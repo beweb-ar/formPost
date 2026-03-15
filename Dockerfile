@@ -37,9 +37,13 @@ COPY logo.png ./
 # Copy admin directory
 COPY admin ./admin
 
-# Change ownership to non-root user and ensure config.json is writable
+# Create data directory for submission storage
+RUN mkdir -p /usr/src/app/data
+
+# Change ownership to non-root user and ensure writable paths
 RUN chown -R nodeuser:nodejs /usr/src/app && \
-    chmod 664 config.json
+    chmod 664 config.json && \
+    chmod 775 /usr/src/app/data
 
 # Switch to non-root user
 USER nodeuser

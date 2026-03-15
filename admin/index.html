@@ -39,11 +39,7 @@
             --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -55,10 +51,7 @@
             min-height: 100vh;
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+        .container { max-width: 1200px; margin: 0 auto; }
 
         .header {
             display: flex;
@@ -69,28 +62,13 @@
             border-bottom: 2px solid var(--border-color);
         }
 
-        h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            letter-spacing: -0.025em;
-        }
+        .header-actions { display: flex; gap: 0.5rem; align-items: center; }
 
-        h2 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: var(--text-primary);
-        }
+        h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.025em; }
+        h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; }
+        h3 { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.75rem; }
 
-        h3 {
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
-            color: var(--text-primary);
-        }
-
-        .theme-toggle {
+        .theme-toggle, .logout-btn {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             color: var(--text-primary);
@@ -104,10 +82,12 @@
             gap: 0.5rem;
         }
 
-        .theme-toggle:hover {
+        .theme-toggle:hover, .logout-btn:hover {
             background: var(--bg-tertiary);
             transform: translateY(-1px);
         }
+
+        .logout-btn { border-color: var(--danger); color: var(--danger); }
 
         .section {
             background: var(--bg-secondary);
@@ -119,9 +99,7 @@
             transition: all 0.3s ease;
         }
 
-        .section:hover {
-            box-shadow: var(--shadow-lg);
-        }
+        .section:hover { box-shadow: var(--shadow-lg); }
 
         .status-card {
             background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
@@ -138,45 +116,17 @@
             margin-top: 0.75rem;
         }
 
-        .status-item {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
+        .status-item { display: flex; flex-direction: column; gap: 0.25rem; }
+        .status-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+        .status-value { font-size: 0.95rem; font-weight: 500; }
+        .status-ok { color: var(--success); font-weight: 700; }
 
-        .status-label {
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-secondary);
-        }
-
-        .status-value {
-            font-size: 0.95rem;
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-
-        .status-ok {
-            color: var(--success);
-            font-weight: 700;
-        }
-
-        .status-error {
-            color: var(--danger);
-            font-weight: 700;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
+        .form-group { margin-bottom: 1rem; }
 
         label {
             display: block;
             font-weight: 500;
             margin-bottom: 0.375rem;
-            color: var(--text-primary);
             font-size: 0.875rem;
         }
 
@@ -184,7 +134,8 @@
         input[type="email"],
         input[type="url"],
         input[type="number"],
-        input[type="password"] {
+        input[type="password"],
+        select {
             width: 100%;
             max-width: 400px;
             padding: 0.625rem 0.875rem;
@@ -194,19 +145,18 @@
             color: var(--text-primary);
             font-size: 0.95rem;
             transition: all 0.2s ease;
-            box-sizing: border-box;
         }
 
-        input:focus {
+        select { cursor: pointer; }
+
+        input:focus, select:focus {
             outline: none;
             border-color: var(--accent-primary);
             box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
 
         input[type="checkbox"] {
-            width: 1.25rem;
-            height: 1.25rem;
-            cursor: pointer;
+            width: 1.25rem; height: 1.25rem; cursor: pointer;
             accent-color: var(--accent-primary);
         }
 
@@ -223,15 +173,24 @@
             box-shadow: var(--shadow-sm);
         }
 
-        button:hover {
+        button:hover:not(:disabled) {
             background: var(--accent-hover);
             transform: translateY(-1px);
             box-shadow: var(--shadow-md);
         }
 
-        button:active {
-            transform: translateY(0);
+        button:active { transform: translateY(0); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .btn-danger { background: var(--danger); }
+        .btn-danger:hover:not(:disabled) { background: #dc2626; }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--accent-primary);
+            color: var(--accent-primary);
         }
+        .btn-outline:hover:not(:disabled) { background: var(--accent-primary); color: white; }
 
         .website-list {
             display: grid;
@@ -255,34 +214,12 @@
             border-color: var(--accent-primary);
         }
 
-        .website-card h4 {
-            margin: 0 0 0.75rem 0;
-            color: var(--accent-primary);
-            font-weight: 700;
-            font-size: 1rem;
-        }
-
-        .website-card div {
-            margin-bottom: 0.375rem;
-            font-size: 0.875rem;
-        }
-
-        .website-card strong {
-            color: var(--text-secondary);
-            font-weight: 600;
-        }
-
-        .website-card a {
-            color: var(--accent-primary);
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.2s ease;
-        }
-
-        .website-card a:hover {
-            color: var(--accent-hover);
-            text-decoration: underline;
-        }
+        .website-card h4 { margin: 0 0 0.75rem 0; color: var(--accent-primary); font-weight: 700; font-size: 1rem; }
+        .website-card div { margin-bottom: 0.375rem; font-size: 0.875rem; }
+        .website-card strong { color: var(--text-secondary); font-weight: 600; }
+        .website-card a { color: var(--accent-primary); text-decoration: none; font-weight: 500; }
+        .website-card a:hover { color: var(--accent-hover); text-decoration: underline; }
+        .website-card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
 
         pre.json {
             background: var(--bg-primary);
@@ -294,7 +231,6 @@
             font-size: 0.85rem;
             line-height: 1.5;
             max-height: 300px;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
         }
 
         .string { color: #10b981; }
@@ -329,62 +265,199 @@
             margin-top: 0.5rem;
         }
 
-        .checkbox-group label {
-            margin-bottom: 0;
-            cursor: pointer;
+        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
+
+        /* Login overlay */
+        .login-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
 
+        .login-box {
+            background: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
+            width: 100%;
+            max-width: 380px;
+        }
+
+        .login-box h2 { text-align: center; margin-bottom: 1.5rem; }
+        .login-box input { max-width: 100%; }
+        .login-box button { width: 100%; margin-top: 0.5rem; }
+        .login-error { color: var(--danger); font-size: 0.875rem; margin-top: 0.5rem; text-align: center; }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius-md);
+            color: white;
+            font-weight: 500;
+            font-size: 0.9rem;
+            box-shadow: var(--shadow-lg);
+            animation: toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards;
+            max-width: 400px;
+            word-break: break-word;
+        }
+
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--danger); }
+        .toast-info { background: var(--accent-primary); }
+
+        @keyframes toastIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
+        }
+
+        .modal h3 { margin-bottom: 1rem; }
+        .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+        /* Submissions table */
+        .submissions-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        .submissions-table th, .submissions-table td {
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .submissions-table th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .submissions-table tr:hover { background: var(--bg-tertiary); }
+        .submissions-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .submissions-table td.clickable { cursor: pointer; color: var(--accent-primary); }
+
+        .pagination {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         @media (max-width: 768px) {
-            body {
-                padding: 1rem;
-            }
-
-            .header {
-                flex-direction: column;
-                gap: 1rem;
-                align-items: flex-start;
-            }
-
-            .website-list {
-                grid-template-columns: 1fr;
-            }
-
-            .status-grid {
-                grid-template-columns: 1fr;
-            }
-
-            input[type="text"],
-            input[type="email"],
-            input[type="url"],
-            input[type="number"],
-            input[type="password"] {
-                max-width: 100%;
-            }
+            body { padding: 1rem; }
+            .header { flex-direction: column; gap: 1rem; align-items: flex-start; }
+            .website-list { grid-template-columns: 1fr; }
+            .status-grid { grid-template-columns: 1fr; }
+            input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="password"], select { max-width: 100%; }
+            .submissions-table { display: block; overflow-x: auto; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Login Overlay -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <h2>Admin Login</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginUser">Username</label>
+                    <input type="text" id="loginUser" required autocomplete="username" />
+                </div>
+                <div class="form-group">
+                    <label for="loginPass">Password</label>
+                    <input type="password" id="loginPass" required autocomplete="current-password" />
+                </div>
+                <button type="submit">Login</button>
+                <div class="login-error" id="loginError"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Main content (hidden until login) -->
+    <div class="container" id="mainContent" style="display:none;">
         <div class="header">
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <img src="/logo.png" alt="Logo" style="height: 40px; width: auto; object-fit: contain;" />
                 <h1>Admin Interface</h1>
             </div>
-            <button class="theme-toggle" id="themeToggle">
-                <span id="themeIcon">🌙</span>
-                <span id="themeText">Dark Mode</span>
-            </button>
+            <div class="header-actions">
+                <button class="theme-toggle" id="themeToggle">
+                    <span id="themeIcon"></span>
+                    <span id="themeText">Dark Mode</span>
+                </button>
+                <button class="logout-btn" id="logoutBtn">Logout</button>
+            </div>
         </div>
 
         <div class="section">
             <h2>Status</h2>
-            <div id="status"></div>
+            <div id="status"><div class="empty-state"><span class="spinner"></span> Loading...</div></div>
         </div>
 
         <div class="section">
             <h2>Websites</h2>
-            <div id="websites"></div>
-            <h3>Add New Website</h3>
+            <div id="websites"><div class="empty-state"><span class="spinner"></span> Loading...</div></div>
+            <h3 style="margin-top:1rem;">Add New Website</h3>
             <form id="addForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -402,21 +475,21 @@
                         <input type="text" name="subjectPrefix" required placeholder="New form submission" />
                     </div>
                     <div class="form-group">
-                        <label>Redirect URL (opcional)</label>
+                        <label>Redirect URL (optional)</label>
                         <input type="url" name="redirectUrl" placeholder="https://example.com/thank-you" />
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Template Path</label>
-                        <input type="text" name="templatePath" required placeholder="templates/email-template.html" />
+                        <input type="text" name="templatePath" required placeholder="email-template.html" />
                     </div>
                     <div class="form-group">
-                        <label>Turnstile Key (opcional)</label>
+                        <label>Turnstile Secret Key (optional)</label>
                         <input type="text" name="turnstileKey" placeholder="0x4AAAAA..." />
                     </div>
                 </div>
-                <button type="submit">Add Website</button>
+                <button type="submit" id="addWebsiteBtn">Add Website</button>
             </form>
         </div>
 
@@ -445,25 +518,38 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Username (opcional)</label>
+                        <label>Username (optional)</label>
                         <input type="text" name="user" placeholder="SMTP username" />
                     </div>
                     <div class="form-group">
-                        <label>Password (opcional)</label>
+                        <label>Password (optional)</label>
                         <input type="password" name="pass" placeholder="SMTP password" />
                     </div>
                 </div>
-                <button type="submit">Save SMTP Settings</button>
+                <button type="submit" id="smtpBtn">Save SMTP Settings</button>
             </form>
-            <h3>Current SMTP Configuration</h3>
+            <h3 style="margin-top:1rem;">Current SMTP Configuration</h3>
             <pre class="json" id="smtpStatus"></pre>
         </div>
 
         <div class="section">
             <h2>Website Statistics</h2>
-            <div id="statistics"></div>
+            <div id="statistics"><div class="empty-state"><span class="spinner"></span> Loading...</div></div>
             <div style="margin-top: 1rem;">
-                <button onclick="loadStatistics()" style="background: var(--accent-primary);">Refresh Statistics</button>
+                <button onclick="loadStatistics()">Refresh Statistics</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Form Submissions</h2>
+            <div class="form-group">
+                <label>Select Website</label>
+                <select id="submissionsWebsite" style="max-width:300px;">
+                    <option value="">-- Select a website --</option>
+                </select>
+            </div>
+            <div id="submissionsContainer">
+                <div class="empty-state">Select a website to view submissions.</div>
             </div>
         </div>
 
@@ -477,116 +563,191 @@
                         <input type="password" name="currentPassword" required placeholder="Enter current password" />
                     </div>
                     <div class="form-group">
-                        <label>New Password</label>
-                        <input type="password" name="newPassword" required placeholder="Enter new password" />
+                        <label>New Password (min 8 characters)</label>
+                        <input type="password" name="newPassword" required placeholder="Enter new password" minlength="8" />
                     </div>
                 </div>
-                <button type="submit" style="background: var(--danger);">Update Password</button>
+                <button type="submit" class="btn-danger" id="passwordBtn">Update Password</button>
             </form>
             <div id="passwordResult" style="margin-top: 1rem;"></div>
         </div>
     </div>
+
+    <!-- Edit Website Modal -->
+    <div class="modal-overlay" id="editModal" style="display:none;">
+        <div class="modal">
+            <h3>Edit Website: <span id="editModalTitle"></span></h3>
+            <form id="editForm">
+                <input type="hidden" name="editId" id="editId" />
+                <div class="form-group">
+                    <label>To Email</label>
+                    <input type="email" name="editTo" id="editTo" required style="max-width:100%;" />
+                </div>
+                <div class="form-group">
+                    <label>Subject Prefix</label>
+                    <input type="text" name="editSubjectPrefix" id="editSubjectPrefix" required style="max-width:100%;" />
+                </div>
+                <div class="form-group">
+                    <label>Redirect URL</label>
+                    <input type="url" name="editRedirectUrl" id="editRedirectUrl" style="max-width:100%;" />
+                </div>
+                <div class="form-group">
+                    <label>Template Path</label>
+                    <input type="text" name="editTemplatePath" id="editTemplatePath" required style="max-width:100%;" />
+                </div>
+                <div class="form-group">
+                    <label>Turnstile Secret Key</label>
+                    <input type="text" name="editTurnstileKey" id="editTurnstileKey" style="max-width:100%;" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" id="editSaveBtn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Submission Detail Modal -->
+    <div class="modal-overlay" id="detailModal" style="display:none;">
+        <div class="modal">
+            <h3>Submission Details</h3>
+            <div id="detailContent"></div>
+            <div class="modal-actions">
+                <button type="button" onclick="document.getElementById('detailModal').style.display='none'">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Credenciales dinámicas: las pide una vez por sesión
-        const creds = { u: sessionStorage.getItem('adm_u'), p: sessionStorage.getItem('adm_p') };
-        if (!creds.u || !creds.p) {
-            creds.u = prompt('Usuario:');
-            creds.p = prompt('Contraseña:');
-            if (creds.u && creds.p) {
-                sessionStorage.setItem('adm_u', creds.u);
-                sessionStorage.setItem('adm_p', creds.p);
+        // ========== HTML Escaping ==========
+        function esc(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
+
+        // ========== Toast Notifications ==========
+        function showToast(message, type) {
+            type = type || 'info';
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-' + type;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(function() { toast.remove(); }, 4000);
+        }
+
+        // ========== Auth ==========
+        let auth = sessionStorage.getItem('adm_auth') || '';
+
+        function checkAuth() {
+            if (auth) {
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                loadAll();
             }
         }
-        const auth = 'Basic ' + btoa(creds.u + ':' + creds.p);
 
-        function syntaxHighlight(json) {
-            if (typeof json != 'string') {
-                json = JSON.stringify(json, undefined, 2);
-            }
-            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"]*)"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
-                let cls = 'number';
-                if (/^"/.test(match)) {
-                    if (/:$/.test(match)) {
-                        cls = 'key';
-                    } else {
-                        cls = 'string';
-                    }
-                } else if (/true|false/.test(match)) {
-                    cls = 'boolean';
-                } else if (/null/.test(match)) {
-                    cls = 'null';
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const u = document.getElementById('loginUser').value;
+            const p = document.getElementById('loginPass').value;
+            const testAuth = 'Basic ' + btoa(u + ':' + p);
+            try {
+                const res = await fetch('/admin/api/status', { headers: { Authorization: testAuth } });
+                if (res.ok) {
+                    auth = testAuth;
+                    sessionStorage.setItem('adm_auth', auth);
+                    document.getElementById('loginOverlay').style.display = 'none';
+                    document.getElementById('mainContent').style.display = 'block';
+                    document.getElementById('loginError').textContent = '';
+                    loadAll();
+                } else {
+                    document.getElementById('loginError').textContent = 'Invalid credentials. Please try again.';
                 }
+            } catch (err) {
+                document.getElementById('loginError').textContent = 'Connection error. Please try again.';
+            }
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            sessionStorage.removeItem('adm_auth');
+            auth = '';
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('loginUser').value = '';
+            document.getElementById('loginPass').value = '';
+        });
+
+        // ========== Loading helpers ==========
+        function setLoading(btn, loading) {
+            if (loading) {
+                btn.disabled = true;
+                btn.dataset.origText = btn.textContent;
+                btn.innerHTML = '<span class="spinner"></span> Saving...';
+            } else {
+                btn.disabled = false;
+                btn.textContent = btn.dataset.origText || 'Save';
+            }
+        }
+
+        // ========== Syntax Highlight ==========
+        function syntaxHighlight(json) {
+            if (typeof json != 'string') json = JSON.stringify(json, undefined, 2);
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"]*)"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function(match) {
+                var cls = 'number';
+                if (/^"/.test(match)) { cls = /:$/.test(match) ? 'key' : 'string'; }
+                else if (/true|false/.test(match)) { cls = 'boolean'; }
+                else if (/null/.test(match)) { cls = 'null'; }
                 return '<span class="' + cls + '">' + match + '</span>';
             });
         }
-        async function loadStatus() {
-            const res = await fetch('/admin/api/status', { headers: { Authorization: auth } });
-            const data = await res.json();
-            renderStatus(data);
+
+        // ========== Load All ==========
+        function loadAll() {
+            loadStatus();
+            loadWebsites();
+            loadSmtp();
+            loadStatistics();
+            loadWebsiteSelector();
         }
 
-        function renderStatus(status) {
-            const container = document.getElementById('status');
-            const uptime = Math.floor(status.uptime);
-            const memoryUsed = status.memory.used;
-            const memoryTotal = status.memory.total;
-            const config = status.config;
-            const smtp = config.smtp || {};
-            const html = `<div class="status-card">
-                <div class="status-grid">
-                    <div class="status-item">
-                        <span class="status-label">Server Status</span>
-                        <span class="status-value ${status.status === 'ok' ? 'status-ok' : 'status-error'}">${status.status.toUpperCase()}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Port</span>
-                        <span class="status-value">${status.port}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Uptime</span>
-                        <span class="status-value">${uptime}s</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Memory</span>
-                        <span class="status-value">${memoryUsed} / ${memoryTotal} MB</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Websites</span>
-                        <span class="status-value">${config.websites.length}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Turnstile Keys</span>
-                        <span class="status-value">${config.turnstile.length}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">SMTP Host</span>
-                        <span class="status-value">${smtp.host || 'Not set'}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">SMTP Port</span>
-                        <span class="status-value">${smtp.port || 'N/A'}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">SMTP Secure</span>
-                        <span class="status-value">${smtp.secure ? 'Yes' : 'No'}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">SMTP From</span>
-                        <span class="status-value">${smtp.from || 'Not set'}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Last Updated</span>
-                        <span class="status-value">${new Date(status.timestamp).toLocaleString()}</span>
-                    </div>
-                </div>
-            </div>`;
-            container.innerHTML = html;
+        // ========== Status ==========
+        async function loadStatus() {
+            try {
+                const res = await fetch('/admin/api/status', { headers: { Authorization: auth } });
+                const data = await res.json();
+                const uptime = Math.floor(data.uptime);
+                const smtp = data.config.smtp || {};
+                document.getElementById('status').innerHTML = '<div class="status-card"><div class="status-grid">' +
+                    '<div class="status-item"><span class="status-label">Server Status</span><span class="status-value status-ok">' + esc(data.status).toUpperCase() + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">Port</span><span class="status-value">' + esc(data.port) + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">Uptime</span><span class="status-value">' + uptime + 's</span></div>' +
+                    '<div class="status-item"><span class="status-label">Memory</span><span class="status-value">' + data.memory.used + ' / ' + data.memory.total + ' MB</span></div>' +
+                    '<div class="status-item"><span class="status-label">Websites</span><span class="status-value">' + data.config.websites.length + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">Turnstile Keys</span><span class="status-value">' + data.config.turnstile.length + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">SMTP Host</span><span class="status-value">' + esc(smtp.host || 'Not set') + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">SMTP Port</span><span class="status-value">' + esc(smtp.port || 'N/A') + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">SMTP Secure</span><span class="status-value">' + (smtp.secure ? 'Yes' : 'No') + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">SMTP From</span><span class="status-value">' + esc(smtp.from || 'Not set') + '</span></div>' +
+                    '<div class="status-item"><span class="status-label">Last Updated</span><span class="status-value">' + new Date(data.timestamp).toLocaleString() + '</span></div>' +
+                    '</div></div>';
+            } catch(e) {
+                document.getElementById('status').innerHTML = '<div class="empty-state">Failed to load status</div>';
+            }
         }
+
+        // ========== Websites ==========
         async function loadWebsites() {
-            const res = await fetch('/admin/api/websites', { headers: { Authorization: auth } });
-            const data = await res.json();
-            renderWebsites(data);
+            try {
+                const res = await fetch('/admin/api/websites', { headers: { Authorization: auth } });
+                const data = await res.json();
+                renderWebsites(data);
+            } catch(e) {
+                document.getElementById('websites').innerHTML = '<div class="empty-state">Failed to load websites</div>';
+            }
         }
 
         function renderWebsites(websites) {
@@ -595,25 +756,33 @@
                 container.innerHTML = '<div class="empty-state">No websites configured yet. Add your first website below.</div>';
                 return;
             }
-            const list = Object.entries(websites).map(([id, cfg]) => {
-                const turnstileKey = cfg.turnstileKey ? `<div><strong>Turnstile:</strong> ${cfg.turnstileKey}</div>` : '';
-                const redirectUrl = cfg.redirectUrl ? `<div><strong>Redirect:</strong> <a href="${cfg.redirectUrl}" target="_blank">${cfg.redirectUrl}</a></div>` : '';
-                return `<div class="website-card">
-                    <h4>${id}</h4>
-                    <div><strong>To:</strong> ${cfg.to}</div>
-                    <div><strong>Subject:</strong> ${cfg.subjectPrefix}</div>
-                    ${redirectUrl}
-                    <div><strong>Template:</strong> ${cfg.templatePath}</div>
-                    ${turnstileKey}
-                </div>`;
+            var list = Object.entries(websites).map(function(entry) {
+                var id = entry[0], cfg = entry[1];
+                var turnstile = cfg.turnstileKey ? '<div><strong>Turnstile:</strong> ' + esc(cfg.turnstileKey) + '</div>' : '';
+                var redirect = cfg.redirectUrl ? '<div><strong>Redirect:</strong> <a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a></div>' : '';
+                return '<div class="website-card">' +
+                    '<h4>' + esc(id) + '</h4>' +
+                    '<div><strong>To:</strong> ' + esc(cfg.to) + '</div>' +
+                    '<div><strong>Subject:</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
+                    redirect +
+                    '<div><strong>Template:</strong> ' + esc(cfg.templatePath) + '</div>' +
+                    turnstile +
+                    '<div class="website-card-actions">' +
+                    '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">Edit</button>' +
+                    '<button class="btn-sm btn-danger" onclick="deleteWebsite(\'' + esc(id) + '\')">Delete</button>' +
+                    '</div></div>';
             }).join('');
-            container.innerHTML = `<div class="website-list">${list}</div>`;
+            container.innerHTML = '<div class="website-list">' + list + '</div>';
         }
-        document.getElementById('addForm').addEventListener('submit', async e => {
+
+        // ========== Add Website ==========
+        document.getElementById('addForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            const payload = {
+            var btn = document.getElementById('addWebsiteBtn');
+            setLoading(btn, true);
+            var form = e.target;
+            var formData = new FormData(form);
+            var payload = {
                 id: formData.get('id'),
                 config: {
                     to: formData.get('to'),
@@ -621,181 +790,443 @@
                     templatePath: formData.get('templatePath')
                 }
             };
-            const redirectUrl = formData.get('redirectUrl');
+            var redirectUrl = formData.get('redirectUrl');
             if (redirectUrl) payload.config.redirectUrl = redirectUrl;
-            const turnstileKey = formData.get('turnstileKey');
+            var turnstileKey = formData.get('turnstileKey');
             if (turnstileKey) payload.config.turnstileKey = turnstileKey;
-            const res = await fetch('/admin/api/websites', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: auth },
-                body: JSON.stringify(payload)
-            });
-            const result = await res.json();
-            alert(JSON.stringify(result));
-            loadWebsites();
+            try {
+                var res = await fetch('/admin/api/websites', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify(payload)
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast('Website added successfully', 'success');
+                    form.reset();
+                    loadWebsites();
+                    loadWebsiteSelector();
+                } else {
+                    showToast(result.error || 'Failed to add website', 'error');
+                }
+            } catch(err) {
+                showToast('Connection error', 'error');
+            }
+            setLoading(btn, false);
         });
-        // Load and handle SMTP settings
-        async function loadSmtp() {
-            const res = await fetch('/admin/api/smtp', { headers: { Authorization: auth } });
-            if (!res.ok) return;
-            const data = await res.json();
-            document.getElementById('smtpStatus').innerHTML = syntaxHighlight(data);
-            // Populate form fields with current values
-            document.querySelector('#smtpForm input[name="host"]').value = data.host || '';
-            document.querySelector('#smtpForm input[name="port"]').value = data.port || '';
-            document.querySelector('#smtpForm input[name="secure"]').checked = !!data.secure;
-            document.querySelector('#smtpForm input[name="from"]').value = data.from || '';
-            document.querySelector('#smtpForm input[name="user"]').value = data.user || '';
-            document.querySelector('#smtpForm input[name="pass"]').value = data.pass || '';
-        }
 
-        async function loadStatistics() {
-            const res = await fetch('/admin/api/statistics', { headers: { Authorization: auth } });
-            if (!res.ok) {
-                document.getElementById('statistics').innerHTML = '<div class="empty-state">Failed to load statistics</div>';
-                return;
-            }
-            const data = await res.json();
-            renderStatistics(data);
-        }
+        // ========== Edit Website ==========
+        var websitesCache = {};
 
-        function renderStatistics(stats) {
-            const container = document.getElementById('statistics');
-            if (!stats || Object.keys(stats).length === 0) {
-                container.innerHTML = '<div class="empty-state">No statistics available yet. Form submissions will appear here.</div>';
-                return;
-            }
-
-            const statsHtml = Object.entries(stats).map(([id, stat]) => {
-                const lastSubmission = stat.lastSubmission 
-                    ? new Date(stat.lastSubmission).toLocaleString() 
-                    : 'Never';
-                
-                return `<div class="website-card">
-                    <h4>${stat.name || id}</h4>
-                    <div><strong>Website ID:</strong> ${id}</div>
-                    <div><strong>Email:</strong> ${stat.email}</div>
-                    <div><strong>Successful Submissions:</strong> <span style="color: var(--success); font-weight: bold;">${stat.successfulSubmissions}</span></div>
-                    <div><strong>Last Submission:</strong> ${lastSubmission}</div>
-                    <div style="margin-top: 0.75rem;">
-                        <button onclick="resetStatistics('${id}')" style="background: var(--danger); padding: 0.4rem 0.8rem; font-size: 0.85rem;">Reset Counter</button>
-                    </div>
-                </div>`;
-            }).join('');
-
-            container.innerHTML = `<div class="website-list">${statsHtml}</div>`;
-        }
-
-        async function resetStatistics(websiteId) {
-            if (!confirm(`Are you sure you want to reset statistics for "${websiteId}"? This cannot be undone.`)) {
-                return;
-            }
-
-            const res = await fetch(`/admin/api/statistics/${websiteId}/reset`, {
-                method: 'PUT',
-                headers: { Authorization: auth }
-            });
-
-            if (res.ok) {
-                alert('Statistics reset successfully');
-                loadStatistics();
-            } else {
-                alert('Failed to reset statistics');
+        async function openEditModal(id) {
+            try {
+                var res = await fetch('/admin/api/websites', { headers: { Authorization: auth } });
+                var data = await res.json();
+                websitesCache = data;
+                var cfg = data[id];
+                if (!cfg) return showToast('Website not found', 'error');
+                document.getElementById('editId').value = id;
+                document.getElementById('editModalTitle').textContent = id;
+                document.getElementById('editTo').value = cfg.to || '';
+                document.getElementById('editSubjectPrefix').value = cfg.subjectPrefix || '';
+                document.getElementById('editRedirectUrl').value = cfg.redirectUrl || '';
+                document.getElementById('editTemplatePath').value = cfg.templatePath || '';
+                document.getElementById('editTurnstileKey').value = cfg.turnstileKey || '';
+                document.getElementById('editModal').style.display = 'flex';
+            } catch(e) {
+                showToast('Failed to load website data', 'error');
             }
         }
-        document.getElementById('smtpForm').addEventListener('submit', async e => {
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        document.getElementById('editForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            const payload = {
+            var btn = document.getElementById('editSaveBtn');
+            setLoading(btn, true);
+            var id = document.getElementById('editId').value;
+            var payload = {
+                to: document.getElementById('editTo').value,
+                subjectPrefix: document.getElementById('editSubjectPrefix').value,
+                redirectUrl: document.getElementById('editRedirectUrl').value,
+                templatePath: document.getElementById('editTemplatePath').value
+            };
+            var turnstileKey = document.getElementById('editTurnstileKey').value;
+            if (turnstileKey) payload.turnstileKey = turnstileKey;
+            try {
+                var res = await fetch('/admin/api/websites/' + encodeURIComponent(id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify(payload)
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast('Website updated successfully', 'success');
+                    closeEditModal();
+                    loadWebsites();
+                } else {
+                    showToast(result.error || 'Failed to update', 'error');
+                }
+            } catch(err) {
+                showToast('Connection error', 'error');
+            }
+            setLoading(btn, false);
+        });
+
+        // ========== Delete Website ==========
+        async function deleteWebsite(id) {
+            if (!confirm('Are you sure you want to delete "' + id + '"? This cannot be undone.')) return;
+            try {
+                var res = await fetch('/admin/api/websites/' + encodeURIComponent(id), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) {
+                    showToast('Website deleted', 'success');
+                    loadWebsites();
+                    loadStatistics();
+                    loadWebsiteSelector();
+                } else {
+                    var result = await res.json();
+                    showToast(result.error || 'Failed to delete', 'error');
+                }
+            } catch(err) {
+                showToast('Connection error', 'error');
+            }
+        }
+
+        // ========== SMTP ==========
+        async function loadSmtp() {
+            try {
+                var res = await fetch('/admin/api/smtp', { headers: { Authorization: auth } });
+                if (!res.ok) return;
+                var data = await res.json();
+                document.getElementById('smtpStatus').innerHTML = syntaxHighlight(data);
+                document.querySelector('#smtpForm input[name="host"]').value = data.host || '';
+                document.querySelector('#smtpForm input[name="port"]').value = data.port || '';
+                document.querySelector('#smtpForm input[name="secure"]').checked = !!data.secure;
+                document.querySelector('#smtpForm input[name="from"]').value = data.from || '';
+                // Don't populate masked credentials
+                if (data.user && data.user !== '****') {
+                    document.querySelector('#smtpForm input[name="user"]').value = data.user;
+                }
+            } catch(e) {}
+        }
+
+        document.getElementById('smtpForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('smtpBtn');
+            setLoading(btn, true);
+            var formData = new FormData(e.target);
+            var payload = {
                 host: formData.get('host'),
                 port: Number(formData.get('port')),
                 secure: formData.get('secure') === 'on',
                 from: formData.get('from')
             };
-            // Only include user/pass if provided
-            const user = formData.get('user');
-            const pass = formData.get('pass');
+            var user = formData.get('user');
+            var pass = formData.get('pass');
             if (user) payload.user = user;
             if (pass) payload.pass = pass;
-            const res = await fetch('/admin/api/smtp', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', Authorization: auth },
-                body: JSON.stringify(payload)
-            });
-            const result = await res.json();
-            alert(JSON.stringify(result));
-            loadSmtp();
+            try {
+                var res = await fetch('/admin/api/smtp', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify(payload)
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast('SMTP settings saved', 'success');
+                    loadSmtp();
+                } else {
+                    showToast(result.error || 'Failed to save', 'error');
+                }
+            } catch(err) {
+                showToast('Connection error', 'error');
+            }
+            setLoading(btn, false);
         });
 
-        // Password reset form handler
-        document.getElementById('passwordForm').addEventListener('submit', async e => {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            const currentPassword = formData.get('currentPassword');
-            const newPassword = formData.get('newPassword');
-            
-            const resultDiv = document.getElementById('passwordResult');
-            resultDiv.innerHTML = '';
-            
-            if (newPassword.length < 4) {
-                resultDiv.innerHTML = '<div style="color: var(--danger);">Password must be at least 4 characters</div>';
+        // ========== Statistics ==========
+        async function loadStatistics() {
+            try {
+                var res = await fetch('/admin/api/statistics', { headers: { Authorization: auth } });
+                if (!res.ok) {
+                    document.getElementById('statistics').innerHTML = '<div class="empty-state">Failed to load statistics</div>';
+                    return;
+                }
+                var data = await res.json();
+                renderStatistics(data);
+            } catch(e) {
+                document.getElementById('statistics').innerHTML = '<div class="empty-state">Failed to load statistics</div>';
+            }
+        }
+
+        function renderStatistics(stats) {
+            var container = document.getElementById('statistics');
+            if (!stats || Object.keys(stats).length === 0) {
+                container.innerHTML = '<div class="empty-state">No statistics available yet.</div>';
                 return;
             }
-            
-            const res = await fetch('/admin/api/admin/reset-password', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', Authorization: auth },
-                body: JSON.stringify({ currentPassword, newPassword })
-            });
-            
-            const result = await res.json();
-            
-            if (res.ok) {
-                resultDiv.innerHTML = '<div style="color: var(--success);">✓ ' + result.message + '. Recargá la página para usar la nueva contraseña.</div>';
-                form.reset();
-                // Limpiar credenciales de sesión para forzar re-login
-                sessionStorage.removeItem('adm_u');
-                sessionStorage.removeItem('adm_p');
-            } else {
-                resultDiv.innerHTML = '<div style="color: var(--danger);">✗ ' + result.error + '</div>';
+            var html = Object.entries(stats).map(function(entry) {
+                var id = entry[0], stat = entry[1];
+                var lastSub = stat.lastSubmission ? new Date(stat.lastSubmission).toLocaleString() : 'Never';
+                return '<div class="website-card">' +
+                    '<h4>' + esc(stat.name || id) + '</h4>' +
+                    '<div><strong>Website ID:</strong> ' + esc(id) + '</div>' +
+                    '<div><strong>Email:</strong> ' + esc(stat.email) + '</div>' +
+                    '<div><strong>Successful Submissions:</strong> <span style="color:var(--success);font-weight:bold;">' + stat.successfulSubmissions + '</span></div>' +
+                    '<div><strong>Last Submission:</strong> ' + esc(lastSub) + '</div>' +
+                    '<div style="margin-top:0.75rem;"><button class="btn-sm btn-danger" onclick="resetStatistics(\'' + esc(id) + '\')">Reset Counter</button></div>' +
+                    '</div>';
+            }).join('');
+            container.innerHTML = '<div class="website-list">' + html + '</div>';
+        }
+
+        async function resetStatistics(websiteId) {
+            if (!confirm('Reset statistics for "' + websiteId + '"? This cannot be undone.')) return;
+            try {
+                var res = await fetch('/admin/api/statistics/' + encodeURIComponent(websiteId) + '/reset', {
+                    method: 'PUT',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) {
+                    showToast('Statistics reset', 'success');
+                    loadStatistics();
+                } else {
+                    showToast('Failed to reset statistics', 'error');
+                }
+            } catch(e) {
+                showToast('Connection error', 'error');
             }
+        }
+
+        // ========== Submissions ==========
+        var currentSubPage = 1;
+
+        async function loadWebsiteSelector() {
+            try {
+                var res = await fetch('/admin/api/websites', { headers: { Authorization: auth } });
+                var data = await res.json();
+                var select = document.getElementById('submissionsWebsite');
+                var current = select.value;
+                select.innerHTML = '<option value="">-- Select a website --</option>';
+                Object.keys(data).forEach(function(id) {
+                    var opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = id;
+                    select.appendChild(opt);
+                });
+                if (current) select.value = current;
+            } catch(e) {}
+        }
+
+        document.getElementById('submissionsWebsite').addEventListener('change', function() {
+            currentSubPage = 1;
+            loadSubmissions();
         });
 
-        // Theme toggle functionality
+        async function loadSubmissions(page) {
+            var websiteId = document.getElementById('submissionsWebsite').value;
+            var container = document.getElementById('submissionsContainer');
+            if (!websiteId) {
+                container.innerHTML = '<div class="empty-state">Select a website to view submissions.</div>';
+                return;
+            }
+            if (page) currentSubPage = page;
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
+            try {
+                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(websiteId) + '?page=' + currentSubPage + '&limit=20', {
+                    headers: { Authorization: auth }
+                });
+                var data = await res.json();
+                renderSubmissions(data, websiteId);
+            } catch(e) {
+                container.innerHTML = '<div class="empty-state">Failed to load submissions</div>';
+            }
+        }
+
+        function renderSubmissions(data, websiteId) {
+            var container = document.getElementById('submissionsContainer');
+            if (!data.submissions || data.submissions.length === 0 && data.total === 0) {
+                container.innerHTML = '<div class="empty-state">No submissions yet for this website.</div>' +
+                    '<div style="margin-top:0.5rem;">' +
+                    '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'csv\')">Export CSV</button> ' +
+                    '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'json\')">Export JSON</button>' +
+                    '</div>';
+                return;
+            }
+            var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr>' +
+                '<th>Date</th><th>Name</th><th>Email</th><th>Phone</th><th>Message</th>' +
+                '</tr></thead><tbody>';
+            data.submissions.forEach(function(s) {
+                var msg = (s.message || '').substring(0, 60);
+                if (s.message && s.message.length > 60) msg += '...';
+                table += '<tr onclick="showSubmissionDetail(' + JSON.stringify(JSON.stringify(s)).replace(/'/g, "\\'") + ')" style="cursor:pointer;">' +
+                    '<td>' + esc(new Date(s.timestamp).toLocaleString()) + '</td>' +
+                    '<td>' + esc(s.name) + '</td>' +
+                    '<td>' + esc(s.email) + '</td>' +
+                    '<td>' + esc(s.phone) + '</td>' +
+                    '<td>' + esc(msg) + '</td>' +
+                    '</tr>';
+            });
+            table += '</tbody></table></div>';
+
+            // Pagination
+            var pagination = '<div class="pagination">';
+            if (currentSubPage > 1) {
+                pagination += '<button class="btn-sm btn-outline" onclick="loadSubmissions(' + (currentSubPage - 1) + ')">Previous</button>';
+            }
+            pagination += '<span>Page ' + data.page + ' of ' + data.totalPages + ' (' + data.total + ' total)</span>';
+            if (currentSubPage < data.totalPages) {
+                pagination += '<button class="btn-sm btn-outline" onclick="loadSubmissions(' + (currentSubPage + 1) + ')">Next</button>';
+            }
+            pagination += '</div>';
+
+            var actions = '<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">' +
+                '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'csv\')">Export CSV</button>' +
+                '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'json\')">Export JSON</button>' +
+                '<button class="btn-sm btn-danger" onclick="deleteAllSubmissions(\'' + esc(websiteId) + '\')">Delete All</button>' +
+                '</div>';
+
+            container.innerHTML = table + pagination + actions;
+        }
+
+        function showSubmissionDetail(jsonStr) {
+            var s = JSON.parse(jsonStr);
+            var content = '<div style="display:grid;gap:0.75rem;">';
+            var fields = [
+                ['Date', new Date(s.timestamp).toLocaleString()],
+                ['Name', s.name],
+                ['Email', s.email],
+                ['Phone', s.phone],
+                ['Rooms', s.rooms],
+                ['Service', s.service],
+                ['Message', s.message],
+                ['IP', s.ip],
+                ['ID', s.id]
+            ];
+            fields.forEach(function(f) {
+                if (f[1]) {
+                    content += '<div><strong>' + esc(f[0]) + ':</strong> ' + esc(f[1]) + '</div>';
+                }
+            });
+            content += '</div>';
+            document.getElementById('detailContent').innerHTML = content;
+            document.getElementById('detailModal').style.display = 'flex';
+        }
+
+        async function exportSubmissions(websiteId, format) {
+            try {
+                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(websiteId) + '/export?format=' + format, {
+                    headers: { Authorization: auth }
+                });
+                var blob = await res.blob();
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'submissions-' + websiteId + '.' + format;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('Export downloaded', 'success');
+            } catch(e) {
+                showToast('Export failed', 'error');
+            }
+        }
+
+        async function deleteAllSubmissions(websiteId) {
+            if (!confirm('Delete ALL submissions for "' + websiteId + '"? This cannot be undone.')) return;
+            try {
+                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(websiteId), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) {
+                    showToast('All submissions deleted', 'success');
+                    loadSubmissions();
+                } else {
+                    showToast('Failed to delete submissions', 'error');
+                }
+            } catch(e) {
+                showToast('Connection error', 'error');
+            }
+        }
+
+        // ========== Password Reset ==========
+        document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('passwordBtn');
+            setLoading(btn, true);
+            var formData = new FormData(e.target);
+            var currentPassword = formData.get('currentPassword');
+            var newPassword = formData.get('newPassword');
+            var resultDiv = document.getElementById('passwordResult');
+            resultDiv.innerHTML = '';
+
+            if (newPassword.length < 8) {
+                resultDiv.innerHTML = '<div style="color:var(--danger);">Password must be at least 8 characters</div>';
+                setLoading(btn, false);
+                return;
+            }
+
+            try {
+                var res = await fetch('/admin/api/admin/reset-password', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ currentPassword: currentPassword, newPassword: newPassword })
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast('Password updated. Please login again.', 'success');
+                    e.target.reset();
+                    sessionStorage.removeItem('adm_auth');
+                    auth = '';
+                    setTimeout(function() {
+                        document.getElementById('loginOverlay').style.display = 'flex';
+                        document.getElementById('mainContent').style.display = 'none';
+                    }, 1500);
+                } else {
+                    showToast(result.error || 'Failed to update password', 'error');
+                }
+            } catch(err) {
+                showToast('Connection error', 'error');
+            }
+            setLoading(btn, false);
+        });
+
+        // ========== Theme ==========
         function initTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            updateThemeButton(savedTheme);
+            var saved = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', saved);
+            updateThemeButton(saved);
         }
 
         function updateThemeButton(theme) {
-            const icon = document.getElementById('themeIcon');
-            const text = document.getElementById('themeText');
-            if (theme === 'dark') {
-                icon.textContent = '☀️';
-                text.textContent = 'Light Mode';
-            } else {
-                icon.textContent = '🌙';
-                text.textContent = 'Dark Mode';
-            }
+            document.getElementById('themeIcon').textContent = theme === 'dark' ? '☀️' : '🌙';
+            document.getElementById('themeText').textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
         }
 
-        document.getElementById('themeToggle').addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            updateThemeButton(newTheme);
+        document.getElementById('themeToggle').addEventListener('click', function() {
+            var current = document.documentElement.getAttribute('data-theme');
+            var next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeButton(next);
         });
 
-        // Initial load calls
+        // Close modals on overlay click
+        document.getElementById('editModal').addEventListener('click', function(e) {
+            if (e.target === this) closeEditModal();
+        });
+        document.getElementById('detailModal').addEventListener('click', function(e) {
+            if (e.target === this) this.style.display = 'none';
+        });
+
+        // Init
         initTheme();
-        loadStatus();
-        loadWebsites();
-        loadSmtp();
-        loadStatistics();
+        checkAuth();
     </script>
 </body>
 </html>
