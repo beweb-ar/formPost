@@ -11,17 +11,24 @@ services:
       - "3000:3000"
     # Environment variables for configuration (override defaults in config.json)
     environment:
-      # Admin credentials (override the defaults in config.json)
+      # Admin credentials (CHANGE THESE before deploying!)
       - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=password
+      - ADMIN_PASSWORD=changeme123
       # Server configuration
       - PORT=3000
       # Optional: Enable debug logging (set to 'true' to bypass Turnstile for testing)
       - DEBUG=false
-    # Mount the config file to allow updating config without rebuilding the image
-    # Remove :ro to allow statistics updates and config changes
+      # Optional: Override SMTP settings via environment variables
+      # - SMTP_HOST=smtp.example.com
+      # - SMTP_PORT=587
+      # - SMTP_SECURE=true
+      # - SMTP_FROM=noreply@example.com
+      # - SMTP_USER=your_smtp_user
+      # - SMTP_PASS=your_smtp_password
+    # Mount the config file and data directory for persistence
     volumes:
       - ./config.json:/usr/src/app/config.json
+      - ./data:/usr/src/app/data
     # Health check configuration
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
