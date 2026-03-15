@@ -402,17 +402,17 @@
                         <input type="text" name="subjectPrefix" required placeholder="New form submission" />
                     </div>
                     <div class="form-group">
-                        <label>Redirect URL</label>
-                        <input type="url" name="redirectUrl" required placeholder="https://example.com/thank-you" />
+                        <label>Redirect URL (opcional)</label>
+                        <input type="url" name="redirectUrl" placeholder="https://example.com/thank-you" />
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Template Path</label>
-                        <input type="text" name="templatePath" required placeholder="/path/to/template.html" />
+                        <input type="text" name="templatePath" required placeholder="templates/email-template.html" />
                     </div>
                     <div class="form-group">
-                        <label>Turnstile Key (optional)</label>
+                        <label>Turnstile Key (opcional)</label>
                         <input type="text" name="turnstileKey" placeholder="0x4AAAAA..." />
                     </div>
                 </div>
@@ -445,11 +445,11 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Username (optional)</label>
+                        <label>Username (opcional)</label>
                         <input type="text" name="user" placeholder="SMTP username" />
                     </div>
                     <div class="form-group">
-                        <label>Password (optional)</label>
+                        <label>Password (opcional)</label>
                         <input type="password" name="pass" placeholder="SMTP password" />
                     </div>
                 </div>
@@ -487,7 +487,18 @@
         </div>
     </div>
     <script>
-        const auth = 'Basic ' + btoa('admin:password');
+        // Credenciales dinámicas: las pide una vez por sesión
+        const creds = { u: sessionStorage.getItem('adm_u'), p: sessionStorage.getItem('adm_p') };
+        if (!creds.u || !creds.p) {
+            creds.u = prompt('Usuario:');
+            creds.p = prompt('Contraseña:');
+            if (creds.u && creds.p) {
+                sessionStorage.setItem('adm_u', creds.u);
+                sessionStorage.setItem('adm_p', creds.p);
+            }
+        }
+        const auth = 'Basic ' + btoa(creds.u + ':' + creds.p);
+
         function syntaxHighlight(json) {
             if (typeof json != 'string') {
                 json = JSON.stringify(json, undefined, 2);
@@ -586,11 +597,12 @@
             }
             const list = Object.entries(websites).map(([id, cfg]) => {
                 const turnstileKey = cfg.turnstileKey ? `<div><strong>Turnstile:</strong> ${cfg.turnstileKey}</div>` : '';
+                const redirectUrl = cfg.redirectUrl ? `<div><strong>Redirect:</strong> <a href="${cfg.redirectUrl}" target="_blank">${cfg.redirectUrl}</a></div>` : '';
                 return `<div class="website-card">
                     <h4>${id}</h4>
                     <div><strong>To:</strong> ${cfg.to}</div>
                     <div><strong>Subject:</strong> ${cfg.subjectPrefix}</div>
-                    <div><strong>Redirect:</strong> <a href="${cfg.redirectUrl}" target="_blank">${cfg.redirectUrl}</a></div>
+                    ${redirectUrl}
                     <div><strong>Template:</strong> ${cfg.templatePath}</div>
                     ${turnstileKey}
                 </div>`;
@@ -606,10 +618,11 @@
                 config: {
                     to: formData.get('to'),
                     subjectPrefix: formData.get('subjectPrefix'),
-                    redirectUrl: formData.get('redirectUrl'),
                     templatePath: formData.get('templatePath')
                 }
             };
+            const redirectUrl = formData.get('redirectUrl');
+            if (redirectUrl) payload.config.redirectUrl = redirectUrl;
             const turnstileKey = formData.get('turnstileKey');
             if (turnstileKey) payload.config.turnstileKey = turnstileKey;
             const res = await fetch('/admin/api/websites', {
@@ -740,14 +753,11 @@
             const result = await res.json();
             
             if (res.ok) {
-                resultDiv.innerHTML = '<div style="color: var(--success);">✓ ' + result.message + '</div>';
+                resultDiv.innerHTML = '<div style="color: var(--success);">✓ ' + result.message + '. Recargá la página para usar la nueva contraseña.</div>';
                 form.reset();
-                // Update the auth token for future requests
-                const newAuth = 'Basic ' + btoa('admin:' + newPassword);
-                // Note: User will need to re-login with new password for the current session
-                setTimeout(() => {
-                    alert('Password updated! You will need to re-login with your new password.');
-                }, 500);
+                // Limpiar credenciales de sesión para forzar re-login
+                sessionStorage.removeItem('adm_u');
+                sessionStorage.removeItem('adm_p');
             } else {
                 resultDiv.innerHTML = '<div style="color: var(--danger);">✗ ' + result.error + '</div>';
             }
