@@ -37,7 +37,8 @@ app.use((req, res, next) => {
 // Only include auth if user and pass are provided
 const transporterConfig = { ...config.smtp };
 if (transporterConfig.user && transporterConfig.pass) {
-    transporterConfig.auth = {
+ transporterConfig.auth = {
+        type: 'LOGIN',
         user: transporterConfig.user,
         pass: transporterConfig.pass
     };
