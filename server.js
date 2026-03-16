@@ -34,6 +34,7 @@ app.use(helmet({
             defaultSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             scriptSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrcAttr: ["'unsafe-inline'"],
             imgSrc: ["'self'", "data:"],
         }
     }
@@ -329,8 +330,8 @@ function adminAuth(req, res, next) {
     return res.status(403).send('Forbidden');
 }
 
-// Serve admin UI (protected)
-app.use('/admin', authLimiter, adminAuth, (req, res, next) => {
+// Serve admin UI (no Basic Auth - the frontend handles its own login)
+app.use('/admin', authLimiter, (req, res, next) => {
     if (req.path === '/' || req.path === '') {
         return res.sendFile(path.join(__dirname, 'admin', 'index.html'));
     }
