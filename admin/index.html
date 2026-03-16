@@ -441,7 +441,7 @@
         .modal input[type="password"] { max-width: 100%; }
 
         .modal-wide {
-            max-width: 900px;
+            max-width: 95vw;
             width: 95%;
         }
 
@@ -470,7 +470,7 @@
         }
 
         .submissions-table tr:hover { background: var(--bg-tertiary); }
-        .submissions-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .submissions-table td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .pagination {
             display: flex;
@@ -515,7 +515,7 @@
             .header { flex-direction: column; gap: 1rem; align-items: flex-start; }
             .cards-grid { grid-template-columns: 1fr; }
             .status-bar-items { gap: 0.75rem; }
-            .modal-wide { width: 98%; max-height: 90vh; }
+            .modal-wide { width: 98%; max-width: 98vw; max-height: 90vh; }
             input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="password"], select { max-width: 100%; }
             .submissions-table { display: block; overflow-x: auto; }
         }
@@ -556,7 +556,7 @@
                 <button class="header-btn" id="changePasswordBtn" data-i18n="passwordBtn">&#128274; Password</button>
                 <button class="theme-toggle" id="themeToggle">
                     <span id="themeIcon"></span>
-                    <span id="themeText">Dark Mode</span>
+                    <span id="themeText" data-i18n="darkMode">Dark Mode</span>
                 </button>
                 <button class="logout-btn" id="logoutBtn" data-i18n="logout">Logout</button>
             </div>
@@ -746,8 +746,6 @@
                     <button type="submit" id="settingsSmtpBtn" data-i18n="saveSmtp">Save SMTP Settings</button>
                 </div>
             </form>
-            <h3 style="margin-top:1.25rem; font-size:1rem;" data-i18n="currentSmtp">Current SMTP Configuration</h3>
-            <pre class="json" id="smtpStatus"></pre>
         </div>
     </div>
 
@@ -795,7 +793,7 @@
                 settings: 'Settings', smtpConfig: 'SMTP Configuration',
                 fromEmail: 'From Email', secureConn: 'Secure Connection (TLS/SSL)',
                 usernameOpt: 'Username (optional)', passwordOpt: 'Password (optional)',
-                saveSmtp: 'Save SMTP Settings', currentSmtp: 'Current SMTP Configuration',
+                saveSmtp: 'Save SMTP Settings',
                 // Toasts
                 websiteAdded: 'Website added successfully', websiteUpdated: 'Website updated successfully',
                 websiteDeleted: 'Website deleted', failedAdd: 'Failed to add website',
@@ -815,59 +813,59 @@
             },
             es: {
                 // Login
-                loginTitle: 'Inicio de Sesion', username: 'Usuario', password: 'Contrasena', loginBtn: 'Ingresar',
-                invalidCredentials: 'Credenciales invalidas. Intente nuevamente.',
-                connectionError: 'Error de conexion. Intente nuevamente.',
+                loginTitle: 'Inicio de Sesi\u00f3n', username: 'Usuario', password: 'Contrase\u00f1a', loginBtn: 'Ingresar',
+                invalidCredentials: 'Credenciales inv\u00e1lidas. Intente nuevamente.',
+                connectionError: 'Error de conexi\u00f3n. Intente nuevamente.',
                 // Header
-                passwordBtn: '&#128274; Clave', logout: 'Salir', settingsBtn: '&#9881; Configuracion',
+                passwordBtn: '&#128274; Clave', logout: 'Salir', settingsBtn: '&#9881; Configuraci\u00f3n',
                 // Status bar
-                port: 'Puerto', uptime: 'Activo', memory: 'Memoria', sites: 'Sitios', totalSubs: 'Total Envios',
+                port: 'Puerto', uptime: 'Activo', memory: 'Memoria', sites: 'Sitios', totalSubs: 'Total Env\u00edos',
                 statusUnavailable: 'Estado no disponible',
                 // Cards
-                to: 'Destino', subject: 'Asunto', redirect: 'Redireccion', template: 'Plantilla',
-                turnstileEnabled: 'Activo', submissions: 'Envios', lastSubmission: 'Ultimo Envio',
+                to: 'Destino', subject: 'Asunto', redirect: 'Redirecci\u00f3n', template: 'Plantilla',
+                turnstileEnabled: 'Activo', submissions: 'Env\u00edos', lastSubmission: '\u00daltimo Env\u00edo',
                 never: 'Nunca', addWebsiteCard: 'Agregar Sitio', edit: 'Editar', delete: 'Eliminar',
                 failedLoadWebsites: 'Error al cargar sitios',
                 // Modals
                 editWebsite: 'Editar Sitio', addNewWebsite: 'Agregar Nuevo Sitio',
                 toEmail: 'Email Destino', subjectPrefix: 'Prefijo de Asunto',
-                redirectUrl: 'URL de Redireccion', redirectUrlOpt: 'URL de Redireccion (opcional)',
+                redirectUrl: 'URL de Redirecci\u00f3n', redirectUrlOpt: 'URL de Redirecci\u00f3n (opcional)',
                 templatePath: 'Ruta de Plantilla',
                 turnstileKey: 'Clave Secreta Turnstile', turnstileKeyOpt: 'Clave Secreta Turnstile (opcional)',
                 cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addWebsite: 'Agregar Sitio',
                 close: 'Cerrar', loading: 'Cargando...',
                 // Submissions modal
-                submissionDetails: 'Detalle del Envio', date: 'Fecha',
+                submissionDetails: 'Detalle del Env\u00edo', date: 'Fecha',
                 exportCsv: 'Exportar CSV', exportJson: 'Exportar JSON',
-                deleteAll: 'Eliminar Todo', noSubmissions: 'No hay envios para este sitio.',
-                failedLoadSubmissions: 'Error al cargar envios',
+                deleteAll: 'Eliminar Todo', noSubmissions: 'No hay env\u00edos para este sitio.',
+                failedLoadSubmissions: 'Error al cargar env\u00edos',
                 previous: 'Anterior', next: 'Siguiente',
-                page: 'Pagina', of: 'de', total: 'total',
+                page: 'P\u00e1gina', of: 'de', total: 'total',
                 // Password modal
-                changePassword: 'Cambiar Contrasena', currentPassword: 'Contrasena Actual',
-                newPasswordLabel: 'Nueva Contrasena (min 8 caracteres)',
-                updatePassword: 'Actualizar Contrasena',
-                passwordMinLength: 'La contrasena debe tener al menos 8 caracteres',
-                passwordUpdatedRelogin: 'Contrasena actualizada. Ingrese nuevamente.',
+                changePassword: 'Cambiar Contrase\u00f1a', currentPassword: 'Contrase\u00f1a Actual',
+                newPasswordLabel: 'Nueva Contrase\u00f1a (m\u00edn 8 caracteres)',
+                updatePassword: 'Actualizar Contrase\u00f1a',
+                passwordMinLength: 'La contrase\u00f1a debe tener al menos 8 caracteres',
+                passwordUpdatedRelogin: 'Contrase\u00f1a actualizada. Ingrese nuevamente.',
                 // Settings modal
-                settings: 'Configuracion', smtpConfig: 'Configuracion SMTP',
-                fromEmail: 'Email Remitente', secureConn: 'Conexion Segura (TLS/SSL)',
-                usernameOpt: 'Usuario (opcional)', passwordOpt: 'Contrasena (opcional)',
-                saveSmtp: 'Guardar Config. SMTP', currentSmtp: 'Configuracion SMTP Actual',
+                settings: 'Configuraci\u00f3n', smtpConfig: 'Configuraci\u00f3n SMTP',
+                fromEmail: 'Email Remitente', secureConn: 'Conexi\u00f3n Segura (TLS/SSL)',
+                usernameOpt: 'Usuario (opcional)', passwordOpt: 'Contrase\u00f1a (opcional)',
+                saveSmtp: 'Guardar Config. SMTP',
                 // Toasts
                 websiteAdded: 'Sitio agregado correctamente', websiteUpdated: 'Sitio actualizado correctamente',
                 websiteDeleted: 'Sitio eliminado', failedAdd: 'Error al agregar sitio',
                 failedUpdate: 'Error al actualizar', failedDelete: 'Error al eliminar',
-                smtpSaved: 'Configuracion SMTP guardada', failedSmtp: 'Error al guardar',
-                statsReset: 'Estadisticas reiniciadas', failedResetStats: 'Error al reiniciar estadisticas',
-                exportDownloaded: 'Exportacion descargada', exportFailed: 'Error en la exportacion',
-                subsDeleted: 'Todos los envios eliminados', failedDeleteSubs: 'Error al eliminar envios',
+                smtpSaved: 'Configuraci\u00f3n SMTP guardada', failedSmtp: 'Error al guardar',
+                statsReset: 'Estad\u00edsticas reiniciadas', failedResetStats: 'Error al reiniciar estad\u00edsticas',
+                exportDownloaded: 'Exportaci\u00f3n descargada', exportFailed: 'Error en la exportaci\u00f3n',
+                subsDeleted: 'Todos los env\u00edos eliminados', failedDeleteSubs: 'Error al eliminar env\u00edos',
                 failedLoadData: 'Error al cargar datos del sitio', websiteNotFound: 'Sitio no encontrado',
-                connError: 'Error de conexion',
+                connError: 'Error de conexi\u00f3n',
                 // Confirms
-                confirmDelete: 'Seguro que desea eliminar "{id}"? Esta accion no se puede deshacer.',
-                confirmResetStats: 'Reiniciar estadisticas de "{id}"? Esta accion no se puede deshacer.',
-                confirmDeleteSubs: 'Eliminar TODOS los envios de "{id}"? Esta accion no se puede deshacer.',
+                confirmDelete: '\u00bfSeguro que desea eliminar "{id}"? Esta acci\u00f3n no se puede deshacer.',
+                confirmResetStats: '\u00bfReiniciar estad\u00edsticas de "{id}"? Esta acci\u00f3n no se puede deshacer.',
+                confirmDeleteSubs: '\u00bfEliminar TODOS los env\u00edos de "{id}"? Esta acci\u00f3n no se puede deshacer.',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -1200,7 +1198,6 @@
                 var res = await fetch('/admin/api/smtp', { headers: { Authorization: auth } });
                 if (!res.ok) return;
                 var data = await res.json();
-                document.getElementById('smtpStatus').innerHTML = syntaxHighlight(data);
                 document.querySelector('#settingsSmtpForm input[name="host"]').value = data.host || '';
                 document.querySelector('#settingsSmtpForm input[name="port"]').value = data.port || '';
                 document.querySelector('#settingsSmtpForm input[name="secure"]').checked = !!data.secure;
