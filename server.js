@@ -52,43 +52,53 @@ const serverMessages = {
         failedRetrieveStatus: 'Failed to retrieve status'
     },
     es: {
-        invalidFormId: 'ID de formulario no valido.',
+        invalidFormId: 'ID de formulario no v\u00e1lido.',
         tooManyFields: 'Demasiados campos en el formulario.',
-        invalidFieldName: 'Nombre de campo no valido.',
+        invalidFieldName: 'Nombre de campo no v\u00e1lido.',
         fieldTooLong: (label) => `El campo "${label}" es demasiado largo.`,
-        invalidEmail: 'Direccion de email no valida.',
-        completeCaptcha: 'Por favor complete la verificacion de seguridad.',
-        invalidSubmission: 'Envio de formulario no valido.',
-        captchaFailed: 'Verificacion de seguridad fallida. Intente nuevamente.',
-        captchaError: 'Error de verificacion de seguridad. Intente mas tarde.',
-        templateError: 'Error de configuracion de template.',
+        invalidEmail: 'Direcci\u00f3n de email no v\u00e1lida.',
+        completeCaptcha: 'Por favor complete la verificaci\u00f3n de seguridad.',
+        invalidSubmission: 'Env\u00edo de formulario no v\u00e1lido.',
+        captchaFailed: 'Verificaci\u00f3n de seguridad fallida. Intente nuevamente.',
+        captchaError: 'Error de verificaci\u00f3n de seguridad. Intente m\u00e1s tarde.',
+        templateError: 'Error de configuraci\u00f3n de template.',
         formSuccess: 'Formulario enviado correctamente.',
-        serverError: 'Ocurrio un error en el servidor.',
+        serverError: 'Ocurri\u00f3 un error en el servidor.',
         templateReadError: 'Error de template en el servidor.',
-        authRequired: 'Autenticacion requerida',
+        authRequired: 'Autenticaci\u00f3n requerida',
         forbidden: 'Acceso denegado',
-        missingIdOrConfig: 'Falta id o configuracion',
+        missingIdOrConfig: 'Falta id o configuraci\u00f3n',
         websiteExists: 'El ID del website ya existe',
         websiteAdded: 'Website agregado',
         websiteNotFound: 'Website no encontrado',
         websiteUpdated: 'Website actualizado',
         websiteRemoved: 'Website eliminado',
-        invalidSmtp: 'Configuracion SMTP no valida',
-        smtpUpdated: 'Configuracion SMTP actualizada',
-        failedSaveConfig: 'Error al guardar configuracion',
-        statsReset: 'Estadisticas reiniciadas',
-        failedResetStats: 'Error al reiniciar estadisticas',
-        submissionsDeleted: 'Todas las submissions eliminadas',
-        failedDeleteSubs: 'Error al eliminar submissions',
-        passwordRequired: 'Se requiere contrasena actual y nueva',
-        passwordTooShort: 'La nueva contrasena debe tener al menos 8 caracteres',
-        passwordIncorrect: 'La contrasena actual es incorrecta',
-        passwordUpdated: 'Contrasena actualizada correctamente',
-        failedUpdatePassword: 'Error al actualizar contrasena',
+        invalidSmtp: 'Configuraci\u00f3n SMTP no v\u00e1lida',
+        smtpUpdated: 'Configuraci\u00f3n SMTP actualizada',
+        failedSaveConfig: 'Error al guardar configuraci\u00f3n',
+        statsReset: 'Estad\u00edsticas reiniciadas',
+        failedResetStats: 'Error al reiniciar estad\u00edsticas',
+        submissionsDeleted: 'Todos los env\u00edos eliminados',
+        failedDeleteSubs: 'Error al eliminar env\u00edos',
+        passwordRequired: 'Se requiere contrase\u00f1a actual y nueva',
+        passwordTooShort: 'La nueva contrase\u00f1a debe tener al menos 8 caracteres',
+        passwordIncorrect: 'La contrase\u00f1a actual es incorrecta',
+        passwordUpdated: 'Contrase\u00f1a actualizada correctamente',
+        failedUpdatePassword: 'Error al actualizar contrase\u00f1a',
         failedRetrieveStatus: 'Error al obtener estado'
     }
 };
 const t = serverMessages[LANG] || serverMessages.es;
+
+// SSE client tracking for real-time inbox
+const sseClients = new Set();
+
+function broadcastInbox(payload) {
+    const data = JSON.stringify(payload);
+    for (const client of sseClients) {
+        client.write(`data: ${data}\n\n`);
+    }
+}
 
 // Override config with environment variables if provided
 if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
@@ -374,6 +384,20 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     submission[key] = String(value || '');
                 }
                 await saveSubmission(website_id, submission);
+
+                // Broadcast to SSE inbox clients
+                broadcastInbox({
+                    type: 'submission',
+                    websiteId: website_id,
+                    id: submission.id,
+                    timestamp: submission.timestamp,
+                    name: formFields.name || formFields.nombre || formFields.full_name || '',
+                    email: formFields.email || formFields.correo || formFields.e_mail || '',
+                    preview: fieldEntries
+                        .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response'].includes(k))
+                        .slice(0, 2)
+                        .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }))
+                });
             } catch (storageError) {
                 console.error('Error saving submission:', storageError.message);
             }
@@ -727,6 +751,34 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
         console.error('Failed to update password:', e.message);
         res.status(500).json({ error: t.failedUpdatePassword });
     }
+});
+
+// SSE Inbox Stream - auth via query param (EventSource doesn't support custom headers)
+app.get('/admin/api/inbox/stream', adminLimiter, (req, res) => {
+    const token = req.query.token;
+    if (!token) return res.status(401).send(t.authRequired);
+    try {
+        const credentials = Buffer.from(token, 'base64').toString('utf8');
+        const [user, ...passParts] = credentials.split(':');
+        const pass = passParts.join(':');
+        if (!config.admin || user !== config.admin.username || pass !== config.admin.password) {
+            return res.status(403).send(t.forbidden);
+        }
+    } catch (e) {
+        return res.status(403).send(t.forbidden);
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+    });
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+    sseClients.add(res);
+
+    const keepalive = setInterval(() => res.write(': keepalive\n\n'), 30000);
+    req.on('close', () => { clearInterval(keepalive); sseClients.delete(res); });
 });
 
 app.use('/admin/api', adminRouter);

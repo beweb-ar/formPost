@@ -294,6 +294,8 @@
         .btn-danger { background: var(--danger); }
         .btn-danger:hover:not(:disabled) { background: #dc2626; }
         .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.4rem; border-radius: var(--radius); opacity: 0.6; transition: opacity 0.2s; }
+        .btn-icon:hover { opacity: 1; background: var(--bg-tertiary); }
         .btn-outline {
             background: transparent;
             border: 1px solid var(--accent-primary);
@@ -441,7 +443,7 @@
         .modal input[type="password"] { max-width: 100%; }
 
         .modal-wide {
-            max-width: 900px;
+            max-width: 95vw;
             width: 95%;
         }
 
@@ -470,7 +472,7 @@
         }
 
         .submissions-table tr:hover { background: var(--bg-tertiary); }
-        .submissions-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .submissions-table td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .pagination {
             display: flex;
@@ -515,9 +517,125 @@
             .header { flex-direction: column; gap: 1rem; align-items: flex-start; }
             .cards-grid { grid-template-columns: 1fr; }
             .status-bar-items { gap: 0.75rem; }
-            .modal-wide { width: 98%; max-height: 90vh; }
+            .modal-wide { width: 98%; max-width: 98vw; max-height: 90vh; }
             input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="password"], select { max-width: 100%; }
             .submissions-table { display: block; overflow-x: auto; }
+            .inbox-entry { flex-wrap: wrap; }
+            .inbox-entry-time { min-width: auto; }
+        }
+
+        /* Inbox Panel */
+        .inbox-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .inbox-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.625rem 1rem;
+            cursor: pointer;
+            user-select: none;
+        }
+        .inbox-header:hover { background: var(--bg-tertiary); }
+        .inbox-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .inbox-status {
+            font-size: 0.75rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-weight: 500;
+        }
+        .inbox-status.connected { background: rgba(16,185,129,0.15); color: var(--success); }
+        .inbox-status.disconnected { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .inbox-status.reconnecting { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .inbox-badge {
+            background: var(--danger);
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0.1rem 0.45rem;
+            border-radius: 9999px;
+            min-width: 1.2rem;
+            text-align: center;
+        }
+        .inbox-toggle-icon {
+            transition: transform 0.3s ease;
+            font-size: 0.8rem;
+        }
+        .inbox-panel.collapsed .inbox-toggle-icon { transform: rotate(-90deg); }
+        .inbox-panel.collapsed .inbox-body { display: none; }
+        .inbox-body {
+            border-top: 1px solid var(--border-color);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .inbox-entry {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.15s ease;
+            animation: inboxSlideIn 0.3s ease;
+        }
+        .inbox-entry:last-child { border-bottom: none; }
+        .inbox-entry:hover { background: var(--bg-tertiary); }
+        @keyframes inboxSlideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .inbox-entry-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            min-width: 3.5rem;
+            padding-top: 0.1rem;
+        }
+        .inbox-entry-website {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.1rem 0.4rem;
+            border-radius: var(--radius-sm);
+            background: var(--accent-primary);
+            color: white;
+            white-space: nowrap;
+        }
+        .inbox-entry-content {
+            flex: 1;
+            min-width: 0;
+        }
+        .inbox-entry-sender {
+            font-weight: 600;
+            font-size: 0.875rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .inbox-entry-preview {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .inbox-empty {
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-style: italic;
         }
     </style>
 </head>
@@ -553,10 +671,11 @@
                 <h1>FORMBackend <span style="font-weight:300;color:var(--text-secondary);">|</span> Admin</h1>
             </div>
             <div class="header-actions">
+                <button class="header-btn" id="helpBtn" onclick="openHelpModal()" title="Integration Guide">&#10067;</button>
                 <button class="header-btn" id="changePasswordBtn" data-i18n="passwordBtn">&#128274; Password</button>
                 <button class="theme-toggle" id="themeToggle">
                     <span id="themeIcon"></span>
-                    <span id="themeText">Dark Mode</span>
+                    <span id="themeText" data-i18n="darkMode">Dark Mode</span>
                 </button>
                 <button class="logout-btn" id="logoutBtn" data-i18n="logout">Logout</button>
             </div>
@@ -568,6 +687,21 @@
                 <div class="status-bar-item"><span class="spinner"></span> Loading...</div>
             </div>
             <button class="btn-sm btn-outline" id="settingsBtn" data-i18n="settingsBtn">&#9881; Settings</button>
+        </div>
+
+        <!-- Inbox Panel -->
+        <div class="inbox-panel collapsed" id="inboxPanel">
+            <div class="inbox-header" onclick="toggleInbox()">
+                <div class="inbox-title">
+                    <span class="inbox-toggle-icon" id="inboxToggleIcon">&#9660;</span>
+                    <span data-i18n="inbox">Inbox</span>
+                    <span class="inbox-badge" id="inboxBadge" style="display:none;">0</span>
+                </div>
+                <span class="inbox-status disconnected" id="inboxStatus" data-i18n="inboxDisconnected">Disconnected</span>
+            </div>
+            <div class="inbox-body" id="inboxBody">
+                <div class="inbox-empty" data-i18n="inboxEmpty">No recent submissions. New ones will appear here in real time.</div>
+            </div>
         </div>
 
         <!-- Website Cards Grid -->
@@ -746,8 +880,17 @@
                     <button type="submit" id="settingsSmtpBtn" data-i18n="saveSmtp">Save SMTP Settings</button>
                 </div>
             </form>
-            <h3 style="margin-top:1.25rem; font-size:1rem;" data-i18n="currentSmtp">Current SMTP Configuration</h3>
-            <pre class="json" id="smtpStatus"></pre>
+        </div>
+    </div>
+
+    <!-- Help / Integration Guide Modal -->
+    <div class="modal-overlay" id="helpModal" style="display:none;">
+        <div class="modal modal-wide">
+            <h3 data-i18n="helpTitle">Integration Guide</h3>
+            <div id="helpContent"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" onclick="document.getElementById('helpModal').style.display='none'" data-i18n="close">Close</button>
+            </div>
         </div>
     </div>
 
@@ -795,7 +938,7 @@
                 settings: 'Settings', smtpConfig: 'SMTP Configuration',
                 fromEmail: 'From Email', secureConn: 'Secure Connection (TLS/SSL)',
                 usernameOpt: 'Username (optional)', passwordOpt: 'Password (optional)',
-                saveSmtp: 'Save SMTP Settings', currentSmtp: 'Current SMTP Configuration',
+                saveSmtp: 'Save SMTP Settings',
                 // Toasts
                 websiteAdded: 'Website added successfully', websiteUpdated: 'Website updated successfully',
                 websiteDeleted: 'Website deleted', failedAdd: 'Failed to add website',
@@ -810,64 +953,95 @@
                 confirmDelete: 'Are you sure you want to delete "{id}"? This cannot be undone.',
                 confirmResetStats: 'Reset statistics for "{id}"? This cannot be undone.',
                 confirmDeleteSubs: 'Delete ALL submissions for "{id}"? This cannot be undone.',
+                // Inbox
+                inbox: 'Inbox', inboxEmpty: 'No recent submissions. New ones will appear here in real time.',
+                inboxConnected: 'Connected', inboxDisconnected: 'Disconnected', inboxReconnecting: 'Reconnecting...',
+                inboxUnknownSender: 'Unknown sender',
+                // Integration / Help
+                copyInstructions: 'Copy Instructions', instructionsCopied: 'Integration instructions copied to clipboard',
+                helpTitle: 'Integration Guide',
+                helpIntro: 'This server processes contact form submissions from your websites. Each configured website has its own endpoint, email destination, and optional bot protection.',
+                helpHowTo: 'How to integrate',
+                helpStep1: 'Create an HTML form with <code>method="POST"</code> and <code>action</code> pointing to this server\'s <code>/submit</code> endpoint.',
+                helpStep2: 'Include a hidden field <code>website_id</code> with the website identifier.',
+                helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
+                helpStep4: 'If Turnstile is configured, add the Cloudflare Turnstile widget with your site key.',
+                helpStep5: 'The server will send an HTML email to the configured recipient and optionally redirect the user.',
+                helpCopyTip: 'Use the <strong>clipboard icon</strong> on each website card to copy a detailed, LLM-ready integration prompt specific to that website\'s configuration.',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
             es: {
                 // Login
-                loginTitle: 'Inicio de Sesion', username: 'Usuario', password: 'Contrasena', loginBtn: 'Ingresar',
-                invalidCredentials: 'Credenciales invalidas. Intente nuevamente.',
-                connectionError: 'Error de conexion. Intente nuevamente.',
+                loginTitle: 'Inicio de Sesi\u00f3n', username: 'Usuario', password: 'Contrase\u00f1a', loginBtn: 'Ingresar',
+                invalidCredentials: 'Credenciales inv\u00e1lidas. Intente nuevamente.',
+                connectionError: 'Error de conexi\u00f3n. Intente nuevamente.',
                 // Header
-                passwordBtn: '&#128274; Clave', logout: 'Salir', settingsBtn: '&#9881; Configuracion',
+                passwordBtn: '&#128274; Clave', logout: 'Salir', settingsBtn: '&#9881; Configuraci\u00f3n',
                 // Status bar
-                port: 'Puerto', uptime: 'Activo', memory: 'Memoria', sites: 'Sitios', totalSubs: 'Total Envios',
+                port: 'Puerto', uptime: 'Activo', memory: 'Memoria', sites: 'Sitios', totalSubs: 'Total Env\u00edos',
                 statusUnavailable: 'Estado no disponible',
                 // Cards
-                to: 'Destino', subject: 'Asunto', redirect: 'Redireccion', template: 'Plantilla',
-                turnstileEnabled: 'Activo', submissions: 'Envios', lastSubmission: 'Ultimo Envio',
+                to: 'Destino', subject: 'Asunto', redirect: 'Redirecci\u00f3n', template: 'Plantilla',
+                turnstileEnabled: 'Activo', submissions: 'Env\u00edos', lastSubmission: '\u00daltimo Env\u00edo',
                 never: 'Nunca', addWebsiteCard: 'Agregar Sitio', edit: 'Editar', delete: 'Eliminar',
                 failedLoadWebsites: 'Error al cargar sitios',
                 // Modals
                 editWebsite: 'Editar Sitio', addNewWebsite: 'Agregar Nuevo Sitio',
                 toEmail: 'Email Destino', subjectPrefix: 'Prefijo de Asunto',
-                redirectUrl: 'URL de Redireccion', redirectUrlOpt: 'URL de Redireccion (opcional)',
+                redirectUrl: 'URL de Redirecci\u00f3n', redirectUrlOpt: 'URL de Redirecci\u00f3n (opcional)',
                 templatePath: 'Ruta de Plantilla',
                 turnstileKey: 'Clave Secreta Turnstile', turnstileKeyOpt: 'Clave Secreta Turnstile (opcional)',
                 cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addWebsite: 'Agregar Sitio',
                 close: 'Cerrar', loading: 'Cargando...',
                 // Submissions modal
-                submissionDetails: 'Detalle del Envio', date: 'Fecha',
+                submissionDetails: 'Detalle del Env\u00edo', date: 'Fecha',
                 exportCsv: 'Exportar CSV', exportJson: 'Exportar JSON',
-                deleteAll: 'Eliminar Todo', noSubmissions: 'No hay envios para este sitio.',
-                failedLoadSubmissions: 'Error al cargar envios',
+                deleteAll: 'Eliminar Todo', noSubmissions: 'No hay env\u00edos para este sitio.',
+                failedLoadSubmissions: 'Error al cargar env\u00edos',
                 previous: 'Anterior', next: 'Siguiente',
-                page: 'Pagina', of: 'de', total: 'total',
+                page: 'P\u00e1gina', of: 'de', total: 'total',
                 // Password modal
-                changePassword: 'Cambiar Contrasena', currentPassword: 'Contrasena Actual',
-                newPasswordLabel: 'Nueva Contrasena (min 8 caracteres)',
-                updatePassword: 'Actualizar Contrasena',
-                passwordMinLength: 'La contrasena debe tener al menos 8 caracteres',
-                passwordUpdatedRelogin: 'Contrasena actualizada. Ingrese nuevamente.',
+                changePassword: 'Cambiar Contrase\u00f1a', currentPassword: 'Contrase\u00f1a Actual',
+                newPasswordLabel: 'Nueva Contrase\u00f1a (m\u00edn 8 caracteres)',
+                updatePassword: 'Actualizar Contrase\u00f1a',
+                passwordMinLength: 'La contrase\u00f1a debe tener al menos 8 caracteres',
+                passwordUpdatedRelogin: 'Contrase\u00f1a actualizada. Ingrese nuevamente.',
                 // Settings modal
-                settings: 'Configuracion', smtpConfig: 'Configuracion SMTP',
-                fromEmail: 'Email Remitente', secureConn: 'Conexion Segura (TLS/SSL)',
-                usernameOpt: 'Usuario (opcional)', passwordOpt: 'Contrasena (opcional)',
-                saveSmtp: 'Guardar Config. SMTP', currentSmtp: 'Configuracion SMTP Actual',
+                settings: 'Configuraci\u00f3n', smtpConfig: 'Configuraci\u00f3n SMTP',
+                fromEmail: 'Email Remitente', secureConn: 'Conexi\u00f3n Segura (TLS/SSL)',
+                usernameOpt: 'Usuario (opcional)', passwordOpt: 'Contrase\u00f1a (opcional)',
+                saveSmtp: 'Guardar Config. SMTP',
                 // Toasts
                 websiteAdded: 'Sitio agregado correctamente', websiteUpdated: 'Sitio actualizado correctamente',
                 websiteDeleted: 'Sitio eliminado', failedAdd: 'Error al agregar sitio',
                 failedUpdate: 'Error al actualizar', failedDelete: 'Error al eliminar',
-                smtpSaved: 'Configuracion SMTP guardada', failedSmtp: 'Error al guardar',
-                statsReset: 'Estadisticas reiniciadas', failedResetStats: 'Error al reiniciar estadisticas',
-                exportDownloaded: 'Exportacion descargada', exportFailed: 'Error en la exportacion',
-                subsDeleted: 'Todos los envios eliminados', failedDeleteSubs: 'Error al eliminar envios',
+                smtpSaved: 'Configuraci\u00f3n SMTP guardada', failedSmtp: 'Error al guardar',
+                statsReset: 'Estad\u00edsticas reiniciadas', failedResetStats: 'Error al reiniciar estad\u00edsticas',
+                exportDownloaded: 'Exportaci\u00f3n descargada', exportFailed: 'Error en la exportaci\u00f3n',
+                subsDeleted: 'Todos los env\u00edos eliminados', failedDeleteSubs: 'Error al eliminar env\u00edos',
                 failedLoadData: 'Error al cargar datos del sitio', websiteNotFound: 'Sitio no encontrado',
-                connError: 'Error de conexion',
+                connError: 'Error de conexi\u00f3n',
                 // Confirms
-                confirmDelete: 'Seguro que desea eliminar "{id}"? Esta accion no se puede deshacer.',
-                confirmResetStats: 'Reiniciar estadisticas de "{id}"? Esta accion no se puede deshacer.',
-                confirmDeleteSubs: 'Eliminar TODOS los envios de "{id}"? Esta accion no se puede deshacer.',
+                confirmDelete: '\u00bfSeguro que desea eliminar "{id}"? Esta acci\u00f3n no se puede deshacer.',
+                confirmResetStats: '\u00bfReiniciar estad\u00edsticas de "{id}"? Esta acci\u00f3n no se puede deshacer.',
+                confirmDeleteSubs: '\u00bfEliminar TODOS los env\u00edos de "{id}"? Esta acci\u00f3n no se puede deshacer.',
+                // Integration / Help
+                // Inbox
+                inbox: 'Bandeja de Entrada', inboxEmpty: 'Sin env\u00edos recientes. Los nuevos aparecer\u00e1n aqu\u00ed en tiempo real.',
+                inboxConnected: 'Conectado', inboxDisconnected: 'Desconectado', inboxReconnecting: 'Reconectando...',
+                inboxUnknownSender: 'Remitente desconocido',
+                // Integration / Help
+                copyInstructions: 'Copiar Instrucciones', instructionsCopied: 'Instrucciones de integraci\u00f3n copiadas al portapapeles',
+                helpTitle: 'Gu\u00eda de Integraci\u00f3n',
+                helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto de tus sitios web. Cada sitio configurado tiene su propio endpoint, email destino y protecci\u00f3n anti-bot opcional.',
+                helpHowTo: 'C\u00f3mo integrar',
+                helpStep1: 'Crea un formulario HTML con <code>method="POST"</code> y <code>action</code> apuntando al endpoint <code>/submit</code> de este servidor.',
+                helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del sitio.',
+                helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
+                helpStep4: 'Si Turnstile est\u00e1 configurado, agrega el widget de Cloudflare Turnstile con tu site key.',
+                helpStep5: 'El servidor enviar\u00e1 un email HTML al destinatario configurado y opcionalmente redirigir\u00e1 al usuario.',
+                helpCopyTip: 'Usa el <strong>\u00edcono de portapapeles</strong> en cada tarjeta de sitio para copiar un prompt detallado de integraci\u00f3n espec\u00edfico a la configuraci\u00f3n de ese sitio, listo para usar con un LLM.',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -936,6 +1110,7 @@
         });
 
         document.getElementById('logoutBtn').addEventListener('click', function() {
+            disconnectInbox();
             sessionStorage.removeItem('adm_auth');
             auth = '';
             document.getElementById('loginOverlay').style.display = 'flex';
@@ -973,6 +1148,108 @@
         function loadAll() {
             loadStatus();
             loadWebsitesWithStats();
+            connectInbox();
+            // Restore inbox collapsed state
+            var collapsed = localStorage.getItem('inbox_collapsed');
+            if (collapsed === '0') {
+                document.getElementById('inboxPanel').classList.remove('collapsed');
+            }
+        }
+
+        // ========== Inbox SSE ==========
+        var inboxEntries = [];
+        var inboxEventSource = null;
+        var inboxUnread = 0;
+        var INBOX_MAX = 15;
+
+        function toggleInbox() {
+            var panel = document.getElementById('inboxPanel');
+            panel.classList.toggle('collapsed');
+            if (!panel.classList.contains('collapsed')) {
+                inboxUnread = 0;
+                updateInboxBadge();
+            }
+            localStorage.setItem('inbox_collapsed', panel.classList.contains('collapsed') ? '1' : '0');
+        }
+
+        function updateInboxBadge() {
+            var badge = document.getElementById('inboxBadge');
+            if (inboxUnread > 0) {
+                badge.textContent = inboxUnread > 99 ? '99+' : inboxUnread;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        function setInboxStatus(status) {
+            var el = document.getElementById('inboxStatus');
+            el.className = 'inbox-status ' + status;
+            if (status === 'connected') el.textContent = L('inboxConnected');
+            else if (status === 'disconnected') el.textContent = L('inboxDisconnected');
+            else if (status === 'reconnecting') el.textContent = L('inboxReconnecting');
+        }
+
+        function renderInboxEntries() {
+            var body = document.getElementById('inboxBody');
+            if (inboxEntries.length === 0) {
+                body.innerHTML = '<div class="inbox-empty">' + L('inboxEmpty') + '</div>';
+                return;
+            }
+            var html = inboxEntries.map(function(entry) {
+                var time = new Date(entry.timestamp);
+                var timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                var sender = entry.name || entry.email || L('inboxUnknownSender');
+                var preview = '';
+                if (entry.email && entry.name) preview = entry.email;
+                if (entry.preview && entry.preview.length > 0) {
+                    var parts = entry.preview.map(function(p) { return p.label + ': ' + p.value; });
+                    preview += (preview ? ' | ' : '') + parts.join(' | ');
+                }
+                return '<div class="inbox-entry" onclick="openSubmissionsModal(\'' + esc(entry.websiteId) + '\')">' +
+                    '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
+                    '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
+                    '<div class="inbox-entry-content">' +
+                        '<div class="inbox-entry-sender">' + esc(sender) + '</div>' +
+                        '<div class="inbox-entry-preview">' + esc(preview) + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+            body.innerHTML = html;
+        }
+
+        function addInboxEntry(entry) {
+            inboxEntries.unshift(entry);
+            if (inboxEntries.length > INBOX_MAX) inboxEntries = inboxEntries.slice(0, INBOX_MAX);
+            var panel = document.getElementById('inboxPanel');
+            if (panel.classList.contains('collapsed')) {
+                inboxUnread++;
+                updateInboxBadge();
+            }
+            renderInboxEntries();
+            loadStatus();
+            loadWebsitesWithStats();
+        }
+
+        function connectInbox() {
+            if (!auth) return;
+            var token = auth.replace('Basic ', '');
+            if (inboxEventSource) inboxEventSource.close();
+            setInboxStatus('reconnecting');
+            inboxEventSource = new EventSource('/admin/api/inbox/stream?token=' + encodeURIComponent(token));
+            inboxEventSource.onopen = function() { setInboxStatus('connected'); };
+            inboxEventSource.onmessage = function(e) {
+                try {
+                    var data = JSON.parse(e.data);
+                    if (data.type === 'submission') addInboxEntry(data);
+                } catch(err) {}
+            };
+            inboxEventSource.onerror = function() { setInboxStatus('disconnected'); };
+        }
+
+        function disconnectInbox() {
+            if (inboxEventSource) { inboxEventSource.close(); inboxEventSource = null; }
+            setInboxStatus('disconnected');
         }
 
         // ========== Status Bar ==========
@@ -1013,6 +1290,7 @@
                 ]);
                 var websites = await results[0].json();
                 var stats = await results[1].json();
+                websitesCache = websites;
                 renderWebsiteCards(websites, stats);
             } catch(e) {
                 document.getElementById('websiteCards').innerHTML =
@@ -1039,7 +1317,10 @@
                     : '';
 
                 return '<div class="website-card">' +
-                    '<h4>' + esc(id) + '</h4>' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+                        '<h4 style="margin:0;">' + esc(id) + '</h4>' +
+                        '<button class="btn-icon" onclick="copyIntegrationPrompt(\'' + esc(id) + '\')" title="' + L('copyInstructions') + '">&#128203;</button>' +
+                    '</div>' +
                     '<div class="card-info"><strong>' + L('to') + ':</strong> ' + esc(cfg.to) + '</div>' +
                     '<div class="card-info"><strong>' + L('subject') + ':</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
                     redirect + turnstile +
@@ -1063,6 +1344,92 @@
                 '</div>';
 
             container.innerHTML = html;
+        }
+
+        // ========== Integration Prompt Copy ==========
+        function copyIntegrationPrompt(websiteId) {
+            var cfg = websitesCache[websiteId];
+            if (!cfg) return;
+            var serverUrl = window.location.origin;
+            var hasTurnstile = !!cfg.turnstileKey;
+
+            var prompt = '## Form Integration Instructions for "' + websiteId + '"\n\n';
+            prompt += 'I need you to create a contact form that submits data to my form processing backend.\n\n';
+            prompt += '### Server Endpoint\n';
+            prompt += '- **URL:** `' + serverUrl + '/submit`\n';
+            prompt += '- **Method:** `POST`\n';
+            prompt += '- **Content-Type:** `application/x-www-form-urlencoded` (standard HTML form) or `application/json`\n\n';
+            prompt += '### Required Hidden Field\n';
+            prompt += '```html\n<input type="hidden" name="website_id" value="' + websiteId + '">\n```\n\n';
+            prompt += '### Website Configuration\n';
+            prompt += '- **Email destination:** `' + cfg.to + '`\n';
+            prompt += '- **Subject prefix:** `' + cfg.subjectPrefix + '`\n';
+            if (cfg.redirectUrl) {
+                prompt += '- **Post-submit redirect:** `' + cfg.redirectUrl + '`\n';
+            }
+            prompt += '\n### Form Fields\n';
+            prompt += 'The server accepts **any form fields dynamically**. There is no fixed schema. Common fields include:\n';
+            prompt += '- `name` or `nombre` - User\'s name\n';
+            prompt += '- `email` or `correo` - User\'s email (validated server-side)\n';
+            prompt += '- `phone` or `telefono` - Phone number\n';
+            prompt += '- `message` or `mensaje` - Message body\n';
+            prompt += '- Any custom fields you need (e.g. `company`, `budget`, `service`, `rooms`)\n\n';
+            prompt += 'Field names are auto-converted to labels in the email (e.g. `correo_electronico` becomes `Correo Electronico`).\n\n';
+            if (hasTurnstile) {
+                prompt += '### Bot Protection (Cloudflare Turnstile)\n';
+                prompt += 'This website has Turnstile enabled. You must:\n';
+                prompt += '1. Add the Turnstile script: `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`\n';
+                prompt += '2. Add the widget inside the form: `<div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>`\n';
+                prompt += '3. The `cf-turnstile-response` field is automatically added and verified server-side.\n\n';
+            }
+            prompt += '### Constraints\n';
+            prompt += '- Max 30 fields per submission\n';
+            prompt += '- Max 100 chars per field name\n';
+            prompt += '- Max 5000 chars per field value\n';
+            prompt += '- Request body max 100KB\n';
+            prompt += '- Rate limit: 5 submissions per minute per IP\n\n';
+            prompt += '### Example Form\n';
+            prompt += '```html\n';
+            prompt += '<form action="' + serverUrl + '/submit" method="POST">\n';
+            prompt += '    <input type="hidden" name="website_id" value="' + websiteId + '">\n';
+            prompt += '    <label>Name: <input type="text" name="name" required></label>\n';
+            prompt += '    <label>Email: <input type="email" name="email" required></label>\n';
+            prompt += '    <label>Message: <textarea name="message"></textarea></label>\n';
+            if (hasTurnstile) {
+                prompt += '    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>\n';
+            }
+            prompt += '    <button type="submit">Send</button>\n';
+            prompt += '</form>\n';
+            if (hasTurnstile) {
+                prompt += '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>\n';
+            }
+            prompt += '```\n\n';
+            prompt += 'The server will send an HTML email with all submitted fields to `' + cfg.to + '` and ';
+            if (cfg.redirectUrl) {
+                prompt += 'redirect the user to `' + cfg.redirectUrl + '`.';
+            } else {
+                prompt += 'return a JSON success response.';
+            }
+
+            navigator.clipboard.writeText(prompt).then(function() {
+                showToast(L('instructionsCopied'), 'success');
+            });
+        }
+
+        // ========== Help Modal ==========
+        function openHelpModal() {
+            var content = '<p>' + L('helpIntro') + '</p>';
+            content += '<h4>' + L('helpHowTo') + '</h4>';
+            content += '<ol style="line-height:1.8;">';
+            content += '<li>' + L('helpStep1') + '</li>';
+            content += '<li>' + L('helpStep2') + '</li>';
+            content += '<li>' + L('helpStep3') + '</li>';
+            content += '<li>' + L('helpStep4') + '</li>';
+            content += '<li>' + L('helpStep5') + '</li>';
+            content += '</ol>';
+            content += '<p style="margin-top:1rem;padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius);border:1px solid var(--border-color);">' + L('helpCopyTip') + '</p>';
+            document.getElementById('helpContent').innerHTML = content;
+            document.getElementById('helpModal').style.display = 'flex';
         }
 
         // ========== Create Website Modal ==========
@@ -1200,7 +1567,6 @@
                 var res = await fetch('/admin/api/smtp', { headers: { Authorization: auth } });
                 if (!res.ok) return;
                 var data = await res.json();
-                document.getElementById('smtpStatus').innerHTML = syntaxHighlight(data);
                 document.querySelector('#settingsSmtpForm input[name="host"]').value = data.host || '';
                 document.querySelector('#settingsSmtpForm input[name="port"]').value = data.port || '';
                 document.querySelector('#settingsSmtpForm input[name="secure"]').checked = !!data.secure;
@@ -1448,6 +1814,7 @@
                 if (res.ok) {
                     showToast(L('passwordUpdatedRelogin'), 'success');
                     closePasswordModal();
+                    disconnectInbox();
                     sessionStorage.removeItem('adm_auth');
                     auth = '';
                     setTimeout(function() {
