@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 
 # Set working directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
@@ -18,7 +18,7 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodeuser -u 1001
 
 # Set working directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
@@ -38,12 +38,12 @@ COPY logo.png ./
 COPY admin ./admin
 
 # Create data directory for submission storage
-RUN mkdir -p /usr/src/app/data
+RUN mkdir -p /app/data
 
 # Change ownership to non-root user and ensure writable paths
-RUN chown -R nodeuser:nodejs /usr/src/app && \
+RUN chown -R nodeuser:nodejs /app && \
     chmod 664 config.json && \
-    chmod 775 /usr/src/app/data
+    chmod 775 /app/data
 
 # Switch to non-root user
 USER nodeuser

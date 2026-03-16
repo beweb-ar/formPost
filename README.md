@@ -381,7 +381,7 @@ docker run -d \
   -e ADMIN_USERNAME=admin \
   -e ADMIN_PASSWORD=password \
   -e DEBUG=false \
-  -v ./config.json:/usr/src/app/config.json \
+  -v ./config.json:/app/config.json \
   --restart always \
   form-processor
 
@@ -392,7 +392,7 @@ docker run -d \
   -e ADMIN_USERNAME=admin \
   -e ADMIN_PASSWORD=password \
   -e DEBUG=true \
-  -v ./config.json:/usr/src/app/config.json \
+  -v ./config.json:/app/config.json \
   --restart always \
   form-processor
 ```

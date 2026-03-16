@@ -62,7 +62,7 @@ docker run -d \
   -p 3000:3000 \
   -e ADMIN_USERNAME=admin \
   -e ADMIN_PASSWORD=password \
-  -v ./config.json:/usr/src/app/config.json:ro \
+  -v ./config.json:/app/config.json:ro \
   --restart always \
   form-processor
 
