@@ -294,6 +294,8 @@
         .btn-danger { background: var(--danger); }
         .btn-danger:hover:not(:disabled) { background: #dc2626; }
         .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.4rem; border-radius: var(--radius); opacity: 0.6; transition: opacity 0.2s; }
+        .btn-icon:hover { opacity: 1; background: var(--bg-tertiary); }
         .btn-outline {
             background: transparent;
             border: 1px solid var(--accent-primary);
@@ -553,6 +555,7 @@
                 <h1>FORMBackend <span style="font-weight:300;color:var(--text-secondary);">|</span> Admin</h1>
             </div>
             <div class="header-actions">
+                <button class="header-btn" id="helpBtn" onclick="openHelpModal()" title="Integration Guide">&#10067;</button>
                 <button class="header-btn" id="changePasswordBtn" data-i18n="passwordBtn">&#128274; Password</button>
                 <button class="theme-toggle" id="themeToggle">
                     <span id="themeIcon"></span>
@@ -749,6 +752,17 @@
         </div>
     </div>
 
+    <!-- Help / Integration Guide Modal -->
+    <div class="modal-overlay" id="helpModal" style="display:none;">
+        <div class="modal modal-wide">
+            <h3 data-i18n="helpTitle">Integration Guide</h3>
+            <div id="helpContent"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" onclick="document.getElementById('helpModal').style.display='none'" data-i18n="close">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ========== i18n ==========
         var currentLang = 'en';
@@ -808,6 +822,17 @@
                 confirmDelete: 'Are you sure you want to delete "{id}"? This cannot be undone.',
                 confirmResetStats: 'Reset statistics for "{id}"? This cannot be undone.',
                 confirmDeleteSubs: 'Delete ALL submissions for "{id}"? This cannot be undone.',
+                // Integration / Help
+                copyInstructions: 'Copy Instructions', instructionsCopied: 'Integration instructions copied to clipboard',
+                helpTitle: 'Integration Guide',
+                helpIntro: 'This server processes contact form submissions from your websites. Each configured website has its own endpoint, email destination, and optional bot protection.',
+                helpHowTo: 'How to integrate',
+                helpStep1: 'Create an HTML form with <code>method="POST"</code> and <code>action</code> pointing to this server\'s <code>/submit</code> endpoint.',
+                helpStep2: 'Include a hidden field <code>website_id</code> with the website identifier.',
+                helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
+                helpStep4: 'If Turnstile is configured, add the Cloudflare Turnstile widget with your site key.',
+                helpStep5: 'The server will send an HTML email to the configured recipient and optionally redirect the user.',
+                helpCopyTip: 'Use the <strong>clipboard icon</strong> on each website card to copy a detailed, LLM-ready integration prompt specific to that website\'s configuration.',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
@@ -866,6 +891,17 @@
                 confirmDelete: '\u00bfSeguro que desea eliminar "{id}"? Esta acci\u00f3n no se puede deshacer.',
                 confirmResetStats: '\u00bfReiniciar estad\u00edsticas de "{id}"? Esta acci\u00f3n no se puede deshacer.',
                 confirmDeleteSubs: '\u00bfEliminar TODOS los env\u00edos de "{id}"? Esta acci\u00f3n no se puede deshacer.',
+                // Integration / Help
+                copyInstructions: 'Copiar Instrucciones', instructionsCopied: 'Instrucciones de integraci\u00f3n copiadas al portapapeles',
+                helpTitle: 'Gu\u00eda de Integraci\u00f3n',
+                helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto de tus sitios web. Cada sitio configurado tiene su propio endpoint, email destino y protecci\u00f3n anti-bot opcional.',
+                helpHowTo: 'C\u00f3mo integrar',
+                helpStep1: 'Crea un formulario HTML con <code>method="POST"</code> y <code>action</code> apuntando al endpoint <code>/submit</code> de este servidor.',
+                helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del sitio.',
+                helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
+                helpStep4: 'Si Turnstile est\u00e1 configurado, agrega el widget de Cloudflare Turnstile con tu site key.',
+                helpStep5: 'El servidor enviar\u00e1 un email HTML al destinatario configurado y opcionalmente redirigir\u00e1 al usuario.',
+                helpCopyTip: 'Usa el <strong>\u00edcono de portapapeles</strong> en cada tarjeta de sitio para copiar un prompt detallado de integraci\u00f3n espec\u00edfico a la configuraci\u00f3n de ese sitio, listo para usar con un LLM.',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -1011,6 +1047,7 @@
                 ]);
                 var websites = await results[0].json();
                 var stats = await results[1].json();
+                websitesCache = websites;
                 renderWebsiteCards(websites, stats);
             } catch(e) {
                 document.getElementById('websiteCards').innerHTML =
@@ -1037,7 +1074,10 @@
                     : '';
 
                 return '<div class="website-card">' +
-                    '<h4>' + esc(id) + '</h4>' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+                        '<h4 style="margin:0;">' + esc(id) + '</h4>' +
+                        '<button class="btn-icon" onclick="copyIntegrationPrompt(\'' + esc(id) + '\')" title="' + L('copyInstructions') + '">&#128203;</button>' +
+                    '</div>' +
                     '<div class="card-info"><strong>' + L('to') + ':</strong> ' + esc(cfg.to) + '</div>' +
                     '<div class="card-info"><strong>' + L('subject') + ':</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
                     redirect + turnstile +
@@ -1061,6 +1101,92 @@
                 '</div>';
 
             container.innerHTML = html;
+        }
+
+        // ========== Integration Prompt Copy ==========
+        function copyIntegrationPrompt(websiteId) {
+            var cfg = websitesCache[websiteId];
+            if (!cfg) return;
+            var serverUrl = window.location.origin;
+            var hasTurnstile = !!cfg.turnstileKey;
+
+            var prompt = '## Form Integration Instructions for "' + websiteId + '"\n\n';
+            prompt += 'I need you to create a contact form that submits data to my form processing backend.\n\n';
+            prompt += '### Server Endpoint\n';
+            prompt += '- **URL:** `' + serverUrl + '/submit`\n';
+            prompt += '- **Method:** `POST`\n';
+            prompt += '- **Content-Type:** `application/x-www-form-urlencoded` (standard HTML form) or `application/json`\n\n';
+            prompt += '### Required Hidden Field\n';
+            prompt += '```html\n<input type="hidden" name="website_id" value="' + websiteId + '">\n```\n\n';
+            prompt += '### Website Configuration\n';
+            prompt += '- **Email destination:** `' + cfg.to + '`\n';
+            prompt += '- **Subject prefix:** `' + cfg.subjectPrefix + '`\n';
+            if (cfg.redirectUrl) {
+                prompt += '- **Post-submit redirect:** `' + cfg.redirectUrl + '`\n';
+            }
+            prompt += '\n### Form Fields\n';
+            prompt += 'The server accepts **any form fields dynamically**. There is no fixed schema. Common fields include:\n';
+            prompt += '- `name` or `nombre` - User\'s name\n';
+            prompt += '- `email` or `correo` - User\'s email (validated server-side)\n';
+            prompt += '- `phone` or `telefono` - Phone number\n';
+            prompt += '- `message` or `mensaje` - Message body\n';
+            prompt += '- Any custom fields you need (e.g. `company`, `budget`, `service`, `rooms`)\n\n';
+            prompt += 'Field names are auto-converted to labels in the email (e.g. `correo_electronico` becomes `Correo Electronico`).\n\n';
+            if (hasTurnstile) {
+                prompt += '### Bot Protection (Cloudflare Turnstile)\n';
+                prompt += 'This website has Turnstile enabled. You must:\n';
+                prompt += '1. Add the Turnstile script: `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`\n';
+                prompt += '2. Add the widget inside the form: `<div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>`\n';
+                prompt += '3. The `cf-turnstile-response` field is automatically added and verified server-side.\n\n';
+            }
+            prompt += '### Constraints\n';
+            prompt += '- Max 30 fields per submission\n';
+            prompt += '- Max 100 chars per field name\n';
+            prompt += '- Max 5000 chars per field value\n';
+            prompt += '- Request body max 100KB\n';
+            prompt += '- Rate limit: 5 submissions per minute per IP\n\n';
+            prompt += '### Example Form\n';
+            prompt += '```html\n';
+            prompt += '<form action="' + serverUrl + '/submit" method="POST">\n';
+            prompt += '    <input type="hidden" name="website_id" value="' + websiteId + '">\n';
+            prompt += '    <label>Name: <input type="text" name="name" required></label>\n';
+            prompt += '    <label>Email: <input type="email" name="email" required></label>\n';
+            prompt += '    <label>Message: <textarea name="message"></textarea></label>\n';
+            if (hasTurnstile) {
+                prompt += '    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>\n';
+            }
+            prompt += '    <button type="submit">Send</button>\n';
+            prompt += '</form>\n';
+            if (hasTurnstile) {
+                prompt += '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>\n';
+            }
+            prompt += '```\n\n';
+            prompt += 'The server will send an HTML email with all submitted fields to `' + cfg.to + '` and ';
+            if (cfg.redirectUrl) {
+                prompt += 'redirect the user to `' + cfg.redirectUrl + '`.';
+            } else {
+                prompt += 'return a JSON success response.';
+            }
+
+            navigator.clipboard.writeText(prompt).then(function() {
+                showToast(L('instructionsCopied'), 'success');
+            });
+        }
+
+        // ========== Help Modal ==========
+        function openHelpModal() {
+            var content = '<p>' + L('helpIntro') + '</p>';
+            content += '<h4>' + L('helpHowTo') + '</h4>';
+            content += '<ol style="line-height:1.8;">';
+            content += '<li>' + L('helpStep1') + '</li>';
+            content += '<li>' + L('helpStep2') + '</li>';
+            content += '<li>' + L('helpStep3') + '</li>';
+            content += '<li>' + L('helpStep4') + '</li>';
+            content += '<li>' + L('helpStep5') + '</li>';
+            content += '</ol>';
+            content += '<p style="margin-top:1rem;padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius);border:1px solid var(--border-color);">' + L('helpCopyTip') + '</p>';
+            document.getElementById('helpContent').innerHTML = content;
+            document.getElementById('helpModal').style.display = 'flex';
         }
 
         // ========== Create Website Modal ==========
