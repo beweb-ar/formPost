@@ -90,6 +90,16 @@ const serverMessages = {
 };
 const t = serverMessages[LANG] || serverMessages.es;
 
+// SSE client tracking for real-time inbox
+const sseClients = new Set();
+
+function broadcastInbox(payload) {
+    const data = JSON.stringify(payload);
+    for (const client of sseClients) {
+        client.write(`data: ${data}\n\n`);
+    }
+}
+
 // Override config with environment variables if provided
 if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
     if (!config.admin) config.admin = {};
@@ -374,6 +384,20 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     submission[key] = String(value || '');
                 }
                 await saveSubmission(website_id, submission);
+
+                // Broadcast to SSE inbox clients
+                broadcastInbox({
+                    type: 'submission',
+                    websiteId: website_id,
+                    id: submission.id,
+                    timestamp: submission.timestamp,
+                    name: formFields.name || formFields.nombre || formFields.full_name || '',
+                    email: formFields.email || formFields.correo || formFields.e_mail || '',
+                    preview: fieldEntries
+                        .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response'].includes(k))
+                        .slice(0, 2)
+                        .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }))
+                });
             } catch (storageError) {
                 console.error('Error saving submission:', storageError.message);
             }
@@ -727,6 +751,34 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
         console.error('Failed to update password:', e.message);
         res.status(500).json({ error: t.failedUpdatePassword });
     }
+});
+
+// SSE Inbox Stream - auth via query param (EventSource doesn't support custom headers)
+app.get('/admin/api/inbox/stream', adminLimiter, (req, res) => {
+    const token = req.query.token;
+    if (!token) return res.status(401).send(t.authRequired);
+    try {
+        const credentials = Buffer.from(token, 'base64').toString('utf8');
+        const [user, ...passParts] = credentials.split(':');
+        const pass = passParts.join(':');
+        if (!config.admin || user !== config.admin.username || pass !== config.admin.password) {
+            return res.status(403).send(t.forbidden);
+        }
+    } catch (e) {
+        return res.status(403).send(t.forbidden);
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+    });
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+    sseClients.add(res);
+
+    const keepalive = setInterval(() => res.write(': keepalive\n\n'), 30000);
+    req.on('close', () => { clearInterval(keepalive); sseClients.delete(res); });
 });
 
 app.use('/admin/api', adminRouter);
