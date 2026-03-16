@@ -153,8 +153,16 @@ async function loadSubmissions(websiteId) {
     }
 }
 
+// Convert field name to display label: "correo_electronico" -> "Correo Electronico"
+function fieldToLabel(fieldName) {
+    return fieldName
+        .replace(/[_-]/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+}
+
 app.post('/submit', submitLimiter, async (req, res) => {
-    const { website_id, name, email, phone, rooms, service, message, 'cf-turnstile-response': turnstileToken } = req.body;
+    const { website_id, 'cf-turnstile-response': turnstileToken, ...formFields } = req.body;
 
     // Dynamic routing check
     const recipientConfig = config.recipients[website_id];
@@ -163,13 +171,17 @@ app.post('/submit', submitLimiter, async (req, res) => {
         return res.status(400).send('Invalid form submission ID.');
     }
 
-    // Input validation
-    if (name && name.length > 200) return res.status(400).send('Name is too long.');
+    // Input validation: max 30 fields, each max 5000 chars
+    const fieldEntries = Object.entries(formFields);
+    if (fieldEntries.length > 30) return res.status(400).send('Too many form fields.');
+    for (const [key, value] of fieldEntries) {
+        if (typeof key !== 'string' || key.length > 100) return res.status(400).send('Invalid field name.');
+        const strVal = String(value || '');
+        if (strVal.length > 5000) return res.status(400).send(`Field "${fieldToLabel(key)}" is too long.`);
+    }
+    // Validate email if present
+    const email = formFields.email || formFields.correo || formFields.e_mail || '';
     if (email && !isValidEmail(email)) return res.status(400).send('Invalid email address.');
-    if (phone && phone.length > 30) return res.status(400).send('Phone number is too long.');
-    if (message && message.length > 5000) return res.status(400).send('Message is too long.');
-    if (rooms && String(rooms).length > 200) return res.status(400).send('Rooms field is too long.');
-    if (service && service.length > 200) return res.status(400).send('Service field is too long.');
 
     // Verify Cloudflare Turnstile token
     if (!DEBUG) {
@@ -208,33 +220,61 @@ app.post('/submit', submitLimiter, async (req, res) => {
         console.log('DEBUG mode: Skipping Turnstile verification');
     }
 
-    // Read HTML template and replace placeholders with escaped values
+    // Build email from template or generate dynamic email
     try {
-        // Path traversal protection
+        let mailBody;
         const templatePath = path.resolve(__dirname, recipientConfig.templatePath);
         if (!templatePath.startsWith(__dirname)) {
             console.error('Path traversal attempt detected:', recipientConfig.templatePath);
             return res.status(500).send('Template configuration error.');
         }
 
-        let mailBody = await fs.readFile(templatePath, 'utf8');
+        let templateContent;
+        try {
+            templateContent = await fs.readFile(templatePath, 'utf8');
+        } catch (e) {
+            templateContent = null;
+        }
 
-        // Replace placeholders with HTML-escaped values
-        mailBody = mailBody
-            .replace(/{{website_id}}/g, escapeHtml(website_id) || 'Unknown')
-            .replace(/{{name}}/g, escapeHtml(name) || 'Anonymous')
-            .replace(/{{email}}/g, escapeHtml(email) || 'No email provided')
-            .replace(/{{phone}}/g, escapeHtml(phone) || 'No phone provided')
-            .replace(/{{rooms}}/g, escapeHtml(rooms) || 'Not specified')
-            .replace(/{{service}}/g, escapeHtml(service) || 'Not specified')
-            .replace(/{{message}}/g, escapeHtml(message) || 'No details provided.');
+        if (templateContent && templateContent.includes('{{fields}}')) {
+            // Dynamic template: replace {{fields}} with generated field rows
+            let fieldsHtml = '';
+            for (const [key, value] of fieldEntries) {
+                if (value) {
+                    fieldsHtml += `<li><strong>${escapeHtml(fieldToLabel(key))}:</strong> ${escapeHtml(String(value))}</li>\n`;
+                }
+            }
+            mailBody = templateContent
+                .replace(/{{website_id}}/g, escapeHtml(website_id) || 'Unknown')
+                .replace(/{{fields}}/g, fieldsHtml);
+        } else if (templateContent) {
+            // Legacy template: replace individual {{field}} placeholders
+            mailBody = templateContent.replace(/{{website_id}}/g, escapeHtml(website_id) || 'Unknown');
+            for (const [key, value] of fieldEntries) {
+                const regex = new RegExp(`{{${key}}}`, 'g');
+                mailBody = mailBody.replace(regex, escapeHtml(String(value || '')) || 'Not specified');
+            }
+        } else {
+            // No template: generate a simple email
+            let fieldsHtml = '';
+            for (const [key, value] of fieldEntries) {
+                if (value) {
+                    fieldsHtml += `<p><strong>${escapeHtml(fieldToLabel(key))}:</strong> ${escapeHtml(String(value))}</p>\n`;
+                }
+            }
+            mailBody = `<h2>New submission from ${escapeHtml(website_id)}</h2>\n${fieldsHtml}`;
+        }
+
+        // Detect name and email for mail metadata
+        const senderName = formFields.name || formFields.nombre || formFields.full_name || 'Contact';
+        const senderEmail = email || '';
 
         const mailOptions = {
-            from: `"${escapeHtml(name)}" <${config.smtp.from}>`,
+            from: `"${escapeHtml(String(senderName))}" <${config.smtp.from}>`,
             to: recipientConfig.to,
-            subject: `${recipientConfig.subjectPrefix} New Lead from ${escapeHtml(name)}`,
+            subject: `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`,
             html: mailBody,
-            replyTo: email
+            replyTo: senderEmail || undefined
         };
 
         // Send email
@@ -246,17 +286,16 @@ app.post('/submit', submitLimiter, async (req, res) => {
             try {
                 const ip = req.ip || '';
                 const anonIp = ip.replace(/\.\d+$/, '.xxx');
-                await saveSubmission(website_id, {
+                const submission = {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                    name: name || '',
-                    email: email || '',
-                    phone: phone || '',
-                    rooms: rooms || '',
-                    service: service || '',
-                    message: message || '',
                     timestamp: new Date().toISOString(),
                     ip: anonIp
-                });
+                };
+                // Store all form fields dynamically
+                for (const [key, value] of fieldEntries) {
+                    submission[key] = String(value || '');
+                }
+                await saveSubmission(website_id, submission);
             } catch (storageError) {
                 console.error('Error saving submission:', storageError.message);
             }
@@ -551,7 +590,16 @@ adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
     const submissions = await loadSubmissions(websiteId);
 
     if (format === 'csv') {
-        const headers = ['id', 'timestamp', 'name', 'email', 'phone', 'rooms', 'service', 'message', 'ip'];
+        // Collect all unique field names across all submissions
+        const headerSet = new Set();
+        for (const s of submissions) {
+            Object.keys(s).forEach(k => headerSet.add(k));
+        }
+        // Put id and timestamp first, ip last, rest alphabetical in between
+        const meta = ['id', 'timestamp'];
+        const trailing = ['ip'];
+        const dynamicFields = Array.from(headerSet).filter(k => !meta.includes(k) && !trailing.includes(k)).sort();
+        const headers = [...meta, ...dynamicFields, ...trailing].filter(h => headerSet.has(h));
         const csvRows = [headers.join(',')];
         for (const s of submissions) {
             const row = headers.map(h => {

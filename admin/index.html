@@ -1167,25 +1167,39 @@
             }
         }
 
+        // Convert field key to display label
+        function fieldLabel(key) {
+            return key.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+        }
+
         function renderModalSubmissions(data) {
             var container = document.getElementById('submissionsModalContent');
             if (!data.submissions || (data.submissions.length === 0 && data.total === 0)) {
                 container.innerHTML = '<div class="empty-state">No submissions yet for this website.</div>';
                 return;
             }
-            var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr>' +
-                '<th>Date</th><th>Name</th><th>Email</th><th>Phone</th><th>Message</th>' +
-                '</tr></thead><tbody>';
+            // Detect dynamic columns from submissions (exclude metadata)
+            var meta = ['id', 'timestamp', 'ip'];
+            var colSet = {};
             data.submissions.forEach(function(s) {
-                var msg = (s.message || '').substring(0, 60);
-                if (s.message && s.message.length > 60) msg += '...';
-                table += '<tr onclick="showSubmissionDetail(' + JSON.stringify(JSON.stringify(s)).replace(/'/g, "\\'") + ')" style="cursor:pointer;">' +
-                    '<td>' + esc(new Date(s.timestamp).toLocaleString()) + '</td>' +
-                    '<td>' + esc(s.name) + '</td>' +
-                    '<td>' + esc(s.email) + '</td>' +
-                    '<td>' + esc(s.phone) + '</td>' +
-                    '<td>' + esc(msg) + '</td>' +
-                    '</tr>';
+                Object.keys(s).forEach(function(k) {
+                    if (meta.indexOf(k) === -1) colSet[k] = true;
+                });
+            });
+            var cols = Object.keys(colSet);
+            // Build table header
+            var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr><th>Date</th>';
+            cols.forEach(function(c) { table += '<th>' + esc(fieldLabel(c)) + '</th>'; });
+            table += '</tr></thead><tbody>';
+            data.submissions.forEach(function(s) {
+                table += '<tr onclick="showSubmissionDetail(' + JSON.stringify(JSON.stringify(s)).replace(/'/g, "\\'") + ')" style="cursor:pointer;">';
+                table += '<td>' + esc(new Date(s.timestamp).toLocaleString()) + '</td>';
+                cols.forEach(function(c) {
+                    var val = String(s[c] || '');
+                    if (val.length > 60) val = val.substring(0, 60) + '...';
+                    table += '<td>' + esc(val) + '</td>';
+                });
+                table += '</tr>';
             });
             table += '</tbody></table></div>';
 
@@ -1206,22 +1220,20 @@
         function showSubmissionDetail(jsonStr) {
             var s = JSON.parse(jsonStr);
             var content = '<div style="display:grid;gap:0.75rem;">';
-            var fields = [
-                ['Date', new Date(s.timestamp).toLocaleString()],
-                ['Name', s.name],
-                ['Email', s.email],
-                ['Phone', s.phone],
-                ['Rooms', s.rooms],
-                ['Service', s.service],
-                ['Message', s.message],
-                ['IP', s.ip],
-                ['ID', s.id]
-            ];
-            fields.forEach(function(f) {
-                if (f[1]) {
-                    content += '<div><strong>' + esc(f[0]) + ':</strong> ' + esc(f[1]) + '</div>';
+            // Show timestamp first
+            if (s.timestamp) {
+                content += '<div><strong>Date:</strong> ' + esc(new Date(s.timestamp).toLocaleString()) + '</div>';
+            }
+            // Show all dynamic fields (skip metadata)
+            var meta = ['id', 'timestamp', 'ip'];
+            Object.keys(s).forEach(function(key) {
+                if (meta.indexOf(key) === -1 && s[key]) {
+                    content += '<div><strong>' + esc(fieldLabel(key)) + ':</strong> ' + esc(String(s[key])) + '</div>';
                 }
             });
+            // Show metadata at the end
+            if (s.ip) content += '<div><strong>IP:</strong> ' + esc(s.ip) + '</div>';
+            if (s.id) content += '<div><strong>ID:</strong> ' + esc(s.id) + '</div>';
             content += '</div>';
             document.getElementById('detailContent').innerHTML = content;
             document.getElementById('detailModal').style.display = 'flex';
