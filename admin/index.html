@@ -57,7 +57,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.25rem;
             padding-bottom: 1rem;
             border-bottom: 2px solid var(--border-color);
         }
@@ -68,7 +68,7 @@
         h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; }
         h3 { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.75rem; }
 
-        .theme-toggle, .logout-btn {
+        .theme-toggle, .logout-btn, .header-btn {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             color: var(--text-primary);
@@ -80,46 +80,155 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            font-size: 0.9rem;
         }
 
-        .theme-toggle:hover, .logout-btn:hover {
+        .theme-toggle:hover, .logout-btn:hover, .header-btn:hover {
             background: var(--bg-tertiary);
             transform: translateY(-1px);
         }
 
         .logout-btn { border-color: var(--danger); color: var(--danger); }
 
-        .section {
+        /* Status Bar */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             background: var(--bg-secondary);
-            border-radius: var(--radius-lg);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: var(--shadow-md);
             border: 1px solid var(--border-color);
-            transition: all 0.3s ease;
-        }
-
-        .section:hover { box-shadow: var(--shadow-lg); }
-
-        .status-card {
-            background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
             border-radius: var(--radius-md);
-            padding: 1.25rem;
-            margin-bottom: 1rem;
-            border: 1px solid var(--border-color);
+            padding: 0.625rem 1rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            flex-wrap: wrap;
+            gap: 0.5rem;
         }
 
-        .status-grid {
+        .status-bar-items {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .status-bar-item {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .status-bar-item .value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            display: inline-block;
+        }
+
+        /* Cards Grid */
+        .cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 0.75rem;
-            margin-top: 0.75rem;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.25rem;
         }
 
-        .status-item { display: flex; flex-direction: column; gap: 0.25rem; }
-        .status-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
-        .status-value { font-size: 0.95rem; font-weight: 500; }
-        .status-ok { color: var(--success); font-weight: 700; }
+        .website-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .website-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent-primary);
+        }
+
+        .website-card h4 { margin: 0 0 0.75rem 0; color: var(--accent-primary); font-weight: 700; font-size: 1.05rem; }
+        .website-card .card-info { margin-bottom: 0.375rem; font-size: 0.875rem; }
+        .website-card strong { color: var(--text-secondary); font-weight: 600; }
+        .website-card a { color: var(--accent-primary); text-decoration: none; font-weight: 500; }
+        .website-card a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+        .card-stats {
+            display: flex;
+            gap: 1.5rem;
+            padding: 0.75rem 0;
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .card-stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-stat-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+        }
+
+        .card-stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 0.05em;
+        }
+
+        .card-stat-value.small {
+            font-size: 0.8rem;
+        }
+
+        .website-card-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        /* Add Card */
+        .add-card {
+            background: transparent;
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-lg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 220px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            gap: 0.5rem;
+        }
+
+        .add-card:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+            background: rgba(79, 70, 229, 0.04);
+            transform: translateY(-2px);
+        }
+
+        .add-card .plus-icon {
+            font-size: 2.5rem;
+            font-weight: 300;
+            line-height: 1;
+        }
 
         .form-group { margin-bottom: 1rem; }
 
@@ -192,34 +301,20 @@
         }
         .btn-outline:hover:not(:disabled) { background: var(--accent-primary); color: white; }
 
-        .website-list {
+        .form-row {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1rem;
-            margin-top: 1rem;
         }
 
-        .website-card {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            padding: 1rem;
-            transition: all 0.2s ease;
-            box-shadow: var(--shadow-sm);
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
         }
 
-        .website-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-            border-color: var(--accent-primary);
-        }
-
-        .website-card h4 { margin: 0 0 0.75rem 0; color: var(--accent-primary); font-weight: 700; font-size: 1rem; }
-        .website-card div { margin-bottom: 0.375rem; font-size: 0.875rem; }
-        .website-card strong { color: var(--text-secondary); font-weight: 600; }
-        .website-card a { color: var(--accent-primary); text-decoration: none; font-weight: 500; }
-        .website-card a:hover { color: var(--accent-hover); text-decoration: underline; }
-        .website-card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
 
         pre.json {
             background: var(--bg-primary);
@@ -251,21 +346,6 @@
             color: var(--text-secondary);
             font-style: italic;
         }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1rem;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-        }
-
-        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
 
         /* Login overlay */
         .login-overlay {
@@ -354,6 +434,20 @@
 
         .modal h3 { margin-bottom: 1rem; }
         .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+        .modal input[type="text"],
+        .modal input[type="email"],
+        .modal input[type="url"],
+        .modal input[type="number"],
+        .modal input[type="password"] { max-width: 100%; }
+
+        .modal-wide {
+            max-width: 900px;
+            width: 95%;
+        }
+
+        #detailModal {
+            z-index: 600;
+        }
 
         /* Submissions table */
         .submissions-table {
@@ -377,7 +471,6 @@
 
         .submissions-table tr:hover { background: var(--bg-tertiary); }
         .submissions-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .submissions-table td.clickable { cursor: pointer; color: var(--accent-primary); }
 
         .pagination {
             display: flex;
@@ -400,11 +493,29 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        .submissions-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .submissions-modal-header h3 { margin-bottom: 0; }
+
+        .submissions-modal-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 768px) {
             body { padding: 1rem; }
             .header { flex-direction: column; gap: 1rem; align-items: flex-start; }
-            .website-list { grid-template-columns: 1fr; }
-            .status-grid { grid-template-columns: 1fr; }
+            .cards-grid { grid-template-columns: 1fr; }
+            .status-bar-items { gap: 0.75rem; }
+            .modal-wide { width: 98%; max-height: 90vh; }
             input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="password"], select { max-width: 100%; }
             .submissions-table { display: block; overflow-x: auto; }
         }
@@ -435,12 +546,14 @@
 
     <!-- Main content (hidden until login) -->
     <div class="container" id="mainContent" style="display:none;">
+        <!-- Header -->
         <div class="header">
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <img src="/logo.png" alt="Logo" style="height: 40px; width: auto; object-fit: contain;" />
-                <h1>Admin Interface</h1>
+                <h1>FORMBackend <span style="font-weight:300;color:var(--text-secondary);">|</span> Admin</h1>
             </div>
             <div class="header-actions">
+                <button class="header-btn" id="changePasswordBtn">&#128274; Password</button>
                 <button class="theme-toggle" id="themeToggle">
                     <span id="themeIcon"></span>
                     <span id="themeText">Dark Mode</span>
@@ -449,16 +562,70 @@
             </div>
         </div>
 
-        <div class="section">
-            <h2>Status</h2>
-            <div id="status"><div class="empty-state"><span class="spinner"></span> Loading...</div></div>
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-bar-items" id="statusItems">
+                <div class="status-bar-item"><span class="spinner"></span> Loading...</div>
+            </div>
+            <button class="btn-sm btn-outline" id="settingsBtn">&#9881; Settings</button>
         </div>
 
-        <div class="section">
-            <h2>Websites</h2>
-            <div id="websites"><div class="empty-state"><span class="spinner"></span> Loading...</div></div>
-            <h3 style="margin-top:1rem;">Add New Website</h3>
-            <form id="addForm">
+        <!-- Website Cards Grid -->
+        <div class="cards-grid" id="websiteCards">
+            <div class="empty-state"><span class="spinner"></span> Loading...</div>
+        </div>
+    </div>
+
+    <!-- Edit Website Modal -->
+    <div class="modal-overlay" id="editModal" style="display:none;">
+        <div class="modal">
+            <h3>Edit Website: <span id="editModalTitle"></span></h3>
+            <form id="editForm">
+                <input type="hidden" name="editId" id="editId" />
+                <div class="form-group">
+                    <label>To Email</label>
+                    <input type="email" name="editTo" id="editTo" required />
+                </div>
+                <div class="form-group">
+                    <label>Subject Prefix</label>
+                    <input type="text" name="editSubjectPrefix" id="editSubjectPrefix" required />
+                </div>
+                <div class="form-group">
+                    <label>Redirect URL</label>
+                    <input type="url" name="editRedirectUrl" id="editRedirectUrl" />
+                </div>
+                <div class="form-group">
+                    <label>Template Path</label>
+                    <input type="text" name="editTemplatePath" id="editTemplatePath" required />
+                </div>
+                <div class="form-group">
+                    <label>Turnstile Secret Key</label>
+                    <input type="text" name="editTurnstileKey" id="editTurnstileKey" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" id="editSaveBtn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Submission Detail Modal (z-index 600 to stack above submissions modal) -->
+    <div class="modal-overlay" id="detailModal" style="display:none;">
+        <div class="modal">
+            <h3>Submission Details</h3>
+            <div id="detailContent"></div>
+            <div class="modal-actions">
+                <button type="button" onclick="document.getElementById('detailModal').style.display='none'">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Website Modal -->
+    <div class="modal-overlay" id="createModal" style="display:none;">
+        <div class="modal">
+            <h3>Add New Website</h3>
+            <form id="createForm">
                 <div class="form-row">
                     <div class="form-group">
                         <label>ID</label>
@@ -489,13 +656,61 @@
                         <input type="text" name="turnstileKey" placeholder="0x4AAAAA..." />
                     </div>
                 </div>
-                <button type="submit" id="addWebsiteBtn">Add Website</button>
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" onclick="closeCreateModal()">Cancel</button>
+                    <button type="submit" id="createWebsiteBtn">Add Website</button>
+                </div>
             </form>
         </div>
+    </div>
 
-        <div class="section">
-            <h2>SMTP Settings</h2>
-            <form id="smtpForm">
+    <!-- Submissions Modal -->
+    <div class="modal-overlay" id="submissionsModal" style="display:none;">
+        <div class="modal modal-wide">
+            <div class="submissions-modal-header">
+                <h3>Submissions: <span id="submissionsModalTitle"></span></h3>
+                <div class="submissions-modal-actions">
+                    <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'csv')">Export CSV</button>
+                    <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'json')">Export JSON</button>
+                    <button class="btn-sm btn-danger" onclick="deleteAllSubmissions(submissionsModalWebsiteId)">Delete All</button>
+                </div>
+            </div>
+            <div id="submissionsModalContent">
+                <div class="empty-state"><span class="spinner"></span> Loading...</div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" onclick="closeSubmissionsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div class="modal-overlay" id="passwordModal" style="display:none;">
+        <div class="modal">
+            <h3>Change Password</h3>
+            <form id="passwordFormModal">
+                <div class="form-group">
+                    <label>Current Password</label>
+                    <input type="password" name="currentPassword" required placeholder="Enter current password" />
+                </div>
+                <div class="form-group">
+                    <label>New Password (min 8 characters)</label>
+                    <input type="password" name="newPassword" required placeholder="Enter new password" minlength="8" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" onclick="closePasswordModal()">Cancel</button>
+                    <button type="submit" class="btn-danger" id="passwordModalBtn">Update Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal" style="display:none;">
+        <div class="modal modal-wide">
+            <h3>Settings</h3>
+            <h3 style="margin-top:0.5rem; font-size:1rem;">SMTP Configuration</h3>
+            <form id="settingsSmtpForm">
                 <div class="form-row">
                     <div class="form-group">
                         <label>Host</label>
@@ -526,95 +741,13 @@
                         <input type="password" name="pass" placeholder="SMTP password" />
                     </div>
                 </div>
-                <button type="submit" id="smtpBtn">Save SMTP Settings</button>
-            </form>
-            <h3 style="margin-top:1rem;">Current SMTP Configuration</h3>
-            <pre class="json" id="smtpStatus"></pre>
-        </div>
-
-        <div class="section">
-            <h2>Website Statistics</h2>
-            <div id="statistics"><div class="empty-state"><span class="spinner"></span> Loading...</div></div>
-            <div style="margin-top: 1rem;">
-                <button onclick="loadStatistics()">Refresh Statistics</button>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Form Submissions</h2>
-            <div class="form-group">
-                <label>Select Website</label>
-                <select id="submissionsWebsite" style="max-width:300px;">
-                    <option value="">-- Select a website --</option>
-                </select>
-            </div>
-            <div id="submissionsContainer">
-                <div class="empty-state">Select a website to view submissions.</div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Security Settings</h2>
-            <h3>Reset Admin Password</h3>
-            <form id="passwordForm">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Current Password</label>
-                        <input type="password" name="currentPassword" required placeholder="Enter current password" />
-                    </div>
-                    <div class="form-group">
-                        <label>New Password (min 8 characters)</label>
-                        <input type="password" name="newPassword" required placeholder="Enter new password" minlength="8" />
-                    </div>
-                </div>
-                <button type="submit" class="btn-danger" id="passwordBtn">Update Password</button>
-            </form>
-            <div id="passwordResult" style="margin-top: 1rem;"></div>
-        </div>
-    </div>
-
-    <!-- Edit Website Modal -->
-    <div class="modal-overlay" id="editModal" style="display:none;">
-        <div class="modal">
-            <h3>Edit Website: <span id="editModalTitle"></span></h3>
-            <form id="editForm">
-                <input type="hidden" name="editId" id="editId" />
-                <div class="form-group">
-                    <label>To Email</label>
-                    <input type="email" name="editTo" id="editTo" required style="max-width:100%;" />
-                </div>
-                <div class="form-group">
-                    <label>Subject Prefix</label>
-                    <input type="text" name="editSubjectPrefix" id="editSubjectPrefix" required style="max-width:100%;" />
-                </div>
-                <div class="form-group">
-                    <label>Redirect URL</label>
-                    <input type="url" name="editRedirectUrl" id="editRedirectUrl" style="max-width:100%;" />
-                </div>
-                <div class="form-group">
-                    <label>Template Path</label>
-                    <input type="text" name="editTemplatePath" id="editTemplatePath" required style="max-width:100%;" />
-                </div>
-                <div class="form-group">
-                    <label>Turnstile Secret Key</label>
-                    <input type="text" name="editTurnstileKey" id="editTurnstileKey" style="max-width:100%;" />
-                </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-outline" onclick="closeEditModal()">Cancel</button>
-                    <button type="submit" id="editSaveBtn">Save Changes</button>
+                    <button type="button" class="btn-outline" onclick="closeSettingsModal()">Cancel</button>
+                    <button type="submit" id="settingsSmtpBtn">Save SMTP Settings</button>
                 </div>
             </form>
-        </div>
-    </div>
-
-    <!-- Submission Detail Modal -->
-    <div class="modal-overlay" id="detailModal" style="display:none;">
-        <div class="modal">
-            <h3>Submission Details</h3>
-            <div id="detailContent"></div>
-            <div class="modal-actions">
-                <button type="button" onclick="document.getElementById('detailModal').style.display='none'">Close</button>
-            </div>
+            <h3 style="margin-top:1.25rem; font-size:1rem;">Current SMTP Configuration</h3>
+            <pre class="json" id="smtpStatus"></pre>
         </div>
     </div>
 
@@ -622,7 +755,7 @@
         // ========== HTML Escaping ==========
         function esc(str) {
             if (!str) return '';
-            const div = document.createElement('div');
+            var div = document.createElement('div');
             div.textContent = String(str);
             return div.innerHTML;
         }
@@ -630,8 +763,8 @@
         // ========== Toast Notifications ==========
         function showToast(message, type) {
             type = type || 'info';
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
+            var container = document.getElementById('toastContainer');
+            var toast = document.createElement('div');
             toast.className = 'toast toast-' + type;
             toast.textContent = message;
             container.appendChild(toast);
@@ -639,7 +772,7 @@
         }
 
         // ========== Auth ==========
-        let auth = sessionStorage.getItem('adm_auth') || '';
+        var auth = sessionStorage.getItem('adm_auth') || '';
 
         function checkAuth() {
             if (auth) {
@@ -651,11 +784,11 @@
 
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const u = document.getElementById('loginUser').value;
-            const p = document.getElementById('loginPass').value;
-            const testAuth = 'Basic ' + btoa(u + ':' + p);
+            var u = document.getElementById('loginUser').value;
+            var p = document.getElementById('loginPass').value;
+            var testAuth = 'Basic ' + btoa(u + ':' + p);
             try {
-                const res = await fetch('/admin/api/status', { headers: { Authorization: testAuth } });
+                var res = await fetch('/admin/api/status', { headers: { Authorization: testAuth } });
                 if (res.ok) {
                     auth = testAuth;
                     sessionStorage.setItem('adm_auth', auth);
@@ -708,80 +841,107 @@
         // ========== Load All ==========
         function loadAll() {
             loadStatus();
-            loadWebsites();
-            loadSmtp();
-            loadStatistics();
-            loadWebsiteSelector();
+            loadWebsitesWithStats();
         }
 
-        // ========== Status ==========
+        // ========== Status Bar ==========
         async function loadStatus() {
             try {
-                const res = await fetch('/admin/api/status', { headers: { Authorization: auth } });
-                const data = await res.json();
-                const uptime = Math.floor(data.uptime);
-                const smtp = data.config.smtp || {};
-                document.getElementById('status').innerHTML = '<div class="status-card"><div class="status-grid">' +
-                    '<div class="status-item"><span class="status-label">Server Status</span><span class="status-value status-ok">' + esc(data.status).toUpperCase() + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">Port</span><span class="status-value">' + esc(data.port) + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">Uptime</span><span class="status-value">' + uptime + 's</span></div>' +
-                    '<div class="status-item"><span class="status-label">Memory</span><span class="status-value">' + data.memory.used + ' / ' + data.memory.total + ' MB</span></div>' +
-                    '<div class="status-item"><span class="status-label">Websites</span><span class="status-value">' + data.config.websites.length + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">Turnstile Keys</span><span class="status-value">' + data.config.turnstile.length + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">SMTP Host</span><span class="status-value">' + esc(smtp.host || 'Not set') + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">SMTP Port</span><span class="status-value">' + esc(smtp.port || 'N/A') + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">SMTP Secure</span><span class="status-value">' + (smtp.secure ? 'Yes' : 'No') + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">SMTP From</span><span class="status-value">' + esc(smtp.from || 'Not set') + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">Last Updated</span><span class="status-value">' + new Date(data.timestamp).toLocaleString() + '</span></div>' +
-                    '</div></div>';
+                var res = await fetch('/admin/api/status', { headers: { Authorization: auth } });
+                var data = await res.json();
+                var uptime = Math.floor(data.uptime);
+                var hours = Math.floor(uptime / 3600);
+                var mins = Math.floor((uptime % 3600) / 60);
+                var uptimeStr = hours > 0 ? hours + 'h ' + mins + 'm' : mins + 'm';
+                var mem = data.memory;
+                document.getElementById('statusItems').innerHTML =
+                    '<div class="status-bar-item"><span class="status-dot"></span> <span class="value">' + esc(data.status).toUpperCase() + '</span></div>' +
+                    '<div class="status-bar-item">Port: <span class="value">' + esc(String(data.port)) + '</span></div>' +
+                    '<div class="status-bar-item">Uptime: <span class="value">' + uptimeStr + '</span></div>' +
+                    '<div class="status-bar-item">Memory: <span class="value">' + mem.used + '/' + mem.total + ' MB</span></div>' +
+                    '<div class="status-bar-item">Sites: <span class="value">' + data.config.websites.length + '</span></div>';
             } catch(e) {
-                document.getElementById('status').innerHTML = '<div class="empty-state">Failed to load status</div>';
+                document.getElementById('statusItems').innerHTML =
+                    '<div class="status-bar-item">Status unavailable</div>';
             }
         }
 
-        // ========== Websites ==========
-        async function loadWebsites() {
+        // ========== Websites + Stats ==========
+        async function loadWebsitesWithStats() {
             try {
-                const res = await fetch('/admin/api/websites', { headers: { Authorization: auth } });
-                const data = await res.json();
-                renderWebsites(data);
+                var results = await Promise.all([
+                    fetch('/admin/api/websites', { headers: { Authorization: auth } }),
+                    fetch('/admin/api/statistics', { headers: { Authorization: auth } })
+                ]);
+                var websites = await results[0].json();
+                var stats = await results[1].json();
+                renderWebsiteCards(websites, stats);
             } catch(e) {
-                document.getElementById('websites').innerHTML = '<div class="empty-state">Failed to load websites</div>';
+                document.getElementById('websiteCards').innerHTML =
+                    '<div class="empty-state">Failed to load websites</div>';
             }
         }
 
-        function renderWebsites(websites) {
-            const container = document.getElementById('websites');
-            if (!websites || Object.keys(websites).length === 0) {
-                container.innerHTML = '<div class="empty-state">No websites configured yet. Add your first website below.</div>';
-                return;
-            }
-            var list = Object.entries(websites).map(function(entry) {
+        function renderWebsiteCards(websites, stats) {
+            var container = document.getElementById('websiteCards');
+            var entries = Object.entries(websites || {});
+
+            var html = entries.map(function(entry) {
                 var id = entry[0], cfg = entry[1];
-                var turnstile = cfg.turnstileKey ? '<div><strong>Turnstile:</strong> ' + esc(cfg.turnstileKey) + '</div>' : '';
-                var redirect = cfg.redirectUrl ? '<div><strong>Redirect:</strong> <a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a></div>' : '';
+                var stat = (stats && stats[id]) || {};
+                var subCount = stat.successfulSubmissions || 0;
+                var lastSub = stat.lastSubmission
+                    ? new Date(stat.lastSubmission).toLocaleString()
+                    : 'Never';
+                var redirect = cfg.redirectUrl
+                    ? '<div class="card-info"><strong>Redirect:</strong> <a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a></div>'
+                    : '';
+                var turnstile = cfg.turnstileKey
+                    ? '<div class="card-info"><strong>Turnstile:</strong> Enabled</div>'
+                    : '';
+
                 return '<div class="website-card">' +
                     '<h4>' + esc(id) + '</h4>' +
-                    '<div><strong>To:</strong> ' + esc(cfg.to) + '</div>' +
-                    '<div><strong>Subject:</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
-                    redirect +
-                    '<div><strong>Template:</strong> ' + esc(cfg.templatePath) + '</div>' +
-                    turnstile +
+                    '<div class="card-info"><strong>To:</strong> ' + esc(cfg.to) + '</div>' +
+                    '<div class="card-info"><strong>Subject:</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
+                    redirect + turnstile +
+                    '<div class="card-info"><strong>Template:</strong> ' + esc(cfg.templatePath) + '</div>' +
+                    '<div class="card-stats">' +
+                        '<div class="card-stat"><span class="card-stat-value">' + subCount + '</span><span class="card-stat-label">Submissions</span></div>' +
+                        '<div class="card-stat"><span class="card-stat-value small">' + esc(lastSub) + '</span><span class="card-stat-label">Last Submission</span></div>' +
+                    '</div>' +
                     '<div class="website-card-actions">' +
-                    '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">Edit</button>' +
-                    '<button class="btn-sm btn-danger" onclick="deleteWebsite(\'' + esc(id) + '\')">Delete</button>' +
-                    '</div></div>';
+                        '<button class="btn-sm" onclick="openSubmissionsModal(\'' + esc(id) + '\')">Submissions</button>' +
+                        '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">Edit</button>' +
+                        '<button class="btn-sm btn-danger" onclick="deleteWebsite(\'' + esc(id) + '\')">Delete</button>' +
+                    '</div>' +
+                    '</div>';
             }).join('');
-            container.innerHTML = '<div class="website-list">' + list + '</div>';
+
+            // Add the "+" card
+            html += '<div class="add-card" onclick="openCreateModal()">' +
+                '<span class="plus-icon">+</span>' +
+                '<span>Add Website</span>' +
+                '</div>';
+
+            container.innerHTML = html;
         }
 
-        // ========== Add Website ==========
-        document.getElementById('addForm').addEventListener('submit', async function(e) {
+        // ========== Create Website Modal ==========
+        function openCreateModal() {
+            document.getElementById('createForm').reset();
+            document.getElementById('createModal').style.display = 'flex';
+        }
+
+        function closeCreateModal() {
+            document.getElementById('createModal').style.display = 'none';
+        }
+
+        document.getElementById('createForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            var btn = document.getElementById('addWebsiteBtn');
+            var btn = document.getElementById('createWebsiteBtn');
             setLoading(btn, true);
-            var form = e.target;
-            var formData = new FormData(form);
+            var formData = new FormData(e.target);
             var payload = {
                 id: formData.get('id'),
                 config: {
@@ -803,9 +963,9 @@
                 var result = await res.json();
                 if (res.ok) {
                     showToast('Website added successfully', 'success');
-                    form.reset();
-                    loadWebsites();
-                    loadWebsiteSelector();
+                    closeCreateModal();
+                    loadWebsitesWithStats();
+                    loadStatus();
                 } else {
                     showToast(result.error || 'Failed to add website', 'error');
                 }
@@ -865,7 +1025,7 @@
                 if (res.ok) {
                     showToast('Website updated successfully', 'success');
                     closeEditModal();
-                    loadWebsites();
+                    loadWebsitesWithStats();
                 } else {
                     showToast(result.error || 'Failed to update', 'error');
                 }
@@ -885,9 +1045,8 @@
                 });
                 if (res.ok) {
                     showToast('Website deleted', 'success');
-                    loadWebsites();
-                    loadStatistics();
-                    loadWebsiteSelector();
+                    loadWebsitesWithStats();
+                    loadStatus();
                 } else {
                     var result = await res.json();
                     showToast(result.error || 'Failed to delete', 'error');
@@ -897,27 +1056,26 @@
             }
         }
 
-        // ========== SMTP ==========
+        // ========== SMTP (Settings Modal) ==========
         async function loadSmtp() {
             try {
                 var res = await fetch('/admin/api/smtp', { headers: { Authorization: auth } });
                 if (!res.ok) return;
                 var data = await res.json();
                 document.getElementById('smtpStatus').innerHTML = syntaxHighlight(data);
-                document.querySelector('#smtpForm input[name="host"]').value = data.host || '';
-                document.querySelector('#smtpForm input[name="port"]').value = data.port || '';
-                document.querySelector('#smtpForm input[name="secure"]').checked = !!data.secure;
-                document.querySelector('#smtpForm input[name="from"]').value = data.from || '';
-                // Don't populate masked credentials
+                document.querySelector('#settingsSmtpForm input[name="host"]').value = data.host || '';
+                document.querySelector('#settingsSmtpForm input[name="port"]').value = data.port || '';
+                document.querySelector('#settingsSmtpForm input[name="secure"]').checked = !!data.secure;
+                document.querySelector('#settingsSmtpForm input[name="from"]').value = data.from || '';
                 if (data.user && data.user !== '****') {
-                    document.querySelector('#smtpForm input[name="user"]').value = data.user;
+                    document.querySelector('#settingsSmtpForm input[name="user"]').value = data.user;
                 }
             } catch(e) {}
         }
 
-        document.getElementById('smtpForm').addEventListener('submit', async function(e) {
+        document.getElementById('settingsSmtpForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            var btn = document.getElementById('smtpBtn');
+            var btn = document.getElementById('settingsSmtpBtn');
             setLoading(btn, true);
             var formData = new FormData(e.target);
             var payload = {
@@ -949,42 +1107,16 @@
             setLoading(btn, false);
         });
 
+        function openSettingsModal() {
+            loadSmtp();
+            document.getElementById('settingsModal').style.display = 'flex';
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
         // ========== Statistics ==========
-        async function loadStatistics() {
-            try {
-                var res = await fetch('/admin/api/statistics', { headers: { Authorization: auth } });
-                if (!res.ok) {
-                    document.getElementById('statistics').innerHTML = '<div class="empty-state">Failed to load statistics</div>';
-                    return;
-                }
-                var data = await res.json();
-                renderStatistics(data);
-            } catch(e) {
-                document.getElementById('statistics').innerHTML = '<div class="empty-state">Failed to load statistics</div>';
-            }
-        }
-
-        function renderStatistics(stats) {
-            var container = document.getElementById('statistics');
-            if (!stats || Object.keys(stats).length === 0) {
-                container.innerHTML = '<div class="empty-state">No statistics available yet.</div>';
-                return;
-            }
-            var html = Object.entries(stats).map(function(entry) {
-                var id = entry[0], stat = entry[1];
-                var lastSub = stat.lastSubmission ? new Date(stat.lastSubmission).toLocaleString() : 'Never';
-                return '<div class="website-card">' +
-                    '<h4>' + esc(stat.name || id) + '</h4>' +
-                    '<div><strong>Website ID:</strong> ' + esc(id) + '</div>' +
-                    '<div><strong>Email:</strong> ' + esc(stat.email) + '</div>' +
-                    '<div><strong>Successful Submissions:</strong> <span style="color:var(--success);font-weight:bold;">' + stat.successfulSubmissions + '</span></div>' +
-                    '<div><strong>Last Submission:</strong> ' + esc(lastSub) + '</div>' +
-                    '<div style="margin-top:0.75rem;"><button class="btn-sm btn-danger" onclick="resetStatistics(\'' + esc(id) + '\')">Reset Counter</button></div>' +
-                    '</div>';
-            }).join('');
-            container.innerHTML = '<div class="website-list">' + html + '</div>';
-        }
-
         async function resetStatistics(websiteId) {
             if (!confirm('Reset statistics for "' + websiteId + '"? This cannot be undone.')) return;
             try {
@@ -994,7 +1126,7 @@
                 });
                 if (res.ok) {
                     showToast('Statistics reset', 'success');
-                    loadStatistics();
+                    loadWebsitesWithStats();
                 } else {
                     showToast('Failed to reset statistics', 'error');
                 }
@@ -1003,59 +1135,42 @@
             }
         }
 
-        // ========== Submissions ==========
-        var currentSubPage = 1;
+        // ========== Submissions Modal ==========
+        var submissionsModalWebsiteId = '';
+        var submissionsModalPage = 1;
 
-        async function loadWebsiteSelector() {
-            try {
-                var res = await fetch('/admin/api/websites', { headers: { Authorization: auth } });
-                var data = await res.json();
-                var select = document.getElementById('submissionsWebsite');
-                var current = select.value;
-                select.innerHTML = '<option value="">-- Select a website --</option>';
-                Object.keys(data).forEach(function(id) {
-                    var opt = document.createElement('option');
-                    opt.value = id;
-                    opt.textContent = id;
-                    select.appendChild(opt);
-                });
-                if (current) select.value = current;
-            } catch(e) {}
+        function openSubmissionsModal(websiteId) {
+            submissionsModalWebsiteId = websiteId;
+            submissionsModalPage = 1;
+            document.getElementById('submissionsModalTitle').textContent = websiteId;
+            document.getElementById('submissionsModal').style.display = 'flex';
+            loadModalSubmissions();
         }
 
-        document.getElementById('submissionsWebsite').addEventListener('change', function() {
-            currentSubPage = 1;
-            loadSubmissions();
-        });
+        function closeSubmissionsModal() {
+            document.getElementById('submissionsModal').style.display = 'none';
+        }
 
-        async function loadSubmissions(page) {
-            var websiteId = document.getElementById('submissionsWebsite').value;
-            var container = document.getElementById('submissionsContainer');
-            if (!websiteId) {
-                container.innerHTML = '<div class="empty-state">Select a website to view submissions.</div>';
-                return;
-            }
-            if (page) currentSubPage = page;
+        async function loadModalSubmissions(page) {
+            if (page) submissionsModalPage = page;
+            var container = document.getElementById('submissionsModalContent');
             container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
             try {
-                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(websiteId) + '?page=' + currentSubPage + '&limit=20', {
+                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(submissionsModalWebsiteId) +
+                    '?page=' + submissionsModalPage + '&limit=20', {
                     headers: { Authorization: auth }
                 });
                 var data = await res.json();
-                renderSubmissions(data, websiteId);
+                renderModalSubmissions(data);
             } catch(e) {
                 container.innerHTML = '<div class="empty-state">Failed to load submissions</div>';
             }
         }
 
-        function renderSubmissions(data, websiteId) {
-            var container = document.getElementById('submissionsContainer');
-            if (!data.submissions || data.submissions.length === 0 && data.total === 0) {
-                container.innerHTML = '<div class="empty-state">No submissions yet for this website.</div>' +
-                    '<div style="margin-top:0.5rem;">' +
-                    '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'csv\')">Export CSV</button> ' +
-                    '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'json\')">Export JSON</button>' +
-                    '</div>';
+        function renderModalSubmissions(data) {
+            var container = document.getElementById('submissionsModalContent');
+            if (!data.submissions || (data.submissions.length === 0 && data.total === 0)) {
+                container.innerHTML = '<div class="empty-state">No submissions yet for this website.</div>';
                 return;
             }
             var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr>' +
@@ -1076,22 +1191,16 @@
 
             // Pagination
             var pagination = '<div class="pagination">';
-            if (currentSubPage > 1) {
-                pagination += '<button class="btn-sm btn-outline" onclick="loadSubmissions(' + (currentSubPage - 1) + ')">Previous</button>';
+            if (submissionsModalPage > 1) {
+                pagination += '<button class="btn-sm btn-outline" onclick="loadModalSubmissions(' + (submissionsModalPage - 1) + ')">Previous</button>';
             }
             pagination += '<span>Page ' + data.page + ' of ' + data.totalPages + ' (' + data.total + ' total)</span>';
-            if (currentSubPage < data.totalPages) {
-                pagination += '<button class="btn-sm btn-outline" onclick="loadSubmissions(' + (currentSubPage + 1) + ')">Next</button>';
+            if (submissionsModalPage < data.totalPages) {
+                pagination += '<button class="btn-sm btn-outline" onclick="loadModalSubmissions(' + (submissionsModalPage + 1) + ')">Next</button>';
             }
             pagination += '</div>';
 
-            var actions = '<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">' +
-                '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'csv\')">Export CSV</button>' +
-                '<button class="btn-sm" onclick="exportSubmissions(\'' + esc(websiteId) + '\', \'json\')">Export JSON</button>' +
-                '<button class="btn-sm btn-danger" onclick="deleteAllSubmissions(\'' + esc(websiteId) + '\')">Delete All</button>' +
-                '</div>';
-
-            container.innerHTML = table + pagination + actions;
+            container.innerHTML = table + pagination;
         }
 
         function showSubmissionDetail(jsonStr) {
@@ -1145,7 +1254,8 @@
                 });
                 if (res.ok) {
                     showToast('All submissions deleted', 'success');
-                    loadSubmissions();
+                    loadModalSubmissions();
+                    loadWebsitesWithStats();
                 } else {
                     showToast('Failed to delete submissions', 'error');
                 }
@@ -1154,19 +1264,26 @@
             }
         }
 
-        // ========== Password Reset ==========
-        document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+        // ========== Password Modal ==========
+        function openPasswordModal() {
+            document.getElementById('passwordFormModal').reset();
+            document.getElementById('passwordModal').style.display = 'flex';
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+        }
+
+        document.getElementById('passwordFormModal').addEventListener('submit', async function(e) {
             e.preventDefault();
-            var btn = document.getElementById('passwordBtn');
+            var btn = document.getElementById('passwordModalBtn');
             setLoading(btn, true);
             var formData = new FormData(e.target);
             var currentPassword = formData.get('currentPassword');
             var newPassword = formData.get('newPassword');
-            var resultDiv = document.getElementById('passwordResult');
-            resultDiv.innerHTML = '';
 
             if (newPassword.length < 8) {
-                resultDiv.innerHTML = '<div style="color:var(--danger);">Password must be at least 8 characters</div>';
+                showToast('Password must be at least 8 characters', 'error');
                 setLoading(btn, false);
                 return;
             }
@@ -1180,7 +1297,7 @@
                 var result = await res.json();
                 if (res.ok) {
                     showToast('Password updated. Please login again.', 'success');
-                    e.target.reset();
+                    closePasswordModal();
                     sessionStorage.removeItem('adm_auth');
                     auth = '';
                     setTimeout(function() {
@@ -1216,12 +1333,15 @@
             updateThemeButton(next);
         });
 
-        // Close modals on overlay click
-        document.getElementById('editModal').addEventListener('click', function(e) {
-            if (e.target === this) closeEditModal();
-        });
-        document.getElementById('detailModal').addEventListener('click', function(e) {
-            if (e.target === this) this.style.display = 'none';
+        // ========== Header button listeners ==========
+        document.getElementById('changePasswordBtn').addEventListener('click', openPasswordModal);
+        document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
+
+        // ========== Close modals on overlay click ==========
+        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal'].forEach(function(id) {
+            document.getElementById(id).addEventListener('click', function(e) {
+                if (e.target === this) this.style.display = 'none';
+            });
         });
 
         // Init
