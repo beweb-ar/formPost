@@ -525,17 +525,17 @@
     <!-- Login Overlay -->
     <div class="login-overlay" id="loginOverlay">
         <div class="login-box">
-            <h2>Admin Login</h2>
+            <h2 data-i18n="loginTitle">Admin Login</h2>
             <form id="loginForm">
                 <div class="form-group">
-                    <label for="loginUser">Username</label>
+                    <label for="loginUser" data-i18n="username">Username</label>
                     <input type="text" id="loginUser" required autocomplete="username" />
                 </div>
                 <div class="form-group">
-                    <label for="loginPass">Password</label>
+                    <label for="loginPass" data-i18n="password">Password</label>
                     <input type="password" id="loginPass" required autocomplete="current-password" />
                 </div>
-                <button type="submit">Login</button>
+                <button type="submit" data-i18n="loginBtn">Login</button>
                 <div class="login-error" id="loginError"></div>
             </form>
         </div>
@@ -553,12 +553,12 @@
                 <h1>FORMBackend <span style="font-weight:300;color:var(--text-secondary);">|</span> Admin</h1>
             </div>
             <div class="header-actions">
-                <button class="header-btn" id="changePasswordBtn">&#128274; Password</button>
+                <button class="header-btn" id="changePasswordBtn" data-i18n="passwordBtn">&#128274; Password</button>
                 <button class="theme-toggle" id="themeToggle">
                     <span id="themeIcon"></span>
                     <span id="themeText">Dark Mode</span>
                 </button>
-                <button class="logout-btn" id="logoutBtn">Logout</button>
+                <button class="logout-btn" id="logoutBtn" data-i18n="logout">Logout</button>
             </div>
         </div>
 
@@ -567,7 +567,7 @@
             <div class="status-bar-items" id="statusItems">
                 <div class="status-bar-item"><span class="spinner"></span> Loading...</div>
             </div>
-            <button class="btn-sm btn-outline" id="settingsBtn">&#9881; Settings</button>
+            <button class="btn-sm btn-outline" id="settingsBtn" data-i18n="settingsBtn">&#9881; Settings</button>
         </div>
 
         <!-- Website Cards Grid -->
@@ -579,44 +579,44 @@
     <!-- Edit Website Modal -->
     <div class="modal-overlay" id="editModal" style="display:none;">
         <div class="modal">
-            <h3>Edit Website: <span id="editModalTitle"></span></h3>
+            <h3><span data-i18n="editWebsite">Edit Website</span>: <span id="editModalTitle"></span></h3>
             <form id="editForm">
                 <input type="hidden" name="editId" id="editId" />
                 <div class="form-group">
-                    <label>To Email</label>
+                    <label data-i18n="toEmail">To Email</label>
                     <input type="email" name="editTo" id="editTo" required />
                 </div>
                 <div class="form-group">
-                    <label>Subject Prefix</label>
+                    <label data-i18n="subjectPrefix">Subject Prefix</label>
                     <input type="text" name="editSubjectPrefix" id="editSubjectPrefix" required />
                 </div>
                 <div class="form-group">
-                    <label>Redirect URL</label>
+                    <label data-i18n="redirectUrl">Redirect URL</label>
                     <input type="url" name="editRedirectUrl" id="editRedirectUrl" />
                 </div>
                 <div class="form-group">
-                    <label>Template Path</label>
+                    <label data-i18n="templatePath">Template Path</label>
                     <input type="text" name="editTemplatePath" id="editTemplatePath" required />
                 </div>
                 <div class="form-group">
-                    <label>Turnstile Secret Key</label>
+                    <label data-i18n="turnstileKey">Turnstile Secret Key</label>
                     <input type="text" name="editTurnstileKey" id="editTurnstileKey" />
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-outline" onclick="closeEditModal()">Cancel</button>
-                    <button type="submit" id="editSaveBtn">Save Changes</button>
+                    <button type="button" class="btn-outline" onclick="closeEditModal()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" id="editSaveBtn" data-i18n="saveChanges">Save Changes</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Submission Detail Modal (z-index 600 to stack above submissions modal) -->
+    <!-- Submission Detail Modal -->
     <div class="modal-overlay" id="detailModal" style="display:none;">
         <div class="modal">
-            <h3>Submission Details</h3>
+            <h3 data-i18n="submissionDetails">Submission Details</h3>
             <div id="detailContent"></div>
             <div class="modal-actions">
-                <button type="button" onclick="document.getElementById('detailModal').style.display='none'">Close</button>
+                <button type="button" onclick="document.getElementById('detailModal').style.display='none'" data-i18n="close">Close</button>
             </div>
         </div>
     </div>
@@ -624,7 +624,7 @@
     <!-- Create Website Modal -->
     <div class="modal-overlay" id="createModal" style="display:none;">
         <div class="modal">
-            <h3>Add New Website</h3>
+            <h3 data-i18n="addNewWebsite">Add New Website</h3>
             <form id="createForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -632,33 +632,33 @@
                         <input type="text" name="id" required placeholder="website-id" />
                     </div>
                     <div class="form-group">
-                        <label>To Email</label>
+                        <label data-i18n="toEmail">To Email</label>
                         <input type="email" name="to" required placeholder="admin@example.com" />
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Subject Prefix</label>
+                        <label data-i18n="subjectPrefix">Subject Prefix</label>
                         <input type="text" name="subjectPrefix" required placeholder="New form submission" />
                     </div>
                     <div class="form-group">
-                        <label>Redirect URL (optional)</label>
+                        <label data-i18n="redirectUrlOpt">Redirect URL (optional)</label>
                         <input type="url" name="redirectUrl" placeholder="https://example.com/thank-you" />
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Template Path</label>
+                        <label data-i18n="templatePath">Template Path</label>
                         <input type="text" name="templatePath" required placeholder="email-template.html" />
                     </div>
                     <div class="form-group">
-                        <label>Turnstile Secret Key (optional)</label>
+                        <label data-i18n="turnstileKeyOpt">Turnstile Secret Key (optional)</label>
                         <input type="text" name="turnstileKey" placeholder="0x4AAAAA..." />
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-outline" onclick="closeCreateModal()">Cancel</button>
-                    <button type="submit" id="createWebsiteBtn">Add Website</button>
+                    <button type="button" class="btn-outline" onclick="closeCreateModal()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" id="createWebsiteBtn" data-i18n="addWebsite">Add Website</button>
                 </div>
             </form>
         </div>
@@ -668,18 +668,18 @@
     <div class="modal-overlay" id="submissionsModal" style="display:none;">
         <div class="modal modal-wide">
             <div class="submissions-modal-header">
-                <h3>Submissions: <span id="submissionsModalTitle"></span></h3>
+                <h3><span data-i18n="submissions">Submissions</span>: <span id="submissionsModalTitle"></span></h3>
                 <div class="submissions-modal-actions">
-                    <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'csv')">Export CSV</button>
-                    <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'json')">Export JSON</button>
-                    <button class="btn-sm btn-danger" onclick="deleteAllSubmissions(submissionsModalWebsiteId)">Delete All</button>
+                    <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'csv')" data-i18n="exportCsv">Export CSV</button>
+                    <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'json')" data-i18n="exportJson">Export JSON</button>
+                    <button class="btn-sm btn-danger" onclick="deleteAllSubmissions(submissionsModalWebsiteId)" data-i18n="deleteAll">Delete All</button>
                 </div>
             </div>
             <div id="submissionsModalContent">
-                <div class="empty-state"><span class="spinner"></span> Loading...</div>
+                <div class="empty-state"><span class="spinner"></span> <span data-i18n="loading">Loading...</span></div>
             </div>
             <div class="modal-actions">
-                <button type="button" class="btn-outline" onclick="closeSubmissionsModal()">Close</button>
+                <button type="button" class="btn-outline" onclick="closeSubmissionsModal()" data-i18n="close">Close</button>
             </div>
         </div>
     </div>
@@ -687,19 +687,19 @@
     <!-- Change Password Modal -->
     <div class="modal-overlay" id="passwordModal" style="display:none;">
         <div class="modal">
-            <h3>Change Password</h3>
+            <h3 data-i18n="changePassword">Change Password</h3>
             <form id="passwordFormModal">
                 <div class="form-group">
-                    <label>Current Password</label>
-                    <input type="password" name="currentPassword" required placeholder="Enter current password" />
+                    <label data-i18n="currentPassword">Current Password</label>
+                    <input type="password" name="currentPassword" required />
                 </div>
                 <div class="form-group">
-                    <label>New Password (min 8 characters)</label>
-                    <input type="password" name="newPassword" required placeholder="Enter new password" minlength="8" />
+                    <label data-i18n="newPasswordLabel">New Password (min 8 characters)</label>
+                    <input type="password" name="newPassword" required minlength="8" />
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-outline" onclick="closePasswordModal()">Cancel</button>
-                    <button type="submit" class="btn-danger" id="passwordModalBtn">Update Password</button>
+                    <button type="button" class="btn-outline" onclick="closePasswordModal()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" class="btn-danger" id="passwordModalBtn" data-i18n="updatePassword">Update Password</button>
                 </div>
             </form>
         </div>
@@ -708,8 +708,8 @@
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none;">
         <div class="modal modal-wide">
-            <h3>Settings</h3>
-            <h3 style="margin-top:0.5rem; font-size:1rem;">SMTP Configuration</h3>
+            <h3 data-i18n="settings">Settings</h3>
+            <h3 style="margin-top:0.5rem; font-size:1rem;" data-i18n="smtpConfig">SMTP Configuration</h3>
             <form id="settingsSmtpForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -717,41 +717,172 @@
                         <input type="text" name="host" required placeholder="smtp.example.com" />
                     </div>
                     <div class="form-group">
-                        <label>Port</label>
+                        <label data-i18n="port">Port</label>
                         <input type="number" name="port" required placeholder="587" />
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>From Email</label>
+                        <label data-i18n="fromEmail">From Email</label>
                         <input type="email" name="from" required placeholder="noreply@example.com" />
                     </div>
                     <div class="form-group checkbox-group">
                         <input type="checkbox" name="secure" id="secureCheck" />
-                        <label for="secureCheck">Secure Connection (TLS/SSL)</label>
+                        <label for="secureCheck" data-i18n="secureConn">Secure Connection (TLS/SSL)</label>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Username (optional)</label>
-                        <input type="text" name="user" placeholder="SMTP username" />
+                        <label data-i18n="usernameOpt">Username (optional)</label>
+                        <input type="text" name="user" />
                     </div>
                     <div class="form-group">
-                        <label>Password (optional)</label>
-                        <input type="password" name="pass" placeholder="SMTP password" />
+                        <label data-i18n="passwordOpt">Password (optional)</label>
+                        <input type="password" name="pass" />
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-outline" onclick="closeSettingsModal()">Cancel</button>
-                    <button type="submit" id="settingsSmtpBtn">Save SMTP Settings</button>
+                    <button type="button" class="btn-outline" onclick="closeSettingsModal()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" id="settingsSmtpBtn" data-i18n="saveSmtp">Save SMTP Settings</button>
                 </div>
             </form>
-            <h3 style="margin-top:1.25rem; font-size:1rem;">Current SMTP Configuration</h3>
+            <h3 style="margin-top:1.25rem; font-size:1rem;" data-i18n="currentSmtp">Current SMTP Configuration</h3>
             <pre class="json" id="smtpStatus"></pre>
         </div>
     </div>
 
     <script>
+        // ========== i18n ==========
+        var currentLang = 'en';
+        var i18n = {
+            en: {
+                // Login
+                loginTitle: 'Admin Login', username: 'Username', password: 'Password', loginBtn: 'Login',
+                invalidCredentials: 'Invalid credentials. Please try again.',
+                connectionError: 'Connection error. Please try again.',
+                // Header
+                passwordBtn: '&#128274; Password', logout: 'Logout', settingsBtn: '&#9881; Settings',
+                // Status bar
+                port: 'Port', uptime: 'Uptime', memory: 'Memory', sites: 'Sites', totalSubs: 'Total Subs',
+                statusUnavailable: 'Status unavailable',
+                // Cards
+                to: 'To', subject: 'Subject', redirect: 'Redirect', template: 'Template',
+                turnstileEnabled: 'Enabled', submissions: 'Submissions', lastSubmission: 'Last Submission',
+                never: 'Never', addWebsiteCard: 'Add Website', edit: 'Edit', delete: 'Delete',
+                failedLoadWebsites: 'Failed to load websites',
+                // Modals
+                editWebsite: 'Edit Website', addNewWebsite: 'Add New Website',
+                toEmail: 'To Email', subjectPrefix: 'Subject Prefix',
+                redirectUrl: 'Redirect URL', redirectUrlOpt: 'Redirect URL (optional)',
+                templatePath: 'Template Path',
+                turnstileKey: 'Turnstile Secret Key', turnstileKeyOpt: 'Turnstile Secret Key (optional)',
+                cancel: 'Cancel', saveChanges: 'Save Changes', addWebsite: 'Add Website',
+                close: 'Close', loading: 'Loading...',
+                // Submissions modal
+                submissionDetails: 'Submission Details', date: 'Date',
+                exportCsv: 'Export CSV', exportJson: 'Export JSON',
+                deleteAll: 'Delete All', noSubmissions: 'No submissions yet for this website.',
+                failedLoadSubmissions: 'Failed to load submissions',
+                previous: 'Previous', next: 'Next',
+                page: 'Page', of: 'of', total: 'total',
+                // Password modal
+                changePassword: 'Change Password', currentPassword: 'Current Password',
+                newPasswordLabel: 'New Password (min 8 characters)',
+                updatePassword: 'Update Password',
+                passwordMinLength: 'Password must be at least 8 characters',
+                passwordUpdatedRelogin: 'Password updated. Please login again.',
+                // Settings modal
+                settings: 'Settings', smtpConfig: 'SMTP Configuration',
+                fromEmail: 'From Email', secureConn: 'Secure Connection (TLS/SSL)',
+                usernameOpt: 'Username (optional)', passwordOpt: 'Password (optional)',
+                saveSmtp: 'Save SMTP Settings', currentSmtp: 'Current SMTP Configuration',
+                // Toasts
+                websiteAdded: 'Website added successfully', websiteUpdated: 'Website updated successfully',
+                websiteDeleted: 'Website deleted', failedAdd: 'Failed to add website',
+                failedUpdate: 'Failed to update', failedDelete: 'Failed to delete',
+                smtpSaved: 'SMTP settings saved', failedSmtp: 'Failed to save',
+                statsReset: 'Statistics reset', failedResetStats: 'Failed to reset statistics',
+                exportDownloaded: 'Export downloaded', exportFailed: 'Export failed',
+                subsDeleted: 'All submissions deleted', failedDeleteSubs: 'Failed to delete submissions',
+                failedLoadData: 'Failed to load website data', websiteNotFound: 'Website not found',
+                connError: 'Connection error',
+                // Confirms
+                confirmDelete: 'Are you sure you want to delete "{id}"? This cannot be undone.',
+                confirmResetStats: 'Reset statistics for "{id}"? This cannot be undone.',
+                confirmDeleteSubs: 'Delete ALL submissions for "{id}"? This cannot be undone.',
+                // Theme
+                darkMode: 'Dark Mode', lightMode: 'Light Mode'
+            },
+            es: {
+                // Login
+                loginTitle: 'Inicio de Sesion', username: 'Usuario', password: 'Contrasena', loginBtn: 'Ingresar',
+                invalidCredentials: 'Credenciales invalidas. Intente nuevamente.',
+                connectionError: 'Error de conexion. Intente nuevamente.',
+                // Header
+                passwordBtn: '&#128274; Clave', logout: 'Salir', settingsBtn: '&#9881; Configuracion',
+                // Status bar
+                port: 'Puerto', uptime: 'Activo', memory: 'Memoria', sites: 'Sitios', totalSubs: 'Total Envios',
+                statusUnavailable: 'Estado no disponible',
+                // Cards
+                to: 'Destino', subject: 'Asunto', redirect: 'Redireccion', template: 'Plantilla',
+                turnstileEnabled: 'Activo', submissions: 'Envios', lastSubmission: 'Ultimo Envio',
+                never: 'Nunca', addWebsiteCard: 'Agregar Sitio', edit: 'Editar', delete: 'Eliminar',
+                failedLoadWebsites: 'Error al cargar sitios',
+                // Modals
+                editWebsite: 'Editar Sitio', addNewWebsite: 'Agregar Nuevo Sitio',
+                toEmail: 'Email Destino', subjectPrefix: 'Prefijo de Asunto',
+                redirectUrl: 'URL de Redireccion', redirectUrlOpt: 'URL de Redireccion (opcional)',
+                templatePath: 'Ruta de Plantilla',
+                turnstileKey: 'Clave Secreta Turnstile', turnstileKeyOpt: 'Clave Secreta Turnstile (opcional)',
+                cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addWebsite: 'Agregar Sitio',
+                close: 'Cerrar', loading: 'Cargando...',
+                // Submissions modal
+                submissionDetails: 'Detalle del Envio', date: 'Fecha',
+                exportCsv: 'Exportar CSV', exportJson: 'Exportar JSON',
+                deleteAll: 'Eliminar Todo', noSubmissions: 'No hay envios para este sitio.',
+                failedLoadSubmissions: 'Error al cargar envios',
+                previous: 'Anterior', next: 'Siguiente',
+                page: 'Pagina', of: 'de', total: 'total',
+                // Password modal
+                changePassword: 'Cambiar Contrasena', currentPassword: 'Contrasena Actual',
+                newPasswordLabel: 'Nueva Contrasena (min 8 caracteres)',
+                updatePassword: 'Actualizar Contrasena',
+                passwordMinLength: 'La contrasena debe tener al menos 8 caracteres',
+                passwordUpdatedRelogin: 'Contrasena actualizada. Ingrese nuevamente.',
+                // Settings modal
+                settings: 'Configuracion', smtpConfig: 'Configuracion SMTP',
+                fromEmail: 'Email Remitente', secureConn: 'Conexion Segura (TLS/SSL)',
+                usernameOpt: 'Usuario (opcional)', passwordOpt: 'Contrasena (opcional)',
+                saveSmtp: 'Guardar Config. SMTP', currentSmtp: 'Configuracion SMTP Actual',
+                // Toasts
+                websiteAdded: 'Sitio agregado correctamente', websiteUpdated: 'Sitio actualizado correctamente',
+                websiteDeleted: 'Sitio eliminado', failedAdd: 'Error al agregar sitio',
+                failedUpdate: 'Error al actualizar', failedDelete: 'Error al eliminar',
+                smtpSaved: 'Configuracion SMTP guardada', failedSmtp: 'Error al guardar',
+                statsReset: 'Estadisticas reiniciadas', failedResetStats: 'Error al reiniciar estadisticas',
+                exportDownloaded: 'Exportacion descargada', exportFailed: 'Error en la exportacion',
+                subsDeleted: 'Todos los envios eliminados', failedDeleteSubs: 'Error al eliminar envios',
+                failedLoadData: 'Error al cargar datos del sitio', websiteNotFound: 'Sitio no encontrado',
+                connError: 'Error de conexion',
+                // Confirms
+                confirmDelete: 'Seguro que desea eliminar "{id}"? Esta accion no se puede deshacer.',
+                confirmResetStats: 'Reiniciar estadisticas de "{id}"? Esta accion no se puede deshacer.',
+                confirmDeleteSubs: 'Eliminar TODOS los envios de "{id}"? Esta accion no se puede deshacer.',
+                // Theme
+                darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
+            }
+        };
+
+        function L(key) { return (i18n[currentLang] || i18n.en)[key] || (i18n.en)[key] || key; }
+
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(function(el) {
+                var key = el.getAttribute('data-i18n');
+                var val = L(key);
+                if (val) el.innerHTML = val;
+            });
+        }
+
         // ========== HTML Escaping ==========
         function esc(str) {
             if (!str) return '';
@@ -797,10 +928,10 @@
                     document.getElementById('loginError').textContent = '';
                     loadAll();
                 } else {
-                    document.getElementById('loginError').textContent = 'Invalid credentials. Please try again.';
+                    document.getElementById('loginError').textContent = L('invalidCredentials');
                 }
             } catch (err) {
-                document.getElementById('loginError').textContent = 'Connection error. Please try again.';
+                document.getElementById('loginError').textContent = L('connectionError');
             }
         });
 
@@ -849,20 +980,27 @@
             try {
                 var res = await fetch('/admin/api/status', { headers: { Authorization: auth } });
                 var data = await res.json();
+                // Set lang from server
+                if (data.lang && i18n[data.lang]) {
+                    currentLang = data.lang;
+                    applyTranslations();
+                }
                 var uptime = Math.floor(data.uptime);
                 var hours = Math.floor(uptime / 3600);
                 var mins = Math.floor((uptime % 3600) / 60);
                 var uptimeStr = hours > 0 ? hours + 'h ' + mins + 'm' : mins + 'm';
                 var mem = data.memory;
+                var totalSubs = data.totalSubmissions || 0;
                 document.getElementById('statusItems').innerHTML =
                     '<div class="status-bar-item"><span class="status-dot"></span> <span class="value">' + esc(data.status).toUpperCase() + '</span></div>' +
-                    '<div class="status-bar-item">Port: <span class="value">' + esc(String(data.port)) + '</span></div>' +
-                    '<div class="status-bar-item">Uptime: <span class="value">' + uptimeStr + '</span></div>' +
-                    '<div class="status-bar-item">Memory: <span class="value">' + mem.used + '/' + mem.total + ' MB</span></div>' +
-                    '<div class="status-bar-item">Sites: <span class="value">' + data.config.websites.length + '</span></div>';
+                    '<div class="status-bar-item">' + L('port') + ': <span class="value">' + esc(String(data.port)) + '</span></div>' +
+                    '<div class="status-bar-item">' + L('uptime') + ': <span class="value">' + uptimeStr + '</span></div>' +
+                    '<div class="status-bar-item">' + L('memory') + ': <span class="value">' + mem.used + '/' + mem.total + ' MB</span></div>' +
+                    '<div class="status-bar-item">' + L('sites') + ': <span class="value">' + data.config.websites.length + '</span></div>' +
+                    '<div class="status-bar-item">' + L('totalSubs') + ': <span class="value">' + totalSubs + '</span></div>';
             } catch(e) {
                 document.getElementById('statusItems').innerHTML =
-                    '<div class="status-bar-item">Status unavailable</div>';
+                    '<div class="status-bar-item">' + L('statusUnavailable') + '</div>';
             }
         }
 
@@ -878,7 +1016,7 @@
                 renderWebsiteCards(websites, stats);
             } catch(e) {
                 document.getElementById('websiteCards').innerHTML =
-                    '<div class="empty-state">Failed to load websites</div>';
+                    '<div class="empty-state">' + L('failedLoadWebsites') + '</div>';
             }
         }
 
@@ -892,28 +1030,28 @@
                 var subCount = stat.successfulSubmissions || 0;
                 var lastSub = stat.lastSubmission
                     ? new Date(stat.lastSubmission).toLocaleString()
-                    : 'Never';
+                    : L('never');
                 var redirect = cfg.redirectUrl
-                    ? '<div class="card-info"><strong>Redirect:</strong> <a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a></div>'
+                    ? '<div class="card-info"><strong>' + L('redirect') + ':</strong> <a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a></div>'
                     : '';
                 var turnstile = cfg.turnstileKey
-                    ? '<div class="card-info"><strong>Turnstile:</strong> Enabled</div>'
+                    ? '<div class="card-info"><strong>Turnstile:</strong> ' + L('turnstileEnabled') + '</div>'
                     : '';
 
                 return '<div class="website-card">' +
                     '<h4>' + esc(id) + '</h4>' +
-                    '<div class="card-info"><strong>To:</strong> ' + esc(cfg.to) + '</div>' +
-                    '<div class="card-info"><strong>Subject:</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
+                    '<div class="card-info"><strong>' + L('to') + ':</strong> ' + esc(cfg.to) + '</div>' +
+                    '<div class="card-info"><strong>' + L('subject') + ':</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
                     redirect + turnstile +
-                    '<div class="card-info"><strong>Template:</strong> ' + esc(cfg.templatePath) + '</div>' +
+                    '<div class="card-info"><strong>' + L('template') + ':</strong> ' + esc(cfg.templatePath) + '</div>' +
                     '<div class="card-stats">' +
-                        '<div class="card-stat"><span class="card-stat-value">' + subCount + '</span><span class="card-stat-label">Submissions</span></div>' +
-                        '<div class="card-stat"><span class="card-stat-value small">' + esc(lastSub) + '</span><span class="card-stat-label">Last Submission</span></div>' +
+                        '<div class="card-stat"><span class="card-stat-value">' + subCount + '</span><span class="card-stat-label">' + L('submissions') + '</span></div>' +
+                        '<div class="card-stat"><span class="card-stat-value small">' + esc(lastSub) + '</span><span class="card-stat-label">' + L('lastSubmission') + '</span></div>' +
                     '</div>' +
                     '<div class="website-card-actions">' +
-                        '<button class="btn-sm" onclick="openSubmissionsModal(\'' + esc(id) + '\')">Submissions</button>' +
-                        '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">Edit</button>' +
-                        '<button class="btn-sm btn-danger" onclick="deleteWebsite(\'' + esc(id) + '\')">Delete</button>' +
+                        '<button class="btn-sm" onclick="openSubmissionsModal(\'' + esc(id) + '\')">' + L('submissions') + '</button>' +
+                        '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">' + L('edit') + '</button>' +
+                        '<button class="btn-sm btn-danger" onclick="deleteWebsite(\'' + esc(id) + '\')">' + L('delete') + '</button>' +
                     '</div>' +
                     '</div>';
             }).join('');
@@ -921,7 +1059,7 @@
             // Add the "+" card
             html += '<div class="add-card" onclick="openCreateModal()">' +
                 '<span class="plus-icon">+</span>' +
-                '<span>Add Website</span>' +
+                '<span>' + L('addWebsiteCard') + '</span>' +
                 '</div>';
 
             container.innerHTML = html;
@@ -962,15 +1100,15 @@
                 });
                 var result = await res.json();
                 if (res.ok) {
-                    showToast('Website added successfully', 'success');
+                    showToast(L('websiteAdded'), 'success');
                     closeCreateModal();
                     loadWebsitesWithStats();
                     loadStatus();
                 } else {
-                    showToast(result.error || 'Failed to add website', 'error');
+                    showToast(result.error || L('failedAdd'), 'error');
                 }
             } catch(err) {
-                showToast('Connection error', 'error');
+                showToast(L('connError'), 'error');
             }
             setLoading(btn, false);
         });
@@ -984,7 +1122,7 @@
                 var data = await res.json();
                 websitesCache = data;
                 var cfg = data[id];
-                if (!cfg) return showToast('Website not found', 'error');
+                if (!cfg) return showToast(L('websiteNotFound'), 'error');
                 document.getElementById('editId').value = id;
                 document.getElementById('editModalTitle').textContent = id;
                 document.getElementById('editTo').value = cfg.to || '';
@@ -994,7 +1132,7 @@
                 document.getElementById('editTurnstileKey').value = cfg.turnstileKey || '';
                 document.getElementById('editModal').style.display = 'flex';
             } catch(e) {
-                showToast('Failed to load website data', 'error');
+                showToast(L('failedLoadData'), 'error');
             }
         }
 
@@ -1023,36 +1161,36 @@
                 });
                 var result = await res.json();
                 if (res.ok) {
-                    showToast('Website updated successfully', 'success');
+                    showToast(L('websiteUpdated'), 'success');
                     closeEditModal();
                     loadWebsitesWithStats();
                 } else {
-                    showToast(result.error || 'Failed to update', 'error');
+                    showToast(result.error || L('failedUpdate'), 'error');
                 }
             } catch(err) {
-                showToast('Connection error', 'error');
+                showToast(L('connError'), 'error');
             }
             setLoading(btn, false);
         });
 
         // ========== Delete Website ==========
         async function deleteWebsite(id) {
-            if (!confirm('Are you sure you want to delete "' + id + '"? This cannot be undone.')) return;
+            if (!confirm(L('confirmDelete').replace('{id}', id))) return;
             try {
                 var res = await fetch('/admin/api/websites/' + encodeURIComponent(id), {
                     method: 'DELETE',
                     headers: { Authorization: auth }
                 });
                 if (res.ok) {
-                    showToast('Website deleted', 'success');
+                    showToast(L('websiteDeleted'), 'success');
                     loadWebsitesWithStats();
                     loadStatus();
                 } else {
                     var result = await res.json();
-                    showToast(result.error || 'Failed to delete', 'error');
+                    showToast(result.error || L('failedDelete'), 'error');
                 }
             } catch(err) {
-                showToast('Connection error', 'error');
+                showToast(L('connError'), 'error');
             }
         }
 
@@ -1096,13 +1234,13 @@
                 });
                 var result = await res.json();
                 if (res.ok) {
-                    showToast('SMTP settings saved', 'success');
+                    showToast(L('smtpSaved'), 'success');
                     loadSmtp();
                 } else {
-                    showToast(result.error || 'Failed to save', 'error');
+                    showToast(result.error || L('failedSmtp'), 'error');
                 }
             } catch(err) {
-                showToast('Connection error', 'error');
+                showToast(L('connError'), 'error');
             }
             setLoading(btn, false);
         });
@@ -1118,20 +1256,20 @@
 
         // ========== Statistics ==========
         async function resetStatistics(websiteId) {
-            if (!confirm('Reset statistics for "' + websiteId + '"? This cannot be undone.')) return;
+            if (!confirm(L('confirmResetStats').replace('{id}', websiteId))) return;
             try {
                 var res = await fetch('/admin/api/statistics/' + encodeURIComponent(websiteId) + '/reset', {
                     method: 'PUT',
                     headers: { Authorization: auth }
                 });
                 if (res.ok) {
-                    showToast('Statistics reset', 'success');
+                    showToast(L('statsReset'), 'success');
                     loadWebsitesWithStats();
                 } else {
-                    showToast('Failed to reset statistics', 'error');
+                    showToast(L('failedResetStats'), 'error');
                 }
             } catch(e) {
-                showToast('Connection error', 'error');
+                showToast(L('connError'), 'error');
             }
         }
 
@@ -1163,40 +1301,54 @@
                 var data = await res.json();
                 renderModalSubmissions(data);
             } catch(e) {
-                container.innerHTML = '<div class="empty-state">Failed to load submissions</div>';
+                container.innerHTML = '<div class="empty-state">' + L('failedLoadSubmissions') + '</div>';
             }
+        }
+
+        // Convert field key to display label
+        function fieldLabel(key) {
+            return key.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
         }
 
         function renderModalSubmissions(data) {
             var container = document.getElementById('submissionsModalContent');
             if (!data.submissions || (data.submissions.length === 0 && data.total === 0)) {
-                container.innerHTML = '<div class="empty-state">No submissions yet for this website.</div>';
+                container.innerHTML = '<div class="empty-state">' + L('noSubmissions') + '</div>';
                 return;
             }
-            var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr>' +
-                '<th>Date</th><th>Name</th><th>Email</th><th>Phone</th><th>Message</th>' +
-                '</tr></thead><tbody>';
+            // Detect dynamic columns from submissions (exclude metadata)
+            var meta = ['id', 'timestamp', 'ip'];
+            var colSet = {};
             data.submissions.forEach(function(s) {
-                var msg = (s.message || '').substring(0, 60);
-                if (s.message && s.message.length > 60) msg += '...';
-                table += '<tr onclick="showSubmissionDetail(' + JSON.stringify(JSON.stringify(s)).replace(/'/g, "\\'") + ')" style="cursor:pointer;">' +
-                    '<td>' + esc(new Date(s.timestamp).toLocaleString()) + '</td>' +
-                    '<td>' + esc(s.name) + '</td>' +
-                    '<td>' + esc(s.email) + '</td>' +
-                    '<td>' + esc(s.phone) + '</td>' +
-                    '<td>' + esc(msg) + '</td>' +
-                    '</tr>';
+                Object.keys(s).forEach(function(k) {
+                    if (meta.indexOf(k) === -1) colSet[k] = true;
+                });
+            });
+            var cols = Object.keys(colSet);
+            // Build table header
+            var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr><th>' + L('date') + '</th>';
+            cols.forEach(function(c) { table += '<th>' + esc(fieldLabel(c)) + '</th>'; });
+            table += '</tr></thead><tbody>';
+            data.submissions.forEach(function(s) {
+                table += '<tr onclick="showSubmissionDetail(' + JSON.stringify(JSON.stringify(s)).replace(/'/g, "\\'") + ')" style="cursor:pointer;">';
+                table += '<td>' + esc(new Date(s.timestamp).toLocaleString()) + '</td>';
+                cols.forEach(function(c) {
+                    var val = String(s[c] || '');
+                    if (val.length > 60) val = val.substring(0, 60) + '...';
+                    table += '<td>' + esc(val) + '</td>';
+                });
+                table += '</tr>';
             });
             table += '</tbody></table></div>';
 
             // Pagination
             var pagination = '<div class="pagination">';
             if (submissionsModalPage > 1) {
-                pagination += '<button class="btn-sm btn-outline" onclick="loadModalSubmissions(' + (submissionsModalPage - 1) + ')">Previous</button>';
+                pagination += '<button class="btn-sm btn-outline" onclick="loadModalSubmissions(' + (submissionsModalPage - 1) + ')">' + L('previous') + '</button>';
             }
-            pagination += '<span>Page ' + data.page + ' of ' + data.totalPages + ' (' + data.total + ' total)</span>';
+            pagination += '<span>' + L('page') + ' ' + data.page + ' ' + L('of') + ' ' + data.totalPages + ' (' + data.total + ' ' + L('total') + ')</span>';
             if (submissionsModalPage < data.totalPages) {
-                pagination += '<button class="btn-sm btn-outline" onclick="loadModalSubmissions(' + (submissionsModalPage + 1) + ')">Next</button>';
+                pagination += '<button class="btn-sm btn-outline" onclick="loadModalSubmissions(' + (submissionsModalPage + 1) + ')">' + L('next') + '</button>';
             }
             pagination += '</div>';
 
@@ -1206,22 +1358,20 @@
         function showSubmissionDetail(jsonStr) {
             var s = JSON.parse(jsonStr);
             var content = '<div style="display:grid;gap:0.75rem;">';
-            var fields = [
-                ['Date', new Date(s.timestamp).toLocaleString()],
-                ['Name', s.name],
-                ['Email', s.email],
-                ['Phone', s.phone],
-                ['Rooms', s.rooms],
-                ['Service', s.service],
-                ['Message', s.message],
-                ['IP', s.ip],
-                ['ID', s.id]
-            ];
-            fields.forEach(function(f) {
-                if (f[1]) {
-                    content += '<div><strong>' + esc(f[0]) + ':</strong> ' + esc(f[1]) + '</div>';
+            // Show timestamp first
+            if (s.timestamp) {
+                content += '<div><strong>' + L('date') + ':</strong> ' + esc(new Date(s.timestamp).toLocaleString()) + '</div>';
+            }
+            // Show all dynamic fields (skip metadata)
+            var meta = ['id', 'timestamp', 'ip'];
+            Object.keys(s).forEach(function(key) {
+                if (meta.indexOf(key) === -1 && s[key]) {
+                    content += '<div><strong>' + esc(fieldLabel(key)) + ':</strong> ' + esc(String(s[key])) + '</div>';
                 }
             });
+            // Show metadata at the end
+            if (s.ip) content += '<div><strong>IP:</strong> ' + esc(s.ip) + '</div>';
+            if (s.id) content += '<div><strong>ID:</strong> ' + esc(s.id) + '</div>';
             content += '</div>';
             document.getElementById('detailContent').innerHTML = content;
             document.getElementById('detailModal').style.display = 'flex';
@@ -1239,28 +1389,28 @@
                 a.download = 'submissions-' + websiteId + '.' + format;
                 a.click();
                 URL.revokeObjectURL(url);
-                showToast('Export downloaded', 'success');
+                showToast(L('exportDownloaded'), 'success');
             } catch(e) {
-                showToast('Export failed', 'error');
+                showToast(L('exportFailed'), 'error');
             }
         }
 
         async function deleteAllSubmissions(websiteId) {
-            if (!confirm('Delete ALL submissions for "' + websiteId + '"? This cannot be undone.')) return;
+            if (!confirm(L('confirmDeleteSubs').replace('{id}', websiteId))) return;
             try {
                 var res = await fetch('/admin/api/submissions/' + encodeURIComponent(websiteId), {
                     method: 'DELETE',
                     headers: { Authorization: auth }
                 });
                 if (res.ok) {
-                    showToast('All submissions deleted', 'success');
+                    showToast(L('subsDeleted'), 'success');
                     loadModalSubmissions();
                     loadWebsitesWithStats();
                 } else {
-                    showToast('Failed to delete submissions', 'error');
+                    showToast(L('failedDeleteSubs'), 'error');
                 }
             } catch(e) {
-                showToast('Connection error', 'error');
+                showToast(L('connError'), 'error');
             }
         }
 
@@ -1283,7 +1433,7 @@
             var newPassword = formData.get('newPassword');
 
             if (newPassword.length < 8) {
-                showToast('Password must be at least 8 characters', 'error');
+                showToast(L('passwordMinLength'), 'error');
                 setLoading(btn, false);
                 return;
             }
@@ -1296,7 +1446,7 @@
                 });
                 var result = await res.json();
                 if (res.ok) {
-                    showToast('Password updated. Please login again.', 'success');
+                    showToast(L('passwordUpdatedRelogin'), 'success');
                     closePasswordModal();
                     sessionStorage.removeItem('adm_auth');
                     auth = '';
@@ -1305,10 +1455,10 @@
                         document.getElementById('mainContent').style.display = 'none';
                     }, 1500);
                 } else {
-                    showToast(result.error || 'Failed to update password', 'error');
+                    showToast(result.error || L('failedUpdate'), 'error');
                 }
             } catch(err) {
-                showToast('Connection error', 'error');
+                showToast(L('connError'), 'error');
             }
             setLoading(btn, false);
         });
@@ -1322,7 +1472,7 @@
 
         function updateThemeButton(theme) {
             document.getElementById('themeIcon').textContent = theme === 'dark' ? '☀️' : '🌙';
-            document.getElementById('themeText').textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            document.getElementById('themeText').textContent = theme === 'dark' ? L('lightMode') : L('darkMode');
         }
 
         document.getElementById('themeToggle').addEventListener('click', function() {
