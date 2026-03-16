@@ -1378,7 +1378,7 @@
             if (hasTurnstile) {
                 prompt += '### Bot Protection (Cloudflare Turnstile)\n';
                 prompt += 'This website has Turnstile enabled. You must:\n';
-                prompt += '1. Add the Turnstile script: `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`\n';
+                prompt += '1. Add the Turnstile script: `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script>`\n';
                 prompt += '2. Add the widget inside the form: `<div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>`\n';
                 prompt += '3. The `cf-turnstile-response` field is automatically added and verified server-side.\n\n';
             }
