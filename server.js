@@ -276,8 +276,12 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 console.error('Error updating statistics:', statsError.message);
             }
 
-            // Redirect the user
-            res.redirect(302, recipientConfig.redirectUrl);
+            // Redirect or respond with success
+            if (recipientConfig.redirectUrl) {
+                res.redirect(302, recipientConfig.redirectUrl);
+            } else {
+                res.status(200).json({ success: true, message: 'Form submitted successfully.' });
+            }
 
         } catch (error) {
             console.error('Error sending email:', error.message);
