@@ -11,6 +11,84 @@ const config = require('./config.json');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DEBUG = process.env.DEBUG === 'true';
+const LANG = (process.env.LANG || 'es').substring(0, 2).toLowerCase();
+
+// Server-side translations
+const serverMessages = {
+    en: {
+        invalidFormId: 'Invalid form submission ID.',
+        tooManyFields: 'Too many form fields.',
+        invalidFieldName: 'Invalid field name.',
+        fieldTooLong: (label) => `Field "${label}" is too long.`,
+        invalidEmail: 'Invalid email address.',
+        completeCaptcha: 'Please complete the security verification.',
+        invalidSubmission: 'Invalid form submission.',
+        captchaFailed: 'Security verification failed. Please try again.',
+        captchaError: 'Security verification error. Please try again later.',
+        templateError: 'Template configuration error.',
+        formSuccess: 'Form submitted successfully.',
+        serverError: 'Something went wrong on the server.',
+        templateReadError: 'Template error on the server.',
+        authRequired: 'Authentication required',
+        forbidden: 'Forbidden',
+        missingIdOrConfig: 'Missing id or config',
+        websiteExists: 'Website ID already exists',
+        websiteAdded: 'Website added',
+        websiteNotFound: 'Website not found',
+        websiteUpdated: 'Website updated',
+        websiteRemoved: 'Website removed',
+        invalidSmtp: 'Invalid SMTP config',
+        smtpUpdated: 'SMTP config updated',
+        failedSaveConfig: 'Failed to save config',
+        statsReset: 'Statistics reset',
+        failedResetStats: 'Failed to reset statistics',
+        submissionsDeleted: 'All submissions deleted',
+        failedDeleteSubs: 'Failed to delete submissions',
+        passwordRequired: 'Current password and new password are required',
+        passwordTooShort: 'New password must be at least 8 characters',
+        passwordIncorrect: 'Current password is incorrect',
+        passwordUpdated: 'Password updated successfully',
+        failedUpdatePassword: 'Failed to update password',
+        failedRetrieveStatus: 'Failed to retrieve status'
+    },
+    es: {
+        invalidFormId: 'ID de formulario no valido.',
+        tooManyFields: 'Demasiados campos en el formulario.',
+        invalidFieldName: 'Nombre de campo no valido.',
+        fieldTooLong: (label) => `El campo "${label}" es demasiado largo.`,
+        invalidEmail: 'Direccion de email no valida.',
+        completeCaptcha: 'Por favor complete la verificacion de seguridad.',
+        invalidSubmission: 'Envio de formulario no valido.',
+        captchaFailed: 'Verificacion de seguridad fallida. Intente nuevamente.',
+        captchaError: 'Error de verificacion de seguridad. Intente mas tarde.',
+        templateError: 'Error de configuracion de template.',
+        formSuccess: 'Formulario enviado correctamente.',
+        serverError: 'Ocurrio un error en el servidor.',
+        templateReadError: 'Error de template en el servidor.',
+        authRequired: 'Autenticacion requerida',
+        forbidden: 'Acceso denegado',
+        missingIdOrConfig: 'Falta id o configuracion',
+        websiteExists: 'El ID del website ya existe',
+        websiteAdded: 'Website agregado',
+        websiteNotFound: 'Website no encontrado',
+        websiteUpdated: 'Website actualizado',
+        websiteRemoved: 'Website eliminado',
+        invalidSmtp: 'Configuracion SMTP no valida',
+        smtpUpdated: 'Configuracion SMTP actualizada',
+        failedSaveConfig: 'Error al guardar configuracion',
+        statsReset: 'Estadisticas reiniciadas',
+        failedResetStats: 'Error al reiniciar estadisticas',
+        submissionsDeleted: 'Todas las submissions eliminadas',
+        failedDeleteSubs: 'Error al eliminar submissions',
+        passwordRequired: 'Se requiere contrasena actual y nueva',
+        passwordTooShort: 'La nueva contrasena debe tener al menos 8 caracteres',
+        passwordIncorrect: 'La contrasena actual es incorrecta',
+        passwordUpdated: 'Contrasena actualizada correctamente',
+        failedUpdatePassword: 'Error al actualizar contrasena',
+        failedRetrieveStatus: 'Error al obtener estado'
+    }
+};
+const t = serverMessages[LANG] || serverMessages.es;
 
 // Override config with environment variables if provided
 if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
@@ -168,32 +246,32 @@ app.post('/submit', submitLimiter, async (req, res) => {
     const recipientConfig = config.recipients[website_id];
     if (!recipientConfig) {
         console.error(`Unknown website_id: ${website_id}`);
-        return res.status(400).send('Invalid form submission ID.');
+        return res.status(400).send(t.invalidFormId);
     }
 
     // Input validation: max 30 fields, each max 5000 chars
     const fieldEntries = Object.entries(formFields);
-    if (fieldEntries.length > 30) return res.status(400).send('Too many form fields.');
+    if (fieldEntries.length > 30) return res.status(400).send(t.tooManyFields);
     for (const [key, value] of fieldEntries) {
-        if (typeof key !== 'string' || key.length > 100) return res.status(400).send('Invalid field name.');
+        if (typeof key !== 'string' || key.length > 100) return res.status(400).send(t.invalidFieldName);
         const strVal = String(value || '');
-        if (strVal.length > 5000) return res.status(400).send(`Field "${fieldToLabel(key)}" is too long.`);
+        if (strVal.length > 5000) return res.status(400).send(t.fieldTooLong(fieldToLabel(key)));
     }
     // Validate email if present
     const email = formFields.email || formFields.correo || formFields.e_mail || '';
-    if (email && !isValidEmail(email)) return res.status(400).send('Invalid email address.');
+    if (email && !isValidEmail(email)) return res.status(400).send(t.invalidEmail);
 
     // Verify Cloudflare Turnstile token
     if (!DEBUG) {
         if (!turnstileToken) {
             console.error('No Turnstile token provided');
-            return res.status(400).send('Please complete the security verification.');
+            return res.status(400).send(t.completeCaptcha);
         }
 
         const turnstileConfig = config.turnstile[website_id];
         if (!turnstileConfig) {
             console.error(`No Turnstile config found for website: ${website_id}`);
-            return res.status(400).send('Invalid form submission.');
+            return res.status(400).send(t.invalidSubmission);
         }
 
         try {
@@ -210,11 +288,11 @@ app.post('/submit', submitLimiter, async (req, res) => {
             const { success, 'error-codes': errorCodes } = verificationResponse.data;
             if (!success) {
                 console.error('Turnstile verification failed:', errorCodes);
-                return res.status(400).send('Security verification failed. Please try again.');
+                return res.status(400).send(t.captchaFailed);
             }
         } catch (error) {
             console.error('Error verifying Turnstile token:', error.message);
-            return res.status(500).send('Security verification error. Please try again later.');
+            return res.status(500).send(t.captchaError);
         }
     } else {
         console.log('DEBUG mode: Skipping Turnstile verification');
@@ -226,7 +304,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
         const templatePath = path.resolve(__dirname, recipientConfig.templatePath);
         if (!templatePath.startsWith(__dirname)) {
             console.error('Path traversal attempt detected:', recipientConfig.templatePath);
-            return res.status(500).send('Template configuration error.');
+            return res.status(500).send(t.templateError);
         }
 
         let templateContent;
@@ -319,16 +397,16 @@ app.post('/submit', submitLimiter, async (req, res) => {
             if (recipientConfig.redirectUrl) {
                 res.redirect(302, recipientConfig.redirectUrl);
             } else {
-                res.status(200).json({ success: true, message: 'Form submitted successfully.' });
+                res.status(200).json({ success: true, message: t.formSuccess });
             }
 
         } catch (error) {
             console.error('Error sending email:', error.message);
-            res.status(500).send('Something went wrong on the server.');
+            res.status(500).send(t.serverError);
         }
     } catch (templateError) {
         console.error('Error reading email template:', templateError.message);
-        res.status(500).send('Template error on the server.');
+        res.status(500).send(t.templateReadError);
     }
 });
 
@@ -356,7 +434,7 @@ function adminAuth(req, res, next) {
     const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Basic ')) {
         res.set('WWW-Authenticate', 'Basic realm="Admin Area"');
-        return res.status(401).send('Authentication required');
+        return res.status(401).send(t.authRequired);
     }
     const base64Credentials = authHeader.split(' ')[1];
     const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
@@ -370,7 +448,7 @@ function adminAuth(req, res, next) {
     if (config.admin && user === config.admin.username && pass === config.admin.password) {
         return next();
     }
-    return res.status(403).send('Forbidden');
+    return res.status(403).send(t.forbidden);
 }
 
 // Serve admin UI (no Basic Auth - the frontend handles its own login)
@@ -394,11 +472,19 @@ adminRouter.use(adminAuth);
 // Get server status
 adminRouter.get('/status', async (req, res) => {
     try {
+        // Calculate total submissions across all websites
+        const stats = config.statistics || {};
+        let totalSubmissions = 0;
+        for (const ws of Object.values(stats)) {
+            totalSubmissions += (ws.successfulSubmissions || 0);
+        }
         res.json({
             status: 'ok',
+            lang: LANG,
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             port: PORT,
+            totalSubmissions: totalSubmissions,
             memory: {
                 used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
                 total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024 * 100) / 100
@@ -415,7 +501,7 @@ adminRouter.get('/status', async (req, res) => {
             }
         });
     } catch (e) {
-        res.status(500).json({ error: 'Failed to retrieve status' });
+        res.status(500).json({ error: t.failedRetrieveStatus });
     }
 });
 
@@ -428,17 +514,17 @@ adminRouter.get('/websites', (req, res) => {
 adminRouter.post('/websites', async (req, res) => {
     const { id, config: siteConfig } = req.body;
     if (!id || !siteConfig) {
-        return res.status(400).json({ error: 'Missing id or config' });
+        return res.status(400).json({ error: t.missingIdOrConfig });
     }
     if (config.recipients[id]) {
-        return res.status(409).json({ error: 'Website ID already exists' });
+        return res.status(409).json({ error: t.websiteExists });
     }
     config.recipients[id] = siteConfig;
     if (siteConfig.turnstileKey) {
         config.turnstile[id] = { secretKey: siteConfig.turnstileKey };
     }
     await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
-    res.status(201).json({ message: 'Website added' });
+    res.status(201).json({ message: t.websiteAdded });
 });
 
 // Update existing website configuration
@@ -446,7 +532,7 @@ adminRouter.put('/websites/:id', async (req, res) => {
     const { id } = req.params;
     const siteConfig = req.body;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: 'Website not found' });
+        return res.status(404).json({ error: t.websiteNotFound });
     }
     config.recipients[id] = { ...config.recipients[id], ...siteConfig };
     if (siteConfig.turnstileKey) {
@@ -454,21 +540,21 @@ adminRouter.put('/websites/:id', async (req, res) => {
         config.turnstile[id] = { secretKey: siteConfig.turnstileKey };
     }
     await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
-    res.json({ message: 'Website updated' });
+    res.json({ message: t.websiteUpdated });
 });
 
 // Delete a website configuration
 adminRouter.delete('/websites/:id', async (req, res) => {
     const { id } = req.params;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: 'Website not found' });
+        return res.status(404).json({ error: t.websiteNotFound });
     }
     delete config.recipients[id];
     if (config.turnstile && config.turnstile[id]) {
         delete config.turnstile[id];
     }
     await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
-    res.json({ message: 'Website removed' });
+    res.json({ message: t.websiteRemoved });
 });
 
 // SMTP configuration routes
@@ -487,15 +573,15 @@ adminRouter.get('/smtp', (req, res) => {
 adminRouter.put('/smtp', async (req, res) => {
     const newSmtp = req.body;
     if (!newSmtp || typeof newSmtp !== 'object') {
-        return res.status(400).json({ error: 'Invalid SMTP config' });
+        return res.status(400).json({ error: t.invalidSmtp });
     }
     config.smtp = { ...config.smtp, ...newSmtp };
     try {
         await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
-        res.json({ message: 'SMTP config updated' });
+        res.json({ message: t.smtpUpdated });
     } catch (e) {
         console.error('Failed to write config:', e.message);
-        res.status(500).json({ error: 'Failed to save config' });
+        res.status(500).json({ error: t.failedSaveConfig });
     }
 });
 
@@ -517,7 +603,7 @@ adminRouter.get('/statistics', (req, res) => {
 adminRouter.get('/statistics/:id', (req, res) => {
     const { id } = req.params;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: 'Website not found' });
+        return res.status(404).json({ error: t.websiteNotFound });
     }
     const stats = config.statistics || {};
     const websiteStats = stats[id] || { successfulSubmissions: 0, lastSubmission: null };
@@ -532,7 +618,7 @@ adminRouter.get('/statistics/:id', (req, res) => {
 adminRouter.put('/statistics/:id/reset', async (req, res) => {
     const { id } = req.params;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: 'Website not found' });
+        return res.status(404).json({ error: t.websiteNotFound });
     }
     try {
         const currentConfig = JSON.parse(await fs.readFile('./config.json', 'utf8'));
@@ -540,10 +626,10 @@ adminRouter.put('/statistics/:id/reset', async (req, res) => {
         currentConfig.statistics[id] = { successfulSubmissions: 0, lastSubmission: null };
         await fs.writeFile('./config.json', JSON.stringify(currentConfig, null, 4));
         config.statistics = currentConfig.statistics;
-        res.json({ message: 'Statistics reset', websiteId: id });
+        res.json({ message: t.statsReset, websiteId: id });
     } catch (e) {
         console.error('Failed to reset statistics:', e.message);
-        res.status(500).json({ error: 'Failed to reset statistics' });
+        res.status(500).json({ error: t.failedResetStats });
     }
 });
 
@@ -551,7 +637,7 @@ adminRouter.put('/statistics/:id/reset', async (req, res) => {
 adminRouter.get('/submissions/:websiteId', async (req, res) => {
     const { websiteId } = req.params;
     if (!config.recipients[websiteId]) {
-        return res.status(404).json({ error: 'Website not found' });
+        return res.status(404).json({ error: t.websiteNotFound });
     }
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
@@ -570,21 +656,21 @@ adminRouter.get('/submissions/:websiteId', async (req, res) => {
 adminRouter.delete('/submissions/:websiteId', async (req, res) => {
     const { websiteId } = req.params;
     if (!config.recipients[websiteId]) {
-        return res.status(404).json({ error: 'Website not found' });
+        return res.status(404).json({ error: t.websiteNotFound });
     }
     const filePath = path.join(DATA_DIR, `submissions-${websiteId}.json`);
     try {
         await fs.writeFile(filePath, JSON.stringify([], null, 2));
-        res.json({ message: 'All submissions deleted' });
+        res.json({ message: t.submissionsDeleted });
     } catch (e) {
-        res.status(500).json({ error: 'Failed to delete submissions' });
+        res.status(500).json({ error: t.failedDeleteSubs });
     }
 });
 
 adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
     const { websiteId } = req.params;
     if (!config.recipients[websiteId]) {
-        return res.status(404).json({ error: 'Website not found' });
+        return res.status(404).json({ error: t.websiteNotFound });
     }
     const format = req.query.format || 'json';
     const submissions = await loadSubmissions(websiteId);
@@ -622,13 +708,13 @@ adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
 adminRouter.put('/admin/reset-password', async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
-        return res.status(400).json({ error: 'Current password and new password are required' });
+        return res.status(400).json({ error: t.passwordRequired });
     }
     if (newPassword.length < 8) {
-        return res.status(400).json({ error: 'New password must be at least 8 characters' });
+        return res.status(400).json({ error: t.passwordTooShort });
     }
     if (currentPassword !== config.admin.password) {
-        return res.status(403).json({ error: 'Current password is incorrect' });
+        return res.status(403).json({ error: t.passwordIncorrect });
     }
     try {
         const configData = await fs.readFile('./config.json', 'utf8');
@@ -636,10 +722,10 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
         currentConfig.admin.password = newPassword;
         await fs.writeFile('./config.json', JSON.stringify(currentConfig, null, 4));
         config.admin.password = newPassword;
-        res.json({ message: 'Password updated successfully' });
+        res.json({ message: t.passwordUpdated });
     } catch (e) {
         console.error('Failed to update password:', e.message);
-        res.status(500).json({ error: 'Failed to update password' });
+        res.status(500).json({ error: t.failedUpdatePassword });
     }
 });
 
