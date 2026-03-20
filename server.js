@@ -853,11 +853,12 @@ async function adminAuth(req, res, next) {
         const match = await bcrypt.compare(pass, config.admin.password);
         if (match) return next();
     }
-    return res.status(403).send(t.forbidden);
+    // Apply auth rate limit only on failed attempts
+    authLimiter(req, res, () => res.status(403).send(t.forbidden));
 }
 
 // Serve admin UI (no Basic Auth - the frontend handles its own login)
-app.use('/admin', authLimiter, (req, res, next) => {
+app.use('/admin', (req, res, next) => {
     if (req.path === '/' || req.path === '') {
         return res.sendFile(path.join(__dirname, 'admin', 'index.html'));
     }
@@ -1087,6 +1088,33 @@ adminRouter.post('/senders/:id/test', async (req, res) => {
     } catch (e) {
         log.error('Sender test failed', { senderId: id, error: e.message });
         res.status(500).json({ error: 'Connection failed: ' + e.message });
+    }
+});
+
+// Telegram: fetch available chats from getUpdates
+adminRouter.post('/telegram/chats', async (req, res) => {
+    const { botToken } = req.body;
+    if (!botToken) return res.status(400).json({ error: 'Bot token required' });
+    try {
+        const response = await axios.get(`https://api.telegram.org/bot${botToken}/getUpdates`, { timeout: 5000 });
+        const updates = response.data.result || [];
+        const chats = {};
+        for (const update of updates) {
+            const msg = update.message || update.channel_post || update.my_chat_member && update.my_chat_member.chat;
+            if (!msg) continue;
+            const chat = msg.chat || msg;
+            if (chat && chat.id && !chats[chat.id]) {
+                chats[chat.id] = {
+                    id: chat.id,
+                    title: chat.title || chat.first_name || chat.username || String(chat.id),
+                    type: chat.type
+                };
+            }
+        }
+        res.json(Object.values(chats));
+    } catch (e) {
+        const errMsg = e.response && e.response.data && e.response.data.description || e.message;
+        res.status(400).json({ error: errMsg });
     }
 });
 

@@ -39,21 +39,43 @@
 
 ## Features
 
+### Core
 - **Multi-form support** - Handle unlimited forms, each with its own configuration
-- **Multi-sender SMTP** - Configure multiple SMTP relays (senders) and assign each form to a specific sender
+- **Multi-sender SMTP** - Configure multiple SMTP relays with active/disabled toggle per sender
+- **Multiple recipients** - Send to multiple email addresses per form (comma-separated, chip UI)
 - **HTML email notifications** - Custom email templates per form with dynamic field injection
 - **Template management** - Create, edit, and delete email templates from the admin UI
-- **Cloudflare Turnstile** - Per-form bot protection with enable/disable toggle
+- **Auto-responder** - Automatic confirmation email to the person who submitted the form, with selectable template
+- **Forms without sender** - Forms can work with notifications only (Discord, Telegram, Webhook) without an SMTP sender
+
+### Notifications
+- **Discord notifications** - Optional per-form Discord webhook for real-time submission alerts
+- **Telegram notifications** - Per-form Telegram bot notifications with automatic Chat ID discovery via "Fetch" button
+- **Generic webhook** - POST JSON payload to any URL on each submission (Slack, Zapier, n8n, custom backends)
+
+### Bot Protection
+- **Cloudflare Turnstile / hCaptcha** - Per-form captcha with provider selection and enable/disable toggle
 - **Honeypot protection** - Hidden field (`_hp_field`) silently rejects bots without user friction
 - **Domain restriction** - Allow submissions only from authorized domains (per form)
-- **Discord notifications** - Optional per-form Discord webhook for real-time submission alerts
-- **Submission storage** - JSON file-based storage, up to 1000 submissions per form
-- **Export** - Download submissions as CSV or JSON
-- **Admin dashboard** - Full web UI to manage forms, senders, templates, statistics, submissions, and passwords
+
+### Admin Dashboard
+- **Full web UI** - Manage forms, senders, templates, statistics, submissions, and passwords
 - **Real-time inbox** - SSE-powered live feed of new submissions
-- **Internationalization** - Server and admin UI available in English and Spanish via `LANG` env var
-- **Statistics & charts** - Per-form and global submission counts with time-series chart data
+- **Real-time outbox** - Live feed of sent emails, Discord, and Telegram notifications with status (OK, error, skipped)
+- **Outbox log modal** - Paginated full log of all outgoing mails and notifications per form
+- **Statistics & charts** - Per-form and global counts for submissions, mails, and notifications with time-series chart (overlapping areas)
+- **Submission search** - Search submissions by name or email
+- **Integration code** - Ready-to-copy HTML form code in the edit modal, including honeypot and captcha
+- **Backup / restore** - Export and import full configuration (forms, senders, templates) as JSON
 - **Dark / Light theme** - Toggle in admin UI, persisted in localStorage
+- **Internationalization** - Server and admin UI in English and Spanish via `LANG` env var
+
+### Storage & Export
+- **Submission storage** - JSON file-based storage, up to 1000 submissions per form
+- **Outbox storage** - JSON file-based log of all outgoing mails and notifications (up to 500 per form)
+- **Export** - Download submissions as CSV or JSON
+
+### Security
 - **Rate limiting** - Separate limits for form submissions, per-form global limits, admin API, and login attempts
 - **Security headers** - Helmet middleware with CSP, XSS protection
 - **Docker ready** - Multi-stage build, non-root user, health checks, resource limits
@@ -92,14 +114,21 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 {
     "recipients": {
         "my-form": {
-            "to": "you@example.com",
+            "to": "you@example.com, team@example.com",
             "subjectPrefix": "Contact Form - ",
             "redirectUrl": "https://example.com/thanks",
             "templatePath": "templates/contact-form.html",
-            "turnstileEnabled": true,
-            "allowedDomains": ["https://example.com", "https://www.example.com"],
+            "captchaEnabled": true,
+            "captchaProvider": "turnstile",
+            "allowedDomains": ["https://example.com"],
             "senderId": "default",
-            "discordWebhook": "https://discord.com/api/webhooks/..."
+            "discordWebhook": "https://discord.com/api/webhooks/...",
+            "telegramBotToken": "123456:ABC-DEF...",
+            "telegramChatId": "-100123456789",
+            "webhookUrl": "https://hooks.example.com/...",
+            "autoReplyEnabled": true,
+            "autoReplySubject": "Thank you for your submission",
+            "autoReplyTemplate": "templates/auto-reply.html"
         }
     },
     "senders": {
@@ -108,26 +137,19 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
             "host": "smtp.example.com",
             "port": 587,
             "secure": false,
+            "active": true,
             "from": "noreply@example.com",
             "user": "smtp_user",
             "pass": "smtp_pass"
         }
     },
-    "statistics": {
-        "my-form": {
-            "successfulSubmissions": 0,
-            "lastSubmission": null
-        }
-    },
-    "turnstile": {
+    "captcha": {
         "my-form": {
             "secretKey": "0x4AAAAA..."
         }
     },
     "cors": {
-        "allowedOrigins": [
-            "https://example.com"
-        ]
+        "allowedOrigins": ["https://example.com"]
     },
     "admin": {
         "username": "admin",
@@ -136,69 +158,57 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 }
 ```
 
-> **Note:** The legacy `smtp` section is auto-migrated to `senders.default` on first run.
-
-### Sections
-
-| Section | Description |
-|---|---|
-| `recipients` | One entry per form: destination email, subject prefix, redirect URL, template path, turnstile toggle, allowed domains, sender ID, Discord webhook |
-| `senders` | Named SMTP relay configurations. Each sender has its own host, port, credentials, and from address |
-| `statistics` | Auto-managed submission counters and timestamps per form |
-| `turnstile` | Cloudflare Turnstile secret key per form (optional) |
-| `cors` | Array of allowed origins for CORS (must include protocol) |
-| `admin` | Admin dashboard credentials |
-
 ### Per-form options
 
 | Field | Type | Description |
 |---|---|---|
-| `to` | string | Destination email address |
+| `to` | string | Destination email(s), comma-separated for multiple recipients |
 | `subjectPrefix` | string | Email subject prefix |
 | `redirectUrl` | string | URL to redirect after successful submission (optional) |
 | `templatePath` | string | Path to email template HTML file |
-| `turnstileEnabled` | boolean | Enable/disable Turnstile verification (default: `true` if key exists) |
-| `allowedDomains` | string[] | List of allowed origin domains. Empty = allow all |
-| `senderId` | string | ID of the sender (from `senders`) to use for this form (default: `"default"`) |
-| `discordWebhook` | string | Discord webhook URL to send submission notifications (optional) |
+| `captchaEnabled` | boolean | Enable/disable captcha verification |
+| `captchaProvider` | string | `"turnstile"` or `"hcaptcha"` |
+| `allowedDomains` | string[] | Allowed origin domains. Empty = allow all |
+| `senderId` | string | ID of the sender to use (default: `"default"`) |
+| `discordWebhook` | string | Discord webhook URL (optional) |
+| `telegramBotToken` | string | Telegram Bot API token (optional) |
+| `telegramChatId` | string | Telegram chat/group/channel ID (optional) |
+| `webhookUrl` | string | Generic webhook URL - receives POST with JSON (optional) |
+| `autoReplyEnabled` | boolean | Send auto-reply to the submitter's email |
+| `autoReplySubject` | string | Subject for the auto-reply email |
+| `autoReplyTemplate` | string | Template path for the auto-reply email |
+
+### Sender options
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Display name / alias |
+| `host` | string | SMTP server hostname |
+| `port` | number | SMTP port (587, 465, etc.) |
+| `secure` | boolean | Use TLS/SSL |
+| `active` | boolean | When `false`, emails are skipped (config preserved) |
+| `from` | string | From email address |
+| `user` | string | SMTP username |
+| `pass` | string | SMTP password |
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | Server listen port |
-| `DEBUG` | `false` | When `true`, skips Turnstile verification (for testing) |
-| `LANG` | `es` | UI and server message language (`en` or `es`) |
-| `ADMIN_USERNAME` | - | Override admin username from config.json |
-| `ADMIN_PASSWORD` | - | Override admin password from config.json |
-| `SMTP_HOST` | - | Override SMTP host |
-| `SMTP_PORT` | - | Override SMTP port |
-| `SMTP_SECURE` | - | Override SMTP secure flag |
-| `SMTP_FROM` | - | Override SMTP from address |
-| `SMTP_USER` | - | Override SMTP username |
-| `SMTP_PASS` | - | Override SMTP password |
+| `DEBUG` | `false` | When `true`, skips captcha verification |
+| `LANG` | `es` | UI and server language (`en` or `es`) |
+| `ADMIN_USERNAME` | - | Override admin username |
+| `ADMIN_PASSWORD` | - | Override admin password |
 
 ## Internationalization (i18n)
 
-The application supports **English** (`en`) and **Spanish** (`es`).
-
-```bash
-# Spanish (default)
-LANG=es
-
-# English
-LANG=en
-```
-
-- **If `LANG` is not set, Spanish is used by default.**
-- The server translates all response messages (form validation errors, API responses, auth messages).
-- The admin UI detects the language from the server and applies translations to all labels, buttons, toasts, confirm dialogs, and status bar items.
-
-In Docker Compose, add it to `environment`:
+The application supports **English** (`en`) and **Spanish** (`es`). All labels, buttons, stat cards, chart filters, and messages are translated.
 
 ```yaml
 environment:
-  - LANG=es
+  - LANG=es   # Spanish (default)
+  - LANG=en   # English
 ```
 
 ## Admin Interface
@@ -207,100 +217,77 @@ environment:
 
 ### Dashboard
 
-- **Status bar** - Server status, port, uptime, memory, form count, **total submissions** (global)
-- **Form cards** - Each form shows: destination email, subject, redirect, template, Turnstile status, allowed domains, submission count, last submission date
-- **Real-time inbox** - SSE-powered live feed of new submissions
+- **Status bar** - Server status, port, uptime, memory, submissions, mails, notifications
+- **Form cards** - Destination, subject, captcha, domains, sender, Discord, Telegram, webhook, auto-reply status, per-form stats (submissions, mails, notifications)
+- **Real-time inbox** (left) - Live feed of incoming submissions via SSE
+- **Real-time outbox** (right) - Live feed of outgoing mails and notifications with status
+- **Charts** - Overlapping area chart with submissions, mails, and notifications series
 - **Dark/Light theme** toggle
 
 ### Form Management
 
-- Add, edit, and delete form configurations
-- Enable/disable Turnstile verification per form
-- Configure allowed domains per form (restrict which origins can submit)
-- Changes are persisted to `config.json` immediately
+- Add, edit, and delete forms with full configuration
+- Multiple recipients with chip/tag UI
+- Captcha provider selection (Turnstile / hCaptcha)
+- Discord, Telegram, and webhook configuration
+- Auto-responder with template selection
+- Integration code section with copy-to-clipboard
+- Backup and restore from the Senders modal
 
 ### Submissions
 
-- Paginated table per form (50 per page)
-- Click any row to see full detail
-- **Export CSV** or **Export JSON**
-- **Delete all** submissions for a form
-- IP addresses are anonymized (last octet masked)
+- Paginated table (10 per page) with search by name/email
+- Click any row for full detail
+- Export CSV / JSON, delete all
 
-### Statistics
+### Outbox Log
 
-- Per-form submission count and last submission timestamp
-- **Total submissions** across all forms shown in the status bar
-- Reset statistics per form
+- Click any outbox entry to open paginated log modal
+- Shows: date, channel (Mail/Discord/Telegram), destination, subject, status (OK/Error/Skipped)
 
-### Senders (SMTP)
+### Senders
 
-- Add, edit, and delete SMTP sender configurations
-- Each sender has its own host, port, credentials, and from address
-- Test sender connection directly from the UI
-- Assign a sender to each form via `senderId`
-
-### Templates
-
-- List, create, edit, and delete email templates
-- Templates stored in the `templates/` directory
-- Live editing from the admin UI
-
-### Settings
-
-- Change admin password (requires current password, min 8 chars)
+- Add, edit, delete SMTP senders with active/disabled toggle
+- Test connection from the UI
+- Backup / Restore buttons (exports forms, senders, templates as JSON)
 
 ## Email Templates
 
-Templates are HTML files with placeholders. Two modes:
-
-### Dynamic mode (recommended)
-
-Use `{{fields}}` to auto-generate a list of all submitted fields:
+Templates are HTML files with placeholders:
 
 ```html
+<!-- Dynamic mode (recommended) -->
 <h2>New submission from {{website_id}}</h2>
-<div>{{fields}}</div>
-```
+<ul>{{fields}}</ul>
 
-### Legacy mode
-
-Use individual `{{fieldname}}` placeholders:
-
-```html
+<!-- Legacy mode -->
 <p><strong>Name:</strong> {{name}}</p>
-<p><strong>Email:</strong> {{email}}</p>
-<p><strong>Message:</strong> {{message}}</p>
 ```
 
-Field names are auto-converted to labels: `correo_electronico` becomes `Correo Electronico`.
-
-If a template is missing or unreadable, the server generates a basic HTML email automatically.
+An auto-reply template (`templates/auto-reply.html`) is included for the auto-responder feature.
 
 ## HTML Form Example
 
 ```html
 <form action="https://your-server.com/submit" method="POST">
     <input type="hidden" name="website_id" value="my-form">
+
+    <!-- Honeypot anti-spam (hidden, do not remove) -->
+    <input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off">
+
     <label>Name: <input type="text" name="name" required></label>
     <label>Email: <input type="email" name="email" required></label>
+    <label>Phone: <input type="tel" name="phone"></label>
     <label>Message: <textarea name="message"></textarea></label>
 
-    <!-- Cloudflare Turnstile (optional, only if configured and enabled) -->
+    <!-- Captcha (if configured) -->
     <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>
+    <!-- or: <div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div> -->
 
     <button type="submit">Send</button>
 </form>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 ```
-
-### Form constraints
-
-- `website_id` (required) - Must match a key in `config.recipients`
-- Max 30 fields per submission
-- Max 100 characters per field name
-- Max 5000 characters per field value
-- Email fields are validated (email, correo, e_mail)
 
 ## API Reference
 
@@ -309,153 +296,74 @@ If a template is missing or unreadable, the server generates a basic HTML email 
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/submit` | Process a form submission |
-| `GET` | `/health` | Health check (no auth) |
+| `GET` | `/health` | Health check |
 
-### Admin (Basic Auth required)
+### Admin (Basic Auth)
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/admin/api/status` | Server status, version, uptime, memory, total submissions, lang |
-| `GET` | `/admin/api/websites` | List all form configs |
-| `POST` | `/admin/api/websites` | Create a new form |
-| `PUT` | `/admin/api/websites/:id` | Update a form |
-| `DELETE` | `/admin/api/websites/:id` | Delete a form |
-| `GET` | `/admin/api/senders` | List all SMTP senders (credentials masked) |
-| `POST` | `/admin/api/senders` | Create a new sender |
-| `PUT` | `/admin/api/senders/:id` | Update a sender |
-| `DELETE` | `/admin/api/senders/:id` | Delete a sender |
-| `POST` | `/admin/api/senders/:id/test` | Test sender connection (sends test email) |
-| `GET` | `/admin/api/smtp` | Legacy: get default sender config (credentials masked) |
-| `PUT` | `/admin/api/smtp` | Legacy: update default sender config |
-| `GET` | `/admin/api/templates` | List all email templates |
-| `GET` | `/admin/api/templates/:name` | Get template content |
-| `PUT` | `/admin/api/templates/:name` | Create or update a template |
-| `DELETE` | `/admin/api/templates/:name` | Delete a template |
-| `GET` | `/admin/api/statistics` | Stats for all forms |
-| `GET` | `/admin/api/statistics/chart` | Chart data aggregated by day (`?period=week\|month\|year\|today`) |
-| `GET` | `/admin/api/statistics/:id` | Stats for one form |
-| `PUT` | `/admin/api/statistics/:id/reset` | Reset stats for a form |
-| `GET` | `/admin/api/submissions/:id` | Paginated submissions (`?page=1&limit=50`) |
-| `DELETE` | `/admin/api/submissions/:id` | Delete all submissions for a form |
-| `GET` | `/admin/api/submissions/:id/export` | Export submissions (`?format=json` or `csv`) |
-| `PUT` | `/admin/api/admin/reset-password` | Change admin password |
-| `POST` | `/admin/api/inbox/token` | Issue a short-lived SSE token |
-| `GET` | `/admin/api/inbox/stream` | SSE real-time inbox stream (`?token=...`) |
+| `GET` | `/admin/api/status` | Server status, totals for submissions/mails/notifications |
+| `GET/POST/PUT/DELETE` | `/admin/api/websites[/:id]` | CRUD forms |
+| `GET/POST/PUT/DELETE` | `/admin/api/senders[/:id]` | CRUD senders |
+| `POST` | `/admin/api/senders/:id/test` | Test sender connection |
+| `POST` | `/admin/api/telegram/chats` | Fetch available Telegram chats for a bot token |
+| `GET/PUT/DELETE` | `/admin/api/templates[/:name]` | CRUD templates |
+| `GET` | `/admin/api/statistics[/:id]` | Stats (includes mails/notifications counts) |
+| `GET` | `/admin/api/statistics/chart` | Chart data with submissions, mails, notifications per day |
+| `PUT` | `/admin/api/statistics/:id/reset` | Reset stats |
+| `GET` | `/admin/api/submissions/:id` | Paginated submissions (`?page=1&limit=10&q=search`) |
+| `DELETE` | `/admin/api/submissions/:id` | Delete all submissions |
+| `GET` | `/admin/api/submissions/:id/export` | Export (`?format=json\|csv`) |
+| `GET` | `/admin/api/outbox/recent` | Recent outbox entries |
+| `GET` | `/admin/api/outbox/:id` | Paginated outbox log per form |
+| `GET` | `/admin/api/backup` | Download full backup (JSON) |
+| `POST` | `/admin/api/restore` | Restore from backup |
+| `POST` | `/admin/api/inbox/token` | Issue SSE token |
+| `GET` | `/admin/api/inbox/stream` | SSE stream (inbox + outbox events) |
 
 ## Docker Deployment
-
-### docker-compose.yml
 
 ```bash
 docker-compose up -d       # Start
 docker-compose logs -f     # View logs
 docker-compose down        # Stop
-docker-compose restart     # Restart (required after config.json edits outside admin UI)
-```
-
-### Manual Docker
-
-```bash
-docker build -t formpost .
-
-docker run -d \
-  --name formpost \
-  -p 3000:3000 \
-  -e ADMIN_USERNAME=admin \
-  -e ADMIN_PASSWORD=securepassword \
-  -e LANG=es \
-  -v ./config.json:/app/config.json \
-  -v ./data:/app/data \
-  --restart always \
-  formpost
 ```
 
 ### Docker features
 
-- **Multi-stage build** - Final image ~150MB (Alpine + production deps only)
+- **Multi-stage build** - Final image ~150MB
 - **Non-root user** - Runs as `nodeuser` (UID 1001)
-- **Health check** - `/health` every 30s, auto-restart on failure
+- **Health check** - `/health` every 30s
 - **Resource limits** - 512MB max, 128MB reserved
-- **no-new-privileges** - Prevents privilege escalation
-- **Volumes** - `config.json`, `data/` (submissions), `templates/` (email templates)
+- **Volumes** - `config.json`, `data/`, `templates/`
 
 ## Security
-
-### Rate Limiting
 
 | Scope | Limit |
 |---|---|
 | Form submissions | 5 per minute per IP |
-| Per-form global | 100 per minute per form (all IPs combined) |
+| Per-form global | 100 per minute per form |
 | Admin API | 30 per minute per IP |
-| Login attempts | 10 per 15 minutes (failures only) |
-
-### Input Validation
-
-- Request body limited to 100KB
-- Max 30 fields, 5000 chars per value, 100 chars per key
-- Email validation with 254 char limit
-- HTML escaping in templates and submissions (XSS prevention)
-
-### Domain Restriction
-
-- Per-form `allowedDomains` validates the `Origin` header on submissions
-- Rejects requests from unauthorized domains with 403
-
-### Headers & Protections
-
-- Helmet with CSP, XSS filter, HSTS, frameguard
-- CORS with configurable allowed origins
-- IP anonymization in stored submissions (last octet masked)
-- Admin credentials never exposed in API responses
-- SMTP credentials masked in status endpoint
+| Login attempts | 20 per 7 minutes (failures only) |
 
 ## File Structure
 
 ```
 formPost/
 ├── server.js                       # Main application
-├── config.json                     # Configuration (managed by admin UI)
-├── package.json                    # Dependencies
-├── Dockerfile                      # Multi-stage Docker build
-├── docker-compose.yml              # Docker Compose config
-├── README.md                       # Documentation (English)
-├── README.es.md                    # Documentation (Spanish)
-├── LICENSE                         # ISC License
-├── logo.png                        # Application logo
-├── fav-icon.png                    # Favicon
-├── screenshot.jpg                  # Admin dashboard screenshot
-├── email-template.html             # Default email template (legacy)
-├── templates/
-│   └── *.html                      # Email templates (managed via admin UI)
+├── config.json                     # Configuration
+├── package.json
+├── Dockerfile / docker-compose.yml
 ├── admin/
 │   └── index.html                  # Admin dashboard (single-file SPA)
+├── templates/
+│   ├── contact-form.html           # Default email template
+│   └── auto-reply.html             # Auto-responder template
 └── data/
-    └── submissions-{formId}.json   # Stored submissions per form
+    ├── submissions-{formId}.json   # Stored submissions
+    └── outbox-{formId}.json        # Outgoing mail/notification log
 ```
 
-## Troubleshooting
+## License
 
-### Emails not sending
-
-1. Verify SMTP credentials in config.json or via admin UI
-2. Check firewall allows outbound SMTP connections
-3. Check logs: `docker-compose logs -f`
-
-### Turnstile verification failing
-
-1. Verify the site key matches the domain in Cloudflare
-2. Check the secret key in config.json matches
-3. Ensure `turnstileEnabled` is `true` for the form
-4. Set `DEBUG=true` to bypass Turnstile for testing
-
-### CORS errors
-
-1. Add the exact origin to `cors.allowedOrigins` (include `https://`)
-2. Restart the container after editing config.json manually
-
-### Domain restriction blocking submissions
-
-1. Check `allowedDomains` in the form config includes the submitting origin
-2. Ensure the origin includes the protocol (e.g., `https://example.com`)
-3. Remove `allowedDomains` or leave it empty to allow all origins
+ISC

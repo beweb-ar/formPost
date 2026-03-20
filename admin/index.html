@@ -49,7 +49,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.25rem;
+            margin-bottom: 0;
             padding-bottom: 1rem;
         }
 
@@ -918,7 +918,11 @@
                         </div>
                         <div class="form-group">
                             <label data-i18n="telegramChatId">Telegram Chat ID</label>
-                            <input type="text" id="editTelegramChatId" placeholder="-100123456789" />
+                            <div style="display:flex;gap:0.5rem;">
+                                <input type="text" id="editTelegramChatId" placeholder="-100123456789" style="flex:1;" />
+                                <button type="button" class="btn-sm btn-outline" onclick="fetchTelegramChats('edit')" data-i18n="telegramFetch">Fetch</button>
+                            </div>
+                            <select id="editTelegramChatSelect" style="display:none;margin-top:0.35rem;font-size:0.85rem;" onchange="selectTelegramChat('edit')"></select>
                         </div>
                     </div>
                     <div class="form-group">
@@ -1047,7 +1051,11 @@
                     </div>
                     <div class="form-group">
                         <label data-i18n="telegramChatId">Telegram Chat ID</label>
-                        <input type="text" id="createTelegramChatId" placeholder="-100123456789" />
+                        <div style="display:flex;gap:0.5rem;">
+                            <input type="text" id="createTelegramChatId" placeholder="-100123456789" style="flex:1;" />
+                            <button type="button" class="btn-sm btn-outline" onclick="fetchTelegramChats('create')" data-i18n="telegramFetch">Fetch</button>
+                        </div>
+                        <select id="createTelegramChatSelect" style="display:none;margin-top:0.35rem;font-size:0.85rem;" onchange="selectTelegramChat('create')"></select>
                     </div>
                 </div>
                 <div class="form-group">
@@ -1280,6 +1288,7 @@
                 allowedDomains: 'Allowed Domains', allowedDomainsHint: 'Leave empty to allow all domains',
                 discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Leave empty to disable Discord notifications',
                 telegramBotToken: 'Telegram Bot Token', telegramChatId: 'Telegram Chat ID', telegramHint: 'Leave empty to disable Telegram notifications',
+                telegramFetch: 'Fetch', telegramNoChats: 'No chats found. Send a message to the bot first, then try again.',
                 webhookUrl: 'Webhook URL', webhookHint: 'POST with JSON payload on each submission',
                 autoReplyEnabled: 'Enable auto-reply to sender', autoReplySubject: 'Auto-reply Subject', autoReplyTemplate: 'Auto-reply Template',
                 backupBtn: 'Backup', restoreBtn: 'Restore',
@@ -1328,7 +1337,7 @@
                 copyInstructions: 'Copy', instructionsCopied: 'Copied to clipboard',
                 integrationTitle: 'Integration',
                 helpTitle: 'Integration Guide',
-                helpIntro: 'This server processes contact form submissions. Each configured form has its own endpoint, email destination, and optional bot protection.',
+                helpIntro: 'This server processes contact form submissions. Each form has its own endpoint, email destination, notifications (Discord, Telegram, Webhook), auto-responder, and optional captcha protection.',
                 helpHowTo: 'How to integrate',
                 helpExampleTitle: 'Example HTML Form',
                 helpConstraintsTitle: 'Constraints',
@@ -1341,8 +1350,8 @@
                 helpStep2: 'Include a hidden field <code>website_id</code> with the form identifier.',
                 helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
                 helpStep4: 'If captcha is configured, add the corresponding widget (Cloudflare Turnstile or hCaptcha) with your site key.',
-                helpStep5: 'The server will send an HTML email to the configured recipient and optionally redirect the user.',
-                helpCopyTip: 'Use the <strong>clipboard icon</strong> on each form card to copy a detailed, LLM-ready integration prompt specific to that form\'s configuration.',
+                helpStep5: 'The server sends the email, saves the submission, triggers notifications (Discord, Telegram, webhook), sends the auto-reply if enabled, and redirects or responds with JSON.',
+                helpCopyTip: 'Use the <strong>Integration</strong> section at the bottom of each form\'s edit modal to copy ready-to-use HTML code.',
                 // Templates
                 templatesBtn: '&#9993; Templates', manageTemplates: 'Email Templates',
                 templateEditor: 'Template Editor', templateName: 'Template Name',
@@ -1385,6 +1394,7 @@
                 allowedDomains: 'Dominios Permitidos', allowedDomainsHint: 'Dejar vac\u00edo para permitir todos los dominios',
                 discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Dejar vac\u00edo para desactivar notificaciones Discord',
                 telegramBotToken: 'Telegram Bot Token', telegramChatId: 'Telegram Chat ID', telegramHint: 'Dejar vac\u00edo para desactivar notificaciones Telegram',
+                telegramFetch: 'Obtener', telegramNoChats: 'No se encontraron chats. Envi\u00e1 un mensaje al bot primero e intent\u00e1 de nuevo.',
                 webhookUrl: 'Webhook URL', webhookHint: 'POST con JSON en cada env\u00edo',
                 autoReplyEnabled: 'Activar auto-respuesta al remitente', autoReplySubject: 'Asunto de auto-respuesta', autoReplyTemplate: 'Template de auto-respuesta',
                 backupBtn: 'Backup', restoreBtn: 'Restaurar',
@@ -1433,7 +1443,7 @@
                 copyInstructions: 'Copiar', instructionsCopied: 'Copiado al portapapeles',
                 integrationTitle: 'Integraci\u00f3n',
                 helpTitle: 'Gu\u00eda de Integraci\u00f3n',
-                helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto. Cada formulario configurado tiene su propio endpoint, email destino y protecci\u00f3n anti-bot opcional.',
+                helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto. Cada formulario tiene su propio endpoint, email destino, notificaciones (Discord, Telegram, Webhook), auto-respuesta y protecci\u00f3n captcha opcional.',
                 helpHowTo: 'C\u00f3mo integrar',
                 helpExampleTitle: 'Ejemplo de Formulario HTML',
                 helpConstraintsTitle: 'Restricciones',
@@ -1446,8 +1456,8 @@
                 helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del formulario.',
                 helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
                 helpStep4: 'Si el captcha est\u00e1 configurado, agrega el widget correspondiente (Cloudflare Turnstile o hCaptcha) con tu site key.',
-                helpStep5: 'El servidor enviar\u00e1 un email HTML al destinatario configurado y opcionalmente redirigir\u00e1 al usuario.',
-                helpCopyTip: 'Usa el <strong>\u00edcono de portapapeles</strong> en cada tarjeta de formulario para copiar un prompt detallado de integraci\u00f3n espec\u00edfico a la configuraci\u00f3n de ese formulario, listo para usar con un LLM.',
+                helpStep5: 'El servidor env\u00eda el email, guarda el env\u00edo, dispara notificaciones (Discord, Telegram, webhook), env\u00eda auto-respuesta si est\u00e1 habilitada, y redirige o responde con JSON.',
+                helpCopyTip: 'Us\u00e1 la secci\u00f3n <strong>Integraci\u00f3n</strong> al final del modal de edici\u00f3n de cada formulario para copiar c\u00f3digo HTML listo para usar.',
                 // Templates
                 templatesBtn: '&#9993; Plantillas', manageTemplates: 'Plantillas de Email',
                 templateEditor: 'Editor de Plantilla', templateName: 'Nombre de Plantilla',
@@ -2584,6 +2594,44 @@
             if (val) { createRecipients.push(val); input.value = ''; renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient'); }
         }
         function removeCreateRecipient(i) { createRecipients.splice(i, 1); renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient'); }
+
+        // Telegram Chat ID fetch
+        async function fetchTelegramChats(prefix) {
+            var token = document.getElementById(prefix + 'TelegramBotToken').value.trim();
+            if (!token) { showToast('Enter a Bot Token first', 'error'); return; }
+            var select = document.getElementById(prefix + 'TelegramChatSelect');
+            select.style.display = 'none';
+            try {
+                var res = await fetch('/admin/api/telegram/chats', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ botToken: token })
+                });
+                var data = await res.json();
+                if (!res.ok) { showToast(data.error || 'Failed', 'error'); return; }
+                if (data.length === 0) {
+                    showToast(L('telegramNoChats'), 'info');
+                    return;
+                }
+                select.innerHTML = '<option value="">-- Select chat --</option>';
+                data.forEach(function(c) {
+                    var label = c.title + ' (' + c.type + ') [' + c.id + ']';
+                    select.innerHTML += '<option value="' + c.id + '">' + esc(label) + '</option>';
+                });
+                select.style.display = 'block';
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
+        function selectTelegramChat(prefix) {
+            var select = document.getElementById(prefix + 'TelegramChatSelect');
+            var val = select.value;
+            if (val) {
+                document.getElementById(prefix + 'TelegramChatId').value = val;
+                select.style.display = 'none';
+            }
+        }
 
         // ========== Delete Website ==========
         async function deleteWebsite(id) {
