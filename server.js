@@ -827,17 +827,20 @@ adminRouter.post('/senders/:id/test', async (req, res) => {
     const { id } = req.params;
     const senderCfg = config.senders && config.senders[id];
     if (!senderCfg) return res.status(404).json({ error: 'Sender not found' });
+    const testTo = (req.body && req.body.to) || senderCfg.from;
+    if (!testTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testTo)) {
+        return res.status(400).json({ error: 'Invalid email address' });
+    }
     try {
         const testTransporter = buildTransporter(senderCfg);
         await testTransporter.verify();
-        // Send a test email to the sender's own from address
         await testTransporter.sendMail({
             from: senderCfg.from,
-            to: senderCfg.from,
+            to: testTo,
             subject: 'formPost - Test Connection',
             html: '<h2>formPost SMTP Test</h2><p>This is a test email from formPost to verify that the SMTP sender <strong>' + escapeHtml(senderCfg.name || id) + '</strong> is working correctly.</p><p>If you received this email, the configuration is correct.</p>'
         });
-        res.json({ message: 'Test email sent successfully to ' + senderCfg.from });
+        res.json({ message: 'Test email sent to ' + testTo });
     } catch (e) {
         log.error('Sender test failed', { senderId: id, error: e.message });
         res.status(500).json({ error: 'Connection failed: ' + e.message });

@@ -934,7 +934,7 @@
 
     <!-- Settings / Senders Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none;">
-        <div class="modal modal-wide">
+        <div class="modal" style="max-width:700px;width:90%;">
             <div class="submissions-modal-header">
                 <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
                 <button class="btn-sm btn-outline" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
@@ -2150,6 +2150,8 @@
         async function testSender() {
             var id = document.getElementById('senderEditorId').value;
             if (!id) return;
+            var testEmail = prompt('Email de destino para el test:', document.getElementById('senderEditorFrom').value);
+            if (!testEmail) return;
             var btn = document.getElementById('senderTestBtn');
             var origText = btn.textContent;
             btn.disabled = true;
@@ -2157,7 +2159,8 @@
             try {
                 var res = await fetch('/admin/api/senders/' + encodeURIComponent(id) + '/test', {
                     method: 'POST',
-                    headers: { Authorization: auth }
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ to: testEmail })
                 });
                 var result = await res.json();
                 if (res.ok) {
