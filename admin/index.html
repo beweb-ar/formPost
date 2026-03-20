@@ -896,6 +896,27 @@
                             <input type="text" name="editCaptchaKey" id="editCaptchaKey" />
                         </div>
                     </div>
+                    <div class="checkbox-group" style="margin-top:0.75rem;">
+                        <input type="checkbox" id="editAutoReplyEnabled" />
+                        <label for="editAutoReplyEnabled" data-i18n="autoReplyEnabled">Enable auto-reply to sender</label>
+                    </div>
+                    <div id="editAutoReplyOptions" style="margin-top:0.5rem;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="autoReplySubject">Auto-reply Subject</label>
+                                <input type="text" id="editAutoReplySubject" placeholder="Thank you for your submission" />
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="autoReplyTemplate">Auto-reply Template</label>
+                                <select id="editAutoReplyTemplate"></select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="autoReplyReplyTo">Reply-To</label>
+                            <input type="email" id="editAutoReplyReplyTo" placeholder="support@example.com" />
+                            <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="autoReplyReplyToHint">Email where replies from the user will go</small>
+                        </div>
+                    </div>
                     <div class="form-group" style="margin-top:1rem;">
                         <label data-i18n="allowedDomains">Allowed Domains</label>
                         <div id="editDomainsContainer"></div>
@@ -929,20 +950,6 @@
                         <label data-i18n="webhookUrl">Webhook URL</label>
                         <input type="url" id="editWebhookUrl" placeholder="https://hooks.example.com/..." />
                         <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="webhookHint">POST with JSON payload on each submission</small>
-                    </div>
-                    <div class="checkbox-group" style="margin-top:0.75rem;">
-                        <input type="checkbox" id="editAutoReplyEnabled" />
-                        <label for="editAutoReplyEnabled" data-i18n="autoReplyEnabled">Enable auto-reply to sender</label>
-                    </div>
-                    <div class="form-row" id="editAutoReplyOptions" style="margin-top:0.5rem;">
-                        <div class="form-group">
-                            <label data-i18n="autoReplySubject">Auto-reply Subject</label>
-                            <input type="text" id="editAutoReplySubject" placeholder="Thank you for your submission" />
-                        </div>
-                        <div class="form-group">
-                            <label data-i18n="autoReplyTemplate">Auto-reply Template</label>
-                            <select id="editAutoReplyTemplate"></select>
-                        </div>
                     </div>
                     <div style="margin-top:1.5rem;border-top:1px solid var(--border-color);padding-top:1rem;">
                         <h4 style="margin-bottom:0.5rem;" data-i18n="integrationTitle">Integration</h4>
@@ -1206,9 +1213,17 @@
         <div class="modal" style="max-width:950px;width:95%;">
             <h3><span data-i18n="templateEditor">Template Editor</span>: <span id="templateEditorTitle"></span></h3>
             <form id="templateEditorForm">
-                <div class="form-group">
-                    <label data-i18n="templateName">Template Name</label>
-                    <input type="text" id="templateEditorName" required placeholder="my-template.html" />
+                <div class="form-row">
+                    <div class="form-group">
+                        <label data-i18n="templateName">Template Name</label>
+                        <input type="text" id="templateEditorName" required placeholder="my-template.html" />
+                    </div>
+                    <div class="form-group" id="templateCopyFromGroup">
+                        <label data-i18n="templateCopyFrom">Copy from</label>
+                        <select id="templateCopyFrom" onchange="copyFromTemplate()">
+                            <option value="">-- Empty --</option>
+                        </select>
+                    </div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.5rem;">
                     <div class="form-group" style="margin-bottom:0;">
@@ -1291,6 +1306,7 @@
                 telegramFetch: 'Fetch', telegramNoChats: 'No chats found. Send a message to the bot first, then try again.',
                 webhookUrl: 'Webhook URL', webhookHint: 'POST with JSON payload on each submission',
                 autoReplyEnabled: 'Enable auto-reply to sender', autoReplySubject: 'Auto-reply Subject', autoReplyTemplate: 'Auto-reply Template',
+                autoReplyReplyTo: 'Reply-To', autoReplyReplyToHint: 'Email where replies from the user will go',
                 backupBtn: 'Backup', restoreBtn: 'Restore',
                 cancel: 'Cancel', saveChanges: 'Save Changes', addForm: 'Add Form',
                 close: 'Close', loading: 'Loading...',
@@ -1357,7 +1373,7 @@
                 templateEditor: 'Template Editor', templateName: 'Template Name',
                 templatePathLabel: 'Path', templateContent: 'HTML Content',
                 templateHint: 'Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{website_id}} for the form ID.',
-                saveTemplate: 'Save Template', newTemplate: 'New Template',
+                saveTemplate: 'Save Template', newTemplate: 'New Template', templateCopyFrom: 'Copy from',
                 noTemplates: 'No templates found.', templateSaved: 'Template saved successfully',
                 templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
                 // Senders
@@ -1397,6 +1413,7 @@
                 telegramFetch: 'Obtener', telegramNoChats: 'No se encontraron chats. Envi\u00e1 un mensaje al bot primero e intent\u00e1 de nuevo.',
                 webhookUrl: 'Webhook URL', webhookHint: 'POST con JSON en cada env\u00edo',
                 autoReplyEnabled: 'Activar auto-respuesta al remitente', autoReplySubject: 'Asunto de auto-respuesta', autoReplyTemplate: 'Template de auto-respuesta',
+                autoReplyReplyTo: 'Responder a', autoReplyReplyToHint: 'Email donde llegar\u00e1n las respuestas del usuario',
                 backupBtn: 'Backup', restoreBtn: 'Restaurar',
                 cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addForm: 'Agregar Formulario',
                 close: 'Cerrar', loading: 'Cargando...',
@@ -1463,7 +1480,7 @@
                 templateEditor: 'Editor de Plantilla', templateName: 'Nombre de Plantilla',
                 templatePathLabel: 'Ruta', templateContent: 'Contenido HTML',
                 templateHint: 'Usa {{fields}} para campos dinámicos o {{fieldname}} para campos específicos. {{website_id}} para el ID del formulario.',
-                saveTemplate: 'Guardar Plantilla', newTemplate: 'Nueva Plantilla',
+                saveTemplate: 'Guardar Plantilla', newTemplate: 'Nueva Plantilla', templateCopyFrom: 'Copiar desde',
                 noTemplates: 'No se encontraron plantillas.', templateSaved: 'Plantilla guardada correctamente',
                 templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
                 // Senders
@@ -2293,6 +2310,7 @@
                 document.getElementById('editWebhookUrl').value = cfg.webhookUrl || '';
                 document.getElementById('editAutoReplyEnabled').checked = !!cfg.autoReplyEnabled;
                 document.getElementById('editAutoReplySubject').value = cfg.autoReplySubject || '';
+                document.getElementById('editAutoReplyReplyTo').value = cfg.autoReplyReplyTo || '';
                 populateTemplateDropdown('editAutoReplyTemplate', cfg.autoReplyTemplate || 'templates/auto-reply.html');
                 // Multiple recipients
                 var toStr = cfg.to || '';
@@ -2373,6 +2391,7 @@
             payload.autoReplyEnabled = document.getElementById('editAutoReplyEnabled').checked;
             payload.autoReplySubject = document.getElementById('editAutoReplySubject').value.trim() || '';
             payload.autoReplyTemplate = document.getElementById('editAutoReplyTemplate').value || '';
+            payload.autoReplyReplyTo = document.getElementById('editAutoReplyReplyTo').value.trim() || '';
             try {
                 var res = await fetch('/admin/api/websites/' + encodeURIComponent(id), {
                     method: 'PUT',
@@ -2470,8 +2489,30 @@
             document.getElementById('templateEditorName').disabled = !!name;
             document.getElementById('templateEditorContent').value = content || '';
             document.getElementById('templateEditorTitle').textContent = name || L('newTemplate');
+            // Show "Copy from" only for new templates
+            var copyGroup = document.getElementById('templateCopyFromGroup');
+            copyGroup.style.display = name ? 'none' : '';
+            if (!name) {
+                var select = document.getElementById('templateCopyFrom');
+                select.innerHTML = '<option value="">-- Empty --</option>';
+                templatesCache.forEach(function(t) {
+                    select.innerHTML += '<option value="' + esc(t.name) + '">' + esc(t.name) + '</option>';
+                });
+            }
             document.getElementById('templateEditorModal').style.display = 'flex';
             updateTemplatePreview();
+        }
+
+        async function copyFromTemplate() {
+            var select = document.getElementById('templateCopyFrom');
+            var name = select.value;
+            if (!name) { document.getElementById('templateEditorContent').value = ''; updateTemplatePreview(); return; }
+            try {
+                var res = await fetch('/admin/api/templates/' + encodeURIComponent(name), { headers: { Authorization: auth } });
+                var data = await res.json();
+                document.getElementById('templateEditorContent').value = data.content || '';
+                updateTemplatePreview();
+            } catch(e) {}
         }
 
         function closeTemplateEditor() {

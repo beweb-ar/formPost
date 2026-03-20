@@ -210,7 +210,7 @@ function checkFormRateLimit(formId) {
 // Rate limiting for admin API
 const adminLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 30,
+    max: 120,
     message: { error: 'Too many requests. Please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -790,7 +790,8 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         from: `"${escapeHtml(String(senderInfo.senderCfg.name || 'No Reply'))}" <${senderInfo.senderCfg.from}>`,
                         to: senderEmail,
                         subject: arSubject,
-                        html: autoReplyBody
+                        html: autoReplyBody,
+                        replyTo: recipientConfig.autoReplyReplyTo || undefined
                     });
                     log.info('Auto-reply sent', { formId: website_id, to: senderEmail });
 
