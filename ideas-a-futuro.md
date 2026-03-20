@@ -1,0 +1,4 @@
+- Configurar varios mail relay y poder configurar cada form por que mail relay sale
+- enviar form a discord - telegram
+- captcha opcional Turnstile / hcaptcha : https://docs.hcaptcha.com/
+- genera codigo ejemplo HTML y js

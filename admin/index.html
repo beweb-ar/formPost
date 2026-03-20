@@ -289,6 +289,7 @@
             box-shadow: var(--shadow-md);
         }
 
+        button:focus:not(.btn-outline):not(.btn-icon):not(.theme-toggle):not(.header-btn) { color: white; }
         button:active { transform: translateY(0); }
         button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
@@ -452,6 +453,14 @@
             z-index: 600;
         }
 
+        #templateManagerModal {
+            z-index: 550;
+        }
+
+        #templateEditorModal {
+            z-index: 600;
+        }
+
         /* Submissions table */
         .submissions-table {
             width: 100%;
@@ -512,6 +521,25 @@
             gap: 0.5rem;
             flex-wrap: wrap;
         }
+
+        /* Footer */
+        .app-footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1.5rem 0 0.5rem;
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+        .footer-separator { opacity: 0.5; }
+        .footer-made { display: flex; align-items: center; gap: 0.3rem; }
+        .footer-heart { color: #ef4444; font-size: 0.85rem; }
+        .footer-beweb-logo { height: 14px; width: auto; opacity: 0.85; }
+        [data-theme="dark"] .footer-heart { color: #ffffff; }
+        [data-theme="dark"] .footer-beweb-logo { filter: brightness(0) invert(1); }
 
         @media (max-width: 768px) {
             body { padding: 1rem; }
@@ -668,8 +696,7 @@
         <!-- Header -->
         <div class="header">
             <div style="display: flex; align-items: center; gap: 1rem;">
-                <img src="/logo.png" alt="Logo" style="height: 40px; width: auto; object-fit: contain;" />
-                <h1>formPost <span style="font-weight:300;color:var(--text-secondary);">|</span> Admin</h1>
+                <img src="/logo.png" alt="formPost" style="height: 40px; width: auto; object-fit: contain;" />
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="templatesBtn" onclick="openTemplateManager()" data-i18n="templatesBtn">&#9993; Templates</button>
@@ -688,7 +715,7 @@
             <div class="status-bar-items" id="statusItems">
                 <div class="status-bar-item"><span class="spinner"></span> Loading...</div>
             </div>
-            <button class="btn-sm btn-outline" id="settingsBtn" data-i18n="settingsBtn">&#9881; Settings</button>
+            <button class="btn-sm btn-outline" id="settingsBtn" data-i18n="sendersBtn">&#9881; Senders</button>
         </div>
 
         <!-- Inbox Panel -->
@@ -710,6 +737,13 @@
         <div class="cards-grid" id="websiteCards">
             <div class="empty-state"><span class="spinner"></span> Loading...</div>
         </div>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <span>formPost <span id="footerVersion"></span></span>
+            <span class="footer-separator">-</span>
+            <span class="footer-made">hecho con <span class="footer-heart">&#10084;</span> por <img src="/logo_beweb.png" alt="beWeb" class="footer-beweb-logo" /></span>
+        </footer>
     </div>
 
     <!-- Edit Website Modal -->
@@ -733,6 +767,12 @@
                 <div class="form-group">
                     <label data-i18n="templatePath">Template</label>
                     <select name="editTemplatePath" id="editTemplatePath" required>
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="sender">Sender</label>
+                    <select name="editSenderId" id="editSenderId">
                         <option value="">Loading...</option>
                     </select>
                 </div>
@@ -810,9 +850,18 @@
                         </select>
                     </div>
                     <div class="form-group">
+                        <label data-i18n="sender">Sender</label>
+                        <select name="senderId" id="createSenderId">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
                         <label data-i18n="turnstileKeyOpt">Turnstile Secret Key (optional)</label>
                         <input type="text" name="turnstileKey" placeholder="0x4AAAAA..." />
                     </div>
+                    <div class="form-group"></div>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="turnstileEnabled" id="createTurnstileEnabled" checked />
@@ -881,45 +930,64 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
+    <!-- Settings / Senders Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none;">
         <div class="modal modal-wide">
-            <h3 data-i18n="settings">Settings</h3>
-            <h3 style="margin-top:0.5rem; font-size:1rem;" data-i18n="smtpConfig">SMTP Configuration</h3>
-            <form id="settingsSmtpForm">
+            <div class="submissions-modal-header">
+                <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
+                <button class="btn-sm btn-outline" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
+            </div>
+            <div id="sendersListContent">
+                <div class="empty-state"><span class="spinner"></span> Loading...</div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" onclick="closeSettingsModal()" data-i18n="close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sender Editor Modal -->
+    <div class="modal-overlay" id="senderEditorModal" style="display:none; z-index:600;">
+        <div class="modal" style="max-width:480px;">
+            <h3 id="senderEditorTitle">Edit Sender</h3>
+            <form id="senderEditorForm">
+                <input type="hidden" id="senderEditorId" />
+                <div class="form-group">
+                    <label data-i18n="senderName">Name / Alias</label>
+                    <input type="text" id="senderEditorName" required placeholder="Main relay" />
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Host</label>
-                        <input type="text" name="host" required placeholder="smtp.example.com" />
+                        <input type="text" id="senderEditorHost" required placeholder="smtp.example.com" />
                     </div>
                     <div class="form-group">
                         <label data-i18n="port">Port</label>
-                        <input type="number" name="port" required placeholder="587" />
+                        <input type="number" id="senderEditorPort" required placeholder="587" />
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label data-i18n="fromEmail">From Email</label>
-                        <input type="email" name="from" required placeholder="noreply@example.com" />
-                    </div>
-                    <div class="form-group checkbox-group">
-                        <input type="checkbox" name="secure" id="secureCheck" />
-                        <label for="secureCheck" data-i18n="secureConn">Secure Connection (TLS/SSL)</label>
-                    </div>
+                <div class="form-group">
+                    <label data-i18n="fromEmail">From Email</label>
+                    <input type="email" id="senderEditorFrom" required placeholder="noreply@example.com" />
                 </div>
-                <div class="form-row">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="senderEditorSecure" />
+                    <label for="senderEditorSecure" data-i18n="secureConn">Secure Connection (TLS/SSL)</label>
+                </div>
+                <div class="form-row" style="margin-top:0.75rem;">
                     <div class="form-group">
                         <label data-i18n="usernameOpt">Username (optional)</label>
-                        <input type="text" name="user" />
+                        <input type="text" id="senderEditorUser" />
                     </div>
                     <div class="form-group">
                         <label data-i18n="passwordOpt">Password (optional)</label>
-                        <input type="password" name="pass" />
+                        <input type="password" id="senderEditorPass" />
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-outline" onclick="closeSettingsModal()" data-i18n="cancel">Cancel</button>
-                    <button type="submit" id="settingsSmtpBtn" data-i18n="saveSmtp">Save SMTP Settings</button>
+                    <button type="button" class="btn-outline" onclick="closeSenderEditor()" data-i18n="cancel">Cancel</button>
+                    <button type="button" class="btn-sm" id="senderTestBtn" onclick="testSender()" style="background:var(--success);">Test</button>
+                    <button type="submit" id="senderEditorSaveBtn">Save</button>
                 </div>
             </form>
         </div>
@@ -934,9 +1002,15 @@
                     <label data-i18n="templateName">Template Name</label>
                     <input type="text" id="templateEditorName" required placeholder="my-template.html" />
                 </div>
-                <div class="form-group">
-                    <label data-i18n="templateContent">HTML Content</label>
-                    <textarea id="templateEditorContent" style="width:100%;min-height:300px;font-family:monospace;font-size:0.85rem;padding:0.75rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);resize:vertical;" placeholder="<h2>New submission from {{website_id}}</h2>&#10;<ul>{{fields}}</ul>"></textarea>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.5rem;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label data-i18n="templateContent">HTML Content</label>
+                        <textarea id="templateEditorContent" oninput="updateTemplatePreview()" style="width:100%;min-height:400px;font-family:monospace;font-size:0.85rem;padding:0.75rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);resize:vertical;" placeholder="<h2>New submission from {{website_id}}</h2>&#10;<ul>{{fields}}</ul>"></textarea>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>Preview</label>
+                        <iframe id="templatePreviewFrame" style="width:100%;min-height:400px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:#fff;" sandbox="allow-same-origin"></iframe>
+                    </div>
                 </div>
                 <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;" data-i18n="templateHint">Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{website_id}} for the form ID.</p>
                 <div class="modal-actions">
@@ -984,7 +1058,7 @@
                 invalidCredentials: 'Invalid credentials. Please try again.',
                 connectionError: 'Connection error. Please try again.',
                 // Header
-                passwordBtn: '&#128274; Password', logout: 'Logout', settingsBtn: '&#9881; Settings',
+                passwordBtn: '&#128274; Password', logout: 'Logout', sendersBtn: '&#9881; Senders',
                 // Status bar
                 port: 'Port', uptime: 'Uptime', memory: 'Memory', forms: 'Forms', totalSubs: 'Total Subs',
                 statusUnavailable: 'Status unavailable',
@@ -1059,6 +1133,9 @@
                 saveTemplate: 'Save Template', newTemplate: 'New Template',
                 noTemplates: 'No templates found.', templateSaved: 'Template saved successfully',
                 templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
+                // Senders
+                senders: 'Senders (SMTP Relays)', newSender: '+ New Sender',
+                senderName: 'Name / Alias', sender: 'Sender',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
@@ -1068,7 +1145,7 @@
                 invalidCredentials: 'Credenciales inv\u00e1lidas. Intente nuevamente.',
                 connectionError: 'Error de conexi\u00f3n. Intente nuevamente.',
                 // Header
-                passwordBtn: '&#128274; Clave', logout: 'Salir', settingsBtn: '&#9881; Configuraci\u00f3n',
+                passwordBtn: '&#128274; Clave', logout: 'Salir', sendersBtn: '&#9881; Senders',
                 // Status bar
                 port: 'Puerto', uptime: 'Activo', memory: 'Memoria', forms: 'Formularios', totalSubs: 'Total Env\u00edos',
                 statusUnavailable: 'Estado no disponible',
@@ -1144,6 +1221,9 @@
                 saveTemplate: 'Guardar Plantilla', newTemplate: 'Nueva Plantilla',
                 noTemplates: 'No se encontraron plantillas.', templateSaved: 'Plantilla guardada correctamente',
                 templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
+                // Senders
+                senders: 'Senders (SMTP Relays)', newSender: '+ Nuevo Sender',
+                senderName: 'Nombre / Alias', sender: 'Sender',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -1390,6 +1470,10 @@
                     '<div class="status-bar-item">' + L('memory') + ': <span class="value">' + mem.used + '/' + mem.total + ' MB</span></div>' +
                     '<div class="status-bar-item">' + L('forms') + ': <span class="value">' + data.config.websites.length + '</span></div>' +
                     '<div class="status-bar-item">' + L('totalSubs') + ': <span class="value">' + totalSubs + '</span></div>';
+                // Update footer version
+                if (data.version) {
+                    document.getElementById('footerVersion').textContent = 'v' + data.version;
+                }
             } catch(e) {
                 document.getElementById('statusItems').innerHTML =
                     '<div class="status-bar-item">' + L('statusUnavailable') + '</div>';
@@ -1401,10 +1485,12 @@
             try {
                 var results = await Promise.all([
                     fetch('/admin/api/websites', { headers: { Authorization: auth } }),
-                    fetch('/admin/api/statistics', { headers: { Authorization: auth } })
+                    fetch('/admin/api/statistics', { headers: { Authorization: auth } }),
+                    fetch('/admin/api/senders', { headers: { Authorization: auth } })
                 ]);
                 var websites = await results[0].json();
                 var stats = await results[1].json();
+                sendersCache = await results[2].json();
                 websitesCache = websites;
                 renderWebsiteCards(websites, stats);
             } catch(e) {
@@ -1438,6 +1524,12 @@
                 if (cfg.allowedDomains && cfg.allowedDomains.length > 0) {
                     domains = '<div class="card-info"><strong>' + L('allowedDomains') + ':</strong> ' + cfg.allowedDomains.map(function(d) { return esc(d); }).join(', ') + '</div>';
                 }
+                var senderLabel = '';
+                if (cfg.senderId && sendersCache[cfg.senderId]) {
+                    senderLabel = '<div class="card-info"><strong>' + L('sender') + ':</strong> ' + esc(sendersCache[cfg.senderId].name || cfg.senderId) + '</div>';
+                } else if (cfg.senderId) {
+                    senderLabel = '<div class="card-info"><strong>' + L('sender') + ':</strong> ' + esc(cfg.senderId) + '</div>';
+                }
                 var discord = cfg.discordWebhook
                     ? '<div class="card-info"><strong>Discord:</strong> ' + L('turnstileOn') + '</div>'
                     : '';
@@ -1449,7 +1541,7 @@
                     '</div>' +
                     '<div class="card-info"><strong>' + L('to') + ':</strong> ' + esc(cfg.to) + '</div>' +
                     '<div class="card-info"><strong>' + L('subject') + ':</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
-                    redirect + turnstile + domains + discord +
+                    redirect + turnstile + domains + senderLabel + discord +
                     '<div class="card-info"><strong>' + L('template') + ':</strong> ' + esc(cfg.templatePath) + '</div>' +
                     '<div class="card-stats">' +
                         '<div class="card-stat"><span class="card-stat-value">' + subCount + '</span><span class="card-stat-label">' + L('submissions') + '</span></div>' +
@@ -1563,7 +1655,10 @@
             document.getElementById('createForm').reset();
             createDomains = [];
             renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain');
-            await populateTemplateDropdown('createTemplatePath', '');
+            await Promise.all([
+                populateTemplateDropdown('createTemplatePath', ''),
+                populateSenderDropdown('createSenderId', '')
+            ]);
             document.getElementById('createModal').style.display = 'flex';
         }
 
@@ -1586,6 +1681,8 @@
             };
             var redirectUrl = formData.get('redirectUrl');
             if (redirectUrl) payload.config.redirectUrl = redirectUrl;
+            var senderId = formData.get('senderId');
+            if (senderId) payload.config.senderId = senderId;
             var turnstileKey = formData.get('turnstileKey');
             if (turnstileKey) payload.config.turnstileKey = turnstileKey;
             payload.config.turnstileEnabled = document.getElementById('createTurnstileEnabled').checked;
@@ -1628,7 +1725,10 @@
                 document.getElementById('editTo').value = cfg.to || '';
                 document.getElementById('editSubjectPrefix').value = cfg.subjectPrefix || '';
                 document.getElementById('editRedirectUrl').value = cfg.redirectUrl || '';
-                await populateTemplateDropdown('editTemplatePath', cfg.templatePath || '');
+                await Promise.all([
+                    populateTemplateDropdown('editTemplatePath', cfg.templatePath || ''),
+                    populateSenderDropdown('editSenderId', cfg.senderId || '')
+                ]);
                 document.getElementById('editTurnstileKey').value = cfg.turnstileKey || '';
                 document.getElementById('editTurnstileEnabled').checked = cfg.turnstileEnabled !== false;
                 document.getElementById('editDiscordWebhook').value = cfg.discordWebhook || '';
@@ -1654,7 +1754,8 @@
                 to: document.getElementById('editTo').value,
                 subjectPrefix: document.getElementById('editSubjectPrefix').value,
                 redirectUrl: document.getElementById('editRedirectUrl').value,
-                templatePath: document.getElementById('editTemplatePath').value
+                templatePath: document.getElementById('editTemplatePath').value,
+                senderId: document.getElementById('editSenderId').value
             };
             var turnstileKey = document.getElementById('editTurnstileKey').value;
             if (turnstileKey) payload.turnstileKey = turnstileKey;
@@ -1760,10 +1861,33 @@
             document.getElementById('templateEditorContent').value = content || '';
             document.getElementById('templateEditorTitle').textContent = name || L('newTemplate');
             document.getElementById('templateEditorModal').style.display = 'flex';
+            updateTemplatePreview();
         }
 
         function closeTemplateEditor() {
             document.getElementById('templateEditorModal').style.display = 'none';
+        }
+
+        function updateTemplatePreview() {
+            var content = document.getElementById('templateEditorContent').value;
+            // Replace template variables with sample data for preview
+            var preview = content
+                .replace(/\{\{website_id\}\}/g, 'my-form')
+                .replace(/\{\{fields\}\}/g, '<li><strong>Name:</strong> John Doe</li>\n<li><strong>Email:</strong> john@example.com</li>\n<li><strong>Message:</strong> Hello, this is a test message.</li>')
+                .replace(/\{\{name\}\}/g, 'John Doe')
+                .replace(/\{\{nombre\}\}/g, 'John Doe')
+                .replace(/\{\{email\}\}/g, 'john@example.com')
+                .replace(/\{\{correo\}\}/g, 'john@example.com')
+                .replace(/\{\{message\}\}/g, 'Hello, this is a test message.')
+                .replace(/\{\{mensaje\}\}/g, 'Hola, este es un mensaje de prueba.')
+                .replace(/\{\{phone\}\}/g, '+1 555-0100')
+                .replace(/\{\{telefono\}\}/g, '+1 555-0100')
+                .replace(/\{\{\w+\}\}/g, 'Sample value');
+            var frame = document.getElementById('templatePreviewFrame');
+            var doc = frame.contentDocument || frame.contentWindow.document;
+            doc.open();
+            doc.write(preview);
+            doc.close();
         }
 
         document.getElementById('templateEditorForm').addEventListener('submit', async function(e) {
@@ -1864,47 +1988,136 @@
             }
         }
 
-        // ========== SMTP (Settings Modal) ==========
-        async function loadSmtp() {
+        // ========== Senders Management ==========
+        var sendersCache = {};
+
+        async function loadSenders() {
             try {
-                var res = await fetch('/admin/api/smtp', { headers: { Authorization: auth } });
-                if (!res.ok) return;
-                var data = await res.json();
-                document.querySelector('#settingsSmtpForm input[name="host"]').value = data.host || '';
-                document.querySelector('#settingsSmtpForm input[name="port"]').value = data.port || '';
-                document.querySelector('#settingsSmtpForm input[name="secure"]').checked = !!data.secure;
-                document.querySelector('#settingsSmtpForm input[name="from"]').value = data.from || '';
-                if (data.user && data.user !== '****') {
-                    document.querySelector('#settingsSmtpForm input[name="user"]').value = data.user;
-                }
-            } catch(e) {}
+                var res = await fetch('/admin/api/senders', { headers: { Authorization: auth } });
+                sendersCache = await res.json();
+            } catch(e) {
+                sendersCache = {};
+            }
+            return sendersCache;
         }
 
-        document.getElementById('settingsSmtpForm').addEventListener('submit', async function(e) {
+        async function populateSenderDropdown(selectId, selectedValue) {
+            var select = document.getElementById(selectId);
+            await loadSenders();
+            select.innerHTML = '';
+            var ids = Object.keys(sendersCache);
+            if (ids.length === 0) {
+                select.innerHTML = '<option value="">No senders</option>';
+            } else {
+                ids.forEach(function(id) {
+                    var opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = (sendersCache[id].name || id) + ' (' + (sendersCache[id].host || '') + ')';
+                    select.appendChild(opt);
+                });
+            }
+            if (selectedValue) select.value = selectedValue;
+        }
+
+        function openSettingsModal() {
+            document.getElementById('settingsModal').style.display = 'flex';
+            loadSendersList();
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        async function loadSendersList() {
+            var container = document.getElementById('sendersListContent');
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
+            await loadSenders();
+            var ids = Object.keys(sendersCache);
+            if (ids.length === 0) {
+                container.innerHTML = '<div class="empty-state">No senders configured.</div>';
+                return;
+            }
+            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>Host</th><th>' + L('fromEmail') + '</th><th></th></tr></thead><tbody>';
+            ids.forEach(function(id) {
+                var s = sendersCache[id];
+                html += '<tr>' +
+                    '<td><code>' + esc(id) + '</code></td>' +
+                    '<td>' + esc(s.name || id) + '</td>' +
+                    '<td>' + esc(s.host || '') + ':' + esc(String(s.port || '')) + '</td>' +
+                    '<td>' + esc(s.from || '') + '</td>' +
+                    '<td style="text-align:right;white-space:nowrap;">' +
+                        '<button class="btn-sm btn-outline" onclick="openSenderEditor(\'' + esc(id) + '\')">' + L('edit') + '</button> ' +
+                        '<button class="btn-sm btn-danger" onclick="deleteSender(\'' + esc(id) + '\')">' + L('delete') + '</button>' +
+                    '</td>' +
+                '</tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        var senderEditorIsNew = false;
+
+        function openSenderEditor(id) {
+            senderEditorIsNew = !id;
+            document.getElementById('senderEditorId').value = id || '';
+            document.getElementById('senderEditorTitle').textContent = id ? 'Edit Sender: ' + id : L('newSender');
+            if (id && sendersCache[id]) {
+                var s = sendersCache[id];
+                document.getElementById('senderEditorName').value = s.name || '';
+                document.getElementById('senderEditorHost').value = s.host || '';
+                document.getElementById('senderEditorPort').value = s.port || '';
+                document.getElementById('senderEditorFrom').value = s.from || '';
+                document.getElementById('senderEditorSecure').checked = !!s.secure;
+                document.getElementById('senderEditorUser').value = '';
+                document.getElementById('senderEditorPass').value = '';
+            } else {
+                document.getElementById('senderEditorForm').reset();
+            }
+            document.getElementById('senderTestBtn').style.display = id ? '' : 'none';
+            document.getElementById('senderEditorModal').style.display = 'flex';
+        }
+
+        function closeSenderEditor() {
+            document.getElementById('senderEditorModal').style.display = 'none';
+        }
+
+        document.getElementById('senderEditorForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            var btn = document.getElementById('settingsSmtpBtn');
+            var btn = document.getElementById('senderEditorSaveBtn');
             setLoading(btn, true);
-            var formData = new FormData(e.target);
+            var existingId = document.getElementById('senderEditorId').value;
             var payload = {
-                host: formData.get('host'),
-                port: Number(formData.get('port')),
-                secure: formData.get('secure') === 'on',
-                from: formData.get('from')
+                name: document.getElementById('senderEditorName').value,
+                host: document.getElementById('senderEditorHost').value,
+                port: Number(document.getElementById('senderEditorPort').value),
+                secure: document.getElementById('senderEditorSecure').checked,
+                from: document.getElementById('senderEditorFrom').value
             };
-            var user = formData.get('user');
-            var pass = formData.get('pass');
+            var user = document.getElementById('senderEditorUser').value;
+            var pass = document.getElementById('senderEditorPass').value;
             if (user) payload.user = user;
             if (pass) payload.pass = pass;
             try {
-                var res = await fetch('/admin/api/smtp', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', Authorization: auth },
-                    body: JSON.stringify(payload)
-                });
+                var res;
+                if (senderEditorIsNew) {
+                    var newId = payload.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-') || 'sender-' + Date.now();
+                    res = await fetch('/admin/api/senders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: auth },
+                        body: JSON.stringify({ id: newId, config: payload })
+                    });
+                } else {
+                    res = await fetch('/admin/api/senders/' + encodeURIComponent(existingId), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', Authorization: auth },
+                        body: JSON.stringify(payload)
+                    });
+                }
                 var result = await res.json();
                 if (res.ok) {
-                    showToast(L('smtpSaved'), 'success');
-                    loadSmtp();
+                    showToast(result.message || L('smtpSaved'), 'success');
+                    closeSenderEditor();
+                    loadSendersList();
                 } else {
                     showToast(result.error || L('failedSmtp'), 'error');
                 }
@@ -1914,13 +2127,47 @@
             setLoading(btn, false);
         });
 
-        function openSettingsModal() {
-            loadSmtp();
-            document.getElementById('settingsModal').style.display = 'flex';
+        async function deleteSender(id) {
+            if (!confirm('Delete sender "' + id + '"? This cannot be undone.')) return;
+            try {
+                var res = await fetch('/admin/api/senders/' + encodeURIComponent(id), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) {
+                    showToast('Sender removed', 'success');
+                    loadSendersList();
+                } else {
+                    showToast(L('failedDelete'), 'error');
+                }
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
         }
 
-        function closeSettingsModal() {
-            document.getElementById('settingsModal').style.display = 'none';
+        async function testSender() {
+            var id = document.getElementById('senderEditorId').value;
+            if (!id) return;
+            var btn = document.getElementById('senderTestBtn');
+            var origText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Testing...';
+            try {
+                var res = await fetch('/admin/api/senders/' + encodeURIComponent(id) + '/test', {
+                    method: 'POST',
+                    headers: { Authorization: auth }
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast(result.message, 'success');
+                } else {
+                    showToast(result.error || 'Test failed', 'error');
+                }
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+            btn.disabled = false;
+            btn.textContent = origText;
         }
 
         // ========== Statistics ==========
@@ -2158,7 +2405,7 @@
         document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
 
         // ========== Close modals on overlay click ==========
-        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal'].forEach(function(id) {
+        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal', 'senderEditorModal', 'helpModal'].forEach(function(id) {
             document.getElementById(id).addEventListener('click', function(e) {
                 if (e.target === this) this.style.display = 'none';
             });

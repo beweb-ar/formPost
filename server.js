@@ -8,6 +8,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcrypt');
 const config = require('./config.json');
+const pkg = require('./package.json');
 const BCRYPT_ROUNDS = 10;
 
 // Structured JSON logger
@@ -142,13 +143,16 @@ if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
     config.admin.password = process.env.ADMIN_PASSWORD;
 }
 
-// Override SMTP config with environment variables if provided
-if (process.env.SMTP_HOST) config.smtp.host = process.env.SMTP_HOST;
-if (process.env.SMTP_PORT) config.smtp.port = parseInt(process.env.SMTP_PORT, 10);
-if (process.env.SMTP_SECURE) config.smtp.secure = process.env.SMTP_SECURE === 'true';
-if (process.env.SMTP_FROM) config.smtp.from = process.env.SMTP_FROM;
-if (process.env.SMTP_USER) config.smtp.user = process.env.SMTP_USER;
-if (process.env.SMTP_PASS) config.smtp.pass = process.env.SMTP_PASS;
+// Override SMTP config with environment variables if provided (applies to legacy smtp and default sender)
+if (process.env.SMTP_HOST || process.env.SMTP_PORT || process.env.SMTP_FROM || process.env.SMTP_USER || process.env.SMTP_PASS || process.env.SMTP_SECURE) {
+    if (!config.smtp) config.smtp = {};
+    if (process.env.SMTP_HOST) config.smtp.host = process.env.SMTP_HOST;
+    if (process.env.SMTP_PORT) config.smtp.port = parseInt(process.env.SMTP_PORT, 10);
+    if (process.env.SMTP_SECURE) config.smtp.secure = process.env.SMTP_SECURE === 'true';
+    if (process.env.SMTP_FROM) config.smtp.from = process.env.SMTP_FROM;
+    if (process.env.SMTP_USER) config.smtp.user = process.env.SMTP_USER;
+    if (process.env.SMTP_PASS) config.smtp.pass = process.env.SMTP_PASS;
+}
 
 // Auto-hash admin password if stored in plaintext (migration)
 async function ensurePasswordHashed() {
@@ -175,6 +179,7 @@ app.use(helmet({
             scriptSrc: ["'self'", "'unsafe-inline'"],
             scriptSrcAttr: ["'unsafe-inline'"],
             imgSrc: ["'self'", "data:"],
+            frameSrc: ["'self'"],
         }
     }
 }));
@@ -235,18 +240,47 @@ app.use((req, res, next) => {
     next();
 });
 
-// Configure the Nodemailer transporter
-let transporter;
-function rebuildTransporter() {
-    const tc = { ...config.smtp };
+// Migrate legacy single smtp to senders map
+if (config.smtp && !config.senders) {
+    config.senders = { default: { name: 'Default', ...config.smtp } };
+    // Persist migration
+    const rawCfg = JSON.parse(require('fs').readFileSync(CONFIG_PATH, 'utf8'));
+    if (!rawCfg.senders) {
+        rawCfg.senders = { default: { name: 'Default', ...rawCfg.smtp } };
+        require('fs').writeFileSync(CONFIG_PATH, JSON.stringify(rawCfg, null, 4));
+    }
+}
+if (!config.senders) config.senders = {};
+
+// Configure Nodemailer transporters (one per sender)
+const transporters = {};
+function buildTransporter(smtpConfig) {
+    const tc = { ...smtpConfig };
+    delete tc.name; // alias field, not for nodemailer
     if (tc.user && tc.pass) {
         tc.auth = { type: 'LOGIN', user: tc.user, pass: tc.pass };
     }
     delete tc.user;
     delete tc.pass;
-    transporter = nodemailer.createTransport(tc);
+    return nodemailer.createTransport(tc);
 }
-rebuildTransporter();
+function rebuildAllTransporters() {
+    for (const id of Object.keys(transporters)) delete transporters[id];
+    for (const [id, cfg] of Object.entries(config.senders || {})) {
+        transporters[id] = buildTransporter(cfg);
+    }
+}
+rebuildAllTransporters();
+
+// Get transporter for a form (by senderId, fallback to 'default' or first)
+function getTransporterForForm(recipientCfg) {
+    const senderId = recipientCfg.senderId || 'default';
+    if (transporters[senderId]) return { transporter: transporters[senderId], senderCfg: config.senders[senderId] };
+    // Fallback to first available
+    const firstId = Object.keys(transporters)[0];
+    if (firstId) return { transporter: transporters[firstId], senderCfg: config.senders[firstId] };
+    return null;
+}
 
 // HTML escape function to prevent XSS in email templates
 function escapeHtml(str) {
@@ -453,8 +487,15 @@ app.post('/submit', submitLimiter, async (req, res) => {
         const senderName = formFields.name || formFields.nombre || formFields.full_name || 'Contact';
         const senderEmail = email || '';
 
+        // Get the correct transporter for this form's sender
+        const senderInfo = getTransporterForForm(recipientConfig);
+        if (!senderInfo) {
+            log.error('No SMTP sender configured', { formId: website_id });
+            return res.status(500).send(t.serverError);
+        }
+
         const mailOptions = {
-            from: `"${escapeHtml(String(senderName))}" <${config.smtp.from}>`,
+            from: `"${escapeHtml(String(senderName))}" <${senderInfo.senderCfg.from}>`,
             to: recipientConfig.to,
             subject: `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`,
             html: mailBody,
@@ -463,7 +504,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
 
         // Send email
         try {
-            await transporter.sendMail(mailOptions);
+            await senderInfo.transporter.sendMail(mailOptions);
             log.info('Email sent', { formId: website_id, to: recipientConfig.to });
 
             // Save submission to storage
@@ -601,6 +642,10 @@ app.get('/fav-icon.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'fav-icon.png'));
 });
 
+app.get('/logo_beweb.png', (req, res) => {
+    res.sendFile(path.join(__dirname, 'logo_beweb.png'));
+});
+
 // Admin API routes (protected)
 const adminRouter = express.Router();
 adminRouter.use(adminLimiter);
@@ -617,6 +662,7 @@ adminRouter.get('/status', async (req, res) => {
         }
         res.json({
             status: 'ok',
+            version: pkg.version,
             lang: LANG,
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
@@ -628,12 +674,7 @@ adminRouter.get('/status', async (req, res) => {
             },
             config: {
                 websites: Object.keys(config.recipients),
-                smtp: {
-                    host: config.smtp.host,
-                    port: config.smtp.port,
-                    secure: config.smtp.secure,
-                    from: config.smtp.from
-                },
+                senders: Object.keys(config.senders || {}),
                 turnstile: Object.keys(config.turnstile || {})
             }
         });
@@ -718,33 +759,109 @@ adminRouter.delete('/websites/:id', async (req, res) => {
     }
 });
 
-// SMTP configuration routes
+// Senders (SMTP relays) CRUD routes
+adminRouter.get('/senders', (req, res) => {
+    const sanitized = {};
+    for (const [id, cfg] of Object.entries(config.senders || {})) {
+        sanitized[id] = {
+            name: cfg.name || id,
+            host: cfg.host,
+            port: cfg.port,
+            secure: cfg.secure,
+            from: cfg.from,
+            user: cfg.user ? '****' : '',
+            pass: cfg.pass ? '****' : ''
+        };
+    }
+    res.json(sanitized);
+});
+
+adminRouter.post('/senders', async (req, res) => {
+    const { id, config: senderConfig } = req.body;
+    if (!id || !senderConfig) return res.status(400).json({ error: t.missingIdOrConfig });
+    if (!/^[a-zA-Z0-9_-]+$/.test(id) || id.length > 64) return res.status(400).json({ error: 'Invalid sender ID' });
+    if (config.senders[id]) return res.status(409).json({ error: 'Sender ID already exists' });
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.senders) cfg.senders = {};
+            cfg.senders[id] = senderConfig;
+        });
+        rebuildAllTransporters();
+        res.status(201).json({ message: 'Sender added' });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.put('/senders/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    const update = req.body;
+    try {
+        await writeConfigSafe(cfg => {
+            cfg.senders[id] = { ...cfg.senders[id], ...update };
+        });
+        rebuildAllTransporters();
+        res.json({ message: t.smtpUpdated });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.delete('/senders/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    try {
+        await writeConfigSafe(cfg => {
+            delete cfg.senders[id];
+        });
+        delete transporters[id];
+        res.json({ message: 'Sender removed' });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+// Test sender connection
+adminRouter.post('/senders/:id/test', async (req, res) => {
+    const { id } = req.params;
+    const senderCfg = config.senders && config.senders[id];
+    if (!senderCfg) return res.status(404).json({ error: 'Sender not found' });
+    try {
+        const testTransporter = buildTransporter(senderCfg);
+        await testTransporter.verify();
+        // Send a test email to the sender's own from address
+        await testTransporter.sendMail({
+            from: senderCfg.from,
+            to: senderCfg.from,
+            subject: 'formPost - Test Connection',
+            html: '<h2>formPost SMTP Test</h2><p>This is a test email from formPost to verify that the SMTP sender <strong>' + escapeHtml(senderCfg.name || id) + '</strong> is working correctly.</p><p>If you received this email, the configuration is correct.</p>'
+        });
+        res.json({ message: 'Test email sent successfully to ' + senderCfg.from });
+    } catch (e) {
+        log.error('Sender test failed', { senderId: id, error: e.message });
+        res.status(500).json({ error: 'Connection failed: ' + e.message });
+    }
+});
+
+// Legacy SMTP endpoint (backward compat — redirects to default sender)
 adminRouter.get('/smtp', (req, res) => {
-    // Return SMTP config without credentials
-    res.json({
-        host: config.smtp.host,
-        port: config.smtp.port,
-        secure: config.smtp.secure,
-        from: config.smtp.from,
-        user: config.smtp.user ? '****' : '',
-        pass: config.smtp.pass ? '****' : ''
-    });
+    const def = config.senders && config.senders.default;
+    if (!def) return res.json({});
+    res.json({ host: def.host, port: def.port, secure: def.secure, from: def.from, user: def.user ? '****' : '', pass: def.pass ? '****' : '' });
 });
 
 adminRouter.put('/smtp', async (req, res) => {
     const newSmtp = req.body;
-    if (!newSmtp || typeof newSmtp !== 'object') {
-        return res.status(400).json({ error: t.invalidSmtp });
-    }
+    if (!newSmtp || typeof newSmtp !== 'object') return res.status(400).json({ error: t.invalidSmtp });
     try {
         await writeConfigSafe(cfg => {
-            cfg.smtp = { ...cfg.smtp, ...newSmtp };
+            if (!cfg.senders) cfg.senders = {};
+            cfg.senders.default = { ...cfg.senders.default, name: 'Default', ...newSmtp };
         });
-        // Recreate transporter with new SMTP config
-        rebuildTransporter();
+        rebuildAllTransporters();
         res.json({ message: t.smtpUpdated });
     } catch (e) {
-        log.error('Failed to write config', { error: e.message });
         res.status(500).json({ error: t.failedSaveConfig });
     }
 });
