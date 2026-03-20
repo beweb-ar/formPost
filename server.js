@@ -217,8 +217,8 @@ const adminLimiter = rateLimit({
 
 // Rate limiting for auth failures
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10,
+    windowMs: 7 * 60 * 1000, // 7 minutes
+    max: 20,
     message: 'Too many login attempts. Please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
