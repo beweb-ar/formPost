@@ -817,6 +817,7 @@
                     <div class="inbox-title">
                         <span class="inbox-toggle-icon" id="outboxToggleIcon">&#9660;</span>
                         <span data-i18n="outbox">Outbox</span>
+                        <span class="live-dot" id="outboxLiveDot" style="display:none;"></span>
                         <span class="inbox-badge" id="outboxBadge" style="display:none;">0</span>
                     </div>
                 </div>
@@ -1043,6 +1044,22 @@
         </div>
     </div>
 
+    <!-- Outbox Log Modal -->
+    <div class="modal-overlay" id="outboxModal" style="display:none;">
+        <div class="modal modal-wide">
+            <div class="submissions-modal-header">
+                <h3><span data-i18n="outbox">Outbox</span>: <span id="outboxModalTitle"></span></h3>
+                <div style="display:flex;gap:0.5rem;">
+                    <button type="button" class="btn-outline" onclick="document.getElementById('outboxModal').style.display='none'" data-i18n="close">Close</button>
+                </div>
+            </div>
+            <div id="outboxModalContent" style="max-height:60vh;overflow-y:auto;">
+                <div class="empty-state"><span class="spinner"></span> Loading...</div>
+            </div>
+            <div id="outboxModalPagination" style="display:flex;justify-content:space-between;align-items:center;padding-top:0.75rem;font-size:0.85rem;"></div>
+        </div>
+    </div>
+
     <!-- Settings / Senders Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none;">
         <div class="modal" style="max-width:700px;width:90%;">
@@ -1082,6 +1099,10 @@
                 <div class="form-group">
                     <label data-i18n="fromEmail">From Email</label>
                     <input type="email" id="senderEditorFrom" required placeholder="noreply@example.com" />
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="senderEditorActive" checked />
+                    <label for="senderEditorActive" data-i18n="senderActive">Active</label>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" id="senderEditorSecure" />
@@ -1261,7 +1282,7 @@
                 templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
                 // Senders
                 senders: 'Senders (SMTP Relays)', newSender: '+ New Sender',
-                senderName: 'Name / Alias', sender: 'Sender',
+                senderName: 'Name / Alias', sender: 'Sender', senderActive: 'Active',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
@@ -1361,7 +1382,7 @@
                 templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
                 // Senders
                 senders: 'Senders (SMTP Relays)', newSender: '+ Nuevo Sender',
-                senderName: 'Nombre / Alias', sender: 'Sender',
+                senderName: 'Nombre / Alias', sender: 'Sender', senderActive: 'Activo',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -1524,16 +1545,20 @@
         function setInboxStatus(status) {
             var el = document.getElementById('inboxStatus');
             var dot = document.getElementById('inboxLiveDot');
+            var outboxDot = document.getElementById('outboxLiveDot');
             el.className = 'inbox-status ' + status;
             if (status === 'connected') {
                 el.textContent = L('inboxConnected');
                 dot.style.display = 'inline-block';
+                if (outboxDot) outboxDot.style.display = 'inline-block';
             } else if (status === 'disconnected') {
                 el.textContent = L('inboxDisconnected');
                 dot.style.display = 'none';
+                if (outboxDot) outboxDot.style.display = 'none';
             } else if (status === 'reconnecting') {
                 el.textContent = L('inboxReconnecting');
                 dot.style.display = 'none';
+                if (outboxDot) outboxDot.style.display = 'none';
             }
         }
 
@@ -1671,7 +1696,7 @@
                 var statusText = entry.status === 'ok' ? '✓' : '✗';
                 var detail = entry.channel === 'email' ? (entry.to || '') : '';
                 var subject = entry.subject ? entry.subject.substring(0, 60) : '';
-                return '<div class="inbox-entry">' +
+                return '<div class="inbox-entry" onclick="openOutboxModal(\'' + esc(entry.websiteId) + '\')" style="cursor:pointer;">' +
                     '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
                     '<span class="outbox-channel ' + channelClass + '">' + channelLabel + '</span>' +
                     '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
@@ -1709,6 +1734,61 @@
                     renderOutboxEntries();
                 }
             } catch(e) {}
+        }
+
+        var outboxModalPage = 1;
+        var outboxModalFormId = '';
+
+        async function openOutboxModal(formId) {
+            outboxModalFormId = formId;
+            outboxModalPage = 1;
+            document.getElementById('outboxModalTitle').textContent = formId;
+            document.getElementById('outboxModal').style.display = 'flex';
+            await loadOutboxModalPage();
+        }
+
+        async function loadOutboxModalPage() {
+            var container = document.getElementById('outboxModalContent');
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+            try {
+                var res = await fetch('/admin/api/outbox/' + encodeURIComponent(outboxModalFormId) + '?page=' + outboxModalPage + '&limit=20', { headers: { Authorization: auth } });
+                var data = await res.json();
+                if (!data.entries || data.entries.length === 0) {
+                    container.innerHTML = '<div class="empty-state">' + L('outboxEmpty') + '</div>';
+                    document.getElementById('outboxModalPagination').innerHTML = '';
+                    return;
+                }
+                var html = '<table class="submissions-table"><thead><tr><th>' + L('date') + '</th><th>Channel</th><th>To / ' + L('statStatus') + '</th><th>' + L('subject') + '</th><th>' + L('statStatus') + '</th></tr></thead><tbody>';
+                data.entries.forEach(function(entry) {
+                    var time = new Date(entry.timestamp).toLocaleString();
+                    var channelLabel = entry.channel === 'email' ? 'Mail' : 'Discord';
+                    var channelClass = entry.channel === 'email' ? 'email' : 'discord';
+                    var statusColor = entry.status === 'ok' ? 'var(--success)' : entry.status === 'skipped' ? '#f59e0b' : 'var(--danger)';
+                    var statusText = entry.status === 'ok' ? 'OK' : entry.status === 'skipped' ? 'Skipped' : 'Error';
+                    html += '<tr>' +
+                        '<td style="white-space:nowrap;font-size:0.8rem;">' + esc(time) + '</td>' +
+                        '<td><span class="outbox-channel ' + channelClass + '">' + channelLabel + '</span></td>' +
+                        '<td>' + esc(entry.to || '-') + '</td>' +
+                        '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(entry.subject || '-') + '</td>' +
+                        '<td><span style="color:' + statusColor + ';font-weight:600;">' + statusText + '</span>' +
+                            (entry.error ? '<div style="font-size:0.75rem;color:var(--danger);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(entry.error) + '">' + esc(entry.error) + '</div>' : '') +
+                        '</td>' +
+                    '</tr>';
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+
+                // Pagination
+                var pag = '';
+                if (data.pages > 1) {
+                    pag = '<button class="btn-sm btn-outline" onclick="outboxModalPage--;loadOutboxModalPage()" ' + (outboxModalPage <= 1 ? 'disabled' : '') + '>' + L('previous') + '</button>' +
+                        '<span>' + L('page') + ' ' + data.page + ' ' + L('of') + ' ' + data.pages + ' (' + data.total + ' ' + L('total') + ')</span>' +
+                        '<button class="btn-sm btn-outline" onclick="outboxModalPage++;loadOutboxModalPage()" ' + (outboxModalPage >= data.pages ? 'disabled' : '') + '>' + L('next') + '</button>';
+                }
+                document.getElementById('outboxModalPagination').innerHTML = pag;
+            } catch(e) {
+                container.innerHTML = '<div class="empty-state">' + L('connError') + '</div>';
+            }
         }
 
         // ========== Status Bar ==========
@@ -2502,14 +2582,16 @@
                 container.innerHTML = '<div class="empty-state">No senders configured.</div>';
                 return;
             }
-            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>Host</th><th>' + L('fromEmail') + '</th><th></th></tr></thead><tbody>';
+            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>Host</th><th>' + L('fromEmail') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
             ids.forEach(function(id) {
                 var s = sendersCache[id];
-                html += '<tr>' +
+                var isActive = s.active !== false;
+                html += '<tr' + (isActive ? '' : ' style="opacity:0.5;"') + '>' +
                     '<td><code>' + esc(id) + '</code></td>' +
                     '<td>' + esc(s.name || id) + '</td>' +
                     '<td>' + esc(s.host || '') + ':' + esc(String(s.port || '')) + '</td>' +
                     '<td>' + esc(s.from || '') + '</td>' +
+                    '<td><span style="color:' + (isActive ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;font-size:0.8rem;">' + (isActive ? L('captchaOn') : L('captchaOff')) + '</span></td>' +
                     '<td style="text-align:right;white-space:nowrap;">' +
                         '<button class="btn-sm btn-outline" onclick="openSenderEditor(\'' + esc(id) + '\')">' + L('edit') + '</button> ' +
                         '<button class="btn-sm btn-danger" onclick="deleteSender(\'' + esc(id) + '\')">' + L('delete') + '</button>' +
@@ -2532,11 +2614,17 @@
                 document.getElementById('senderEditorHost').value = s.host || '';
                 document.getElementById('senderEditorPort').value = s.port || '';
                 document.getElementById('senderEditorFrom').value = s.from || '';
+                document.getElementById('senderEditorActive').checked = s.active !== false;
                 document.getElementById('senderEditorSecure').checked = !!s.secure;
-                document.getElementById('senderEditorUser').value = '';
+                document.getElementById('senderEditorUser').value = s.user && s.user !== '****' ? s.user : '';
+                document.getElementById('senderEditorUser').placeholder = s.user ? '(configured)' : '';
                 document.getElementById('senderEditorPass').value = '';
+                document.getElementById('senderEditorPass').placeholder = s.pass ? '••••••••' : '';
             } else {
                 document.getElementById('senderEditorForm').reset();
+                document.getElementById('senderEditorActive').checked = true;
+                document.getElementById('senderEditorUser').placeholder = '';
+                document.getElementById('senderEditorPass').placeholder = '';
             }
             document.getElementById('senderTestBtn').style.display = id ? '' : 'none';
             document.getElementById('senderEditorModal').style.display = 'flex';
@@ -2556,6 +2644,7 @@
                 host: document.getElementById('senderEditorHost').value,
                 port: Number(document.getElementById('senderEditorPort').value),
                 secure: document.getElementById('senderEditorSecure').checked,
+                active: document.getElementById('senderEditorActive').checked,
                 from: document.getElementById('senderEditorFrom').value
             };
             var user = document.getElementById('senderEditorUser').value;
@@ -2852,7 +2941,7 @@
         document.getElementById('changePasswordBtn').addEventListener('click', openPasswordModal);
 
         // ========== Close modals on overlay click ==========
-        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal', 'senderEditorModal', 'helpModal'].forEach(function(id) {
+        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal', 'senderEditorModal', 'helpModal', 'outboxModal'].forEach(function(id) {
             document.getElementById(id).addEventListener('click', function(e) {
                 if (e.target === this) this.style.display = 'none';
             });

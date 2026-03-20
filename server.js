@@ -178,6 +178,7 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'"],
             scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
             scriptSrcAttr: ["'unsafe-inline'"],
+            connectSrc: ["'self'", "https://cdn.jsdelivr.net"],
             imgSrc: ["'self'", "data:"],
             frameSrc: ["'self'"],
         }
@@ -275,10 +276,18 @@ rebuildAllTransporters();
 // Get transporter for a form (by senderId, fallback to 'default' or first)
 function getTransporterForForm(recipientCfg) {
     const senderId = recipientCfg.senderId || 'default';
-    if (transporters[senderId]) return { transporter: transporters[senderId], senderCfg: config.senders[senderId] };
+    if (transporters[senderId]) {
+        const senderCfg = config.senders[senderId];
+        if (senderCfg && senderCfg.active === false) return { inactive: true, senderId };
+        return { transporter: transporters[senderId], senderCfg };
+    }
     // Fallback to first available
     const firstId = Object.keys(transporters)[0];
-    if (firstId) return { transporter: transporters[firstId], senderCfg: config.senders[firstId] };
+    if (firstId) {
+        const senderCfg = config.senders[firstId];
+        if (senderCfg && senderCfg.active === false) return { inactive: true, senderId: firstId };
+        return { transporter: transporters[firstId], senderCfg };
+    }
     return null;
 }
 
@@ -527,34 +536,68 @@ app.post('/submit', submitLimiter, async (req, res) => {
             log.error('No SMTP sender configured', { formId: website_id });
             return res.status(500).send(t.serverError);
         }
-
-        const mailOptions = {
-            from: `"${escapeHtml(String(senderName))}" <${senderInfo.senderCfg.from}>`,
-            to: recipientConfig.to,
-            subject: `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`,
-            html: mailBody,
-            replyTo: senderEmail || undefined
-        };
-
-        // Send email
-        let emailOk = false;
-        const emailTimestamp = new Date().toISOString();
-        try {
-            await senderInfo.transporter.sendMail(mailOptions);
-            log.info('Email sent', { formId: website_id, to: recipientConfig.to });
-            emailOk = true;
-
-            // Log to outbox
-            const mailEntry = {
+        if (senderInfo.inactive) {
+            log.info('Sender disabled, skipping email', { formId: website_id, senderId: senderInfo.senderId });
+            // Log to outbox as skipped
+            const skipEntry = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                timestamp: emailTimestamp,
+                timestamp: new Date().toISOString(),
                 channel: 'email',
                 to: recipientConfig.to,
-                subject: mailOptions.subject,
-                status: 'ok'
+                subject: `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`,
+                status: 'skipped'
             };
-            saveOutboxEntry(website_id, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
-            broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailEntry });
+            saveOutboxEntry(website_id, skipEntry).catch(() => {});
+            broadcastSSE({ type: 'outbox', websiteId: website_id, ...skipEntry });
+        }
+
+        const emailSubject = `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`;
+        const emailTimestamp = new Date().toISOString();
+        let emailOk = false;
+
+        // Send email (only if sender is active)
+        if (!senderInfo.inactive) {
+            const mailOptions = {
+                from: `"${escapeHtml(String(senderName))}" <${senderInfo.senderCfg.from}>`,
+                to: recipientConfig.to,
+                subject: emailSubject,
+                html: mailBody,
+                replyTo: senderEmail || undefined
+            };
+
+            try {
+                await senderInfo.transporter.sendMail(mailOptions);
+                log.info('Email sent', { formId: website_id, to: recipientConfig.to });
+                emailOk = true;
+
+                const mailEntry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                    timestamp: emailTimestamp,
+                    channel: 'email',
+                    to: recipientConfig.to,
+                    subject: emailSubject,
+                    status: 'ok'
+                };
+                saveOutboxEntry(website_id, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
+                broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailEntry });
+            } catch (error) {
+                log.error('Error sending email', { formId: website_id, error: error.message });
+
+                const mailFailEntry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                    timestamp: emailTimestamp,
+                    channel: 'email',
+                    to: recipientConfig.to,
+                    subject: emailSubject,
+                    status: 'error',
+                    error: error.message
+                };
+                saveOutboxEntry(website_id, mailFailEntry).catch(() => {});
+                broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailFailEntry });
+
+                return res.status(500).send(t.serverError);
+            }
+        }
 
             // Save submission to storage
             try {
@@ -599,7 +642,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         cfg.statistics[website_id] = { successfulSubmissions: 0, lastSubmission: null, mailsSent: 0, notificationsSent: 0 };
                     }
                     cfg.statistics[website_id].successfulSubmissions++;
-                    cfg.statistics[website_id].mailsSent = (cfg.statistics[website_id].mailsSent || 0) + 1;
+                    if (emailOk) cfg.statistics[website_id].mailsSent = (cfg.statistics[website_id].mailsSent || 0) + 1;
                     cfg.statistics[website_id].lastSubmission = new Date().toISOString();
                 });
             } catch (statsError) {
@@ -665,25 +708,6 @@ app.post('/submit', submitLimiter, async (req, res) => {
             } else {
                 res.status(200).json({ success: true, message: t.formSuccess });
             }
-
-        } catch (error) {
-            log.error('Error sending email', { formId: website_id, error: error.message });
-
-            // Log email failure to outbox
-            const mailFailEntry = {
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                timestamp: emailTimestamp,
-                channel: 'email',
-                to: recipientConfig.to,
-                subject: mailOptions.subject,
-                status: 'error',
-                error: error.message
-            };
-            saveOutboxEntry(website_id, mailFailEntry).catch(() => {});
-            broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailFailEntry });
-
-            res.status(500).send(t.serverError);
-        }
     } catch (templateError) {
         log.error('Error reading email template', { formId: website_id, error: templateError.message });
         res.status(500).send(t.templateReadError);
@@ -872,9 +896,10 @@ adminRouter.get('/senders', (req, res) => {
             host: cfg.host,
             port: cfg.port,
             secure: cfg.secure,
+            active: cfg.active !== false,
             from: cfg.from,
-            user: cfg.user ? '****' : '',
-            pass: cfg.pass ? '****' : ''
+            user: cfg.user || '',
+            pass: cfg.pass ? '••••' : ''
         };
     }
     res.json(sanitized);
@@ -1281,6 +1306,22 @@ adminRouter.get('/outbox/recent', async (req, res) => {
     }
     all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     res.json(all.slice(0, limit));
+});
+
+// Outbox entries for a specific form (paginated)
+adminRouter.get('/outbox/:websiteId', async (req, res) => {
+    const { websiteId } = req.params;
+    if (!config.recipients[websiteId]) return res.status(404).json({ error: 'Form not found' });
+    const entries = await loadOutboxEntries(websiteId);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+    const start = (page - 1) * limit;
+    res.json({
+        entries: entries.slice(start, start + limit),
+        total: entries.length,
+        page,
+        pages: Math.ceil(entries.length / limit)
+    });
 });
 
 // SSE token management - temporary tokens instead of credentials in query string
