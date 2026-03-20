@@ -478,6 +478,7 @@
             grid-template-columns: 1fr 1fr 2fr;
             gap: 1rem;
             margin-bottom: 1.25rem;
+            flex-shrink: 0;
         }
         .stat-card {
             background: var(--bg-secondary);
@@ -485,6 +486,7 @@
             border-radius: var(--radius-lg);
             padding: 1rem 1.25rem;
             box-shadow: var(--shadow-sm);
+            align-self: start;
         }
         .stat-card h4 {
             font-size: 0.8rem;
@@ -515,7 +517,7 @@
         }
         .stat-item-value.accent { color: var(--accent-primary); }
         .stat-item-value.success-text { color: var(--success); }
-        .stat-card-chart { grid-column: span 1; }
+        .stat-card-chart canvas { max-height: 150px; }
 
         /* Live indicator */
         .live-dot {
