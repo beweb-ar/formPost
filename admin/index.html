@@ -120,10 +120,11 @@
 
         .card-stats {
             display: flex;
-            gap: 1.5rem;
+            gap: 1rem;
             padding: 0.75rem 0;
             margin-top: auto;
             border-top: 1px solid var(--border-color);
+            flex-wrap: wrap;
         }
 
         .card-stat {
@@ -580,11 +581,20 @@
         }
 
         /* Inbox Panel */
+        .inbox-outbox-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        @media (max-width: 768px) {
+            .inbox-outbox-grid { grid-template-columns: 1fr; }
+        }
         .inbox-panel {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-md);
-            margin-bottom: 1.5rem;
+            margin-bottom: 0;
             box-shadow: var(--shadow-sm);
             overflow: hidden;
             transition: all 0.3s ease;
@@ -637,8 +647,8 @@
             content: '';
             position: absolute;
             bottom: 0; left: 0; right: 0;
-            height: 120px;
-            background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, var(--bg-secondary) 85%);
+            height: 50%;
+            background: linear-gradient(to bottom, transparent 0%, var(--bg-secondary) 100%);
             pointer-events: none;
             z-index: 2;
         }
@@ -646,7 +656,6 @@
             border-top: 1px solid var(--border-color);
             max-height: 400px;
             overflow-y: auto;
-            padding-bottom: 30px;
         }
         .inbox-entry {
             display: flex;
@@ -705,6 +714,17 @@
             font-size: 0.875rem;
             font-style: italic;
         }
+        .outbox-channel {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        .outbox-channel.email { background: var(--accent-primary); color: white; }
+        .outbox-channel.discord { background: #5865F2; color: white; }
+        .outbox-status-ok { color: var(--success); font-weight: 600; font-size: 0.7rem; }
+        .outbox-status-error { color: var(--danger); font-weight: 600; font-size: 0.7rem; }
     </style>
 </head>
 <body>
@@ -771,20 +791,39 @@
             </div>
         </div>
 
-        <!-- Inbox Panel -->
-        <div class="inbox-panel" id="inboxPanel">
-            <div class="inbox-header" onclick="toggleInbox()">
-                <div class="inbox-title">
-                    <span class="inbox-toggle-icon" id="inboxToggleIcon">&#9660;</span>
-                    <span data-i18n="inbox">Inbox</span>
-                    <span class="live-dot" id="inboxLiveDot" style="display:none;"></span>
-                    <span class="inbox-badge" id="inboxBadge" style="display:none;">0</span>
+        <!-- Inbox + Outbox Grid -->
+        <div class="inbox-outbox-grid">
+            <!-- Inbox Panel -->
+            <div class="inbox-panel" id="inboxPanel">
+                <div class="inbox-header" onclick="toggleInbox()">
+                    <div class="inbox-title">
+                        <span class="inbox-toggle-icon" id="inboxToggleIcon">&#9660;</span>
+                        <span data-i18n="inbox">Inbox</span>
+                        <span class="live-dot" id="inboxLiveDot" style="display:none;"></span>
+                        <span class="inbox-badge" id="inboxBadge" style="display:none;">0</span>
+                    </div>
+                    <span class="inbox-status disconnected" id="inboxStatus" data-i18n="inboxDisconnected">Disconnected</span>
                 </div>
-                <span class="inbox-status disconnected" id="inboxStatus" data-i18n="inboxDisconnected">Disconnected</span>
+                <div class="inbox-body-wrap">
+                    <div class="inbox-body" id="inboxBody">
+                        <div class="inbox-empty" data-i18n="inboxEmpty">No recent submissions. New ones will appear here in real time.</div>
+                    </div>
+                </div>
             </div>
-            <div class="inbox-body-wrap">
-                <div class="inbox-body" id="inboxBody">
-                    <div class="inbox-empty" data-i18n="inboxEmpty">No recent submissions. New ones will appear here in real time.</div>
+
+            <!-- Outbox Panel -->
+            <div class="inbox-panel" id="outboxPanel">
+                <div class="inbox-header" onclick="toggleOutbox()">
+                    <div class="inbox-title">
+                        <span class="inbox-toggle-icon" id="outboxToggleIcon">&#9660;</span>
+                        <span data-i18n="outbox">Outbox</span>
+                        <span class="inbox-badge" id="outboxBadge" style="display:none;">0</span>
+                    </div>
+                </div>
+                <div class="inbox-body-wrap">
+                    <div class="inbox-body" id="outboxBody">
+                        <div class="inbox-empty" data-i18n="outboxEmpty">No recent mails or notifications. New ones will appear here in real time.</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1186,10 +1225,13 @@
                 confirmDelete: 'Are you sure you want to delete "{id}"? This cannot be undone.',
                 confirmResetStats: 'Reset statistics for "{id}"? This cannot be undone.',
                 confirmDeleteSubs: 'Delete ALL submissions for "{id}"? This cannot be undone.',
-                // Inbox
+                // Inbox / Outbox
                 inbox: 'Inbox', inboxEmpty: 'No recent submissions. New ones will appear here in real time.',
                 inboxConnected: 'Connected', inboxDisconnected: 'Disconnected', inboxReconnecting: 'Reconnecting...',
                 inboxUnknownSender: 'Unknown sender',
+                outbox: 'Outbox', outboxEmpty: 'No recent mails or notifications. New ones will appear here in real time.',
+                mailsLabel: 'Mails', notificationsLabel: 'Notifications',
+                totalMails: 'Total Mails', totalNotifications: 'Total Notif.',
                 // Integration / Help
                 copyInstructions: 'Copy', instructionsCopied: 'Copied to clipboard',
                 copyPromptHint: 'Copy integration prompt for this form',
@@ -1283,11 +1325,13 @@
                 confirmDelete: '\u00bfSeguro que desea eliminar "{id}"? Esta acci\u00f3n no se puede deshacer.',
                 confirmResetStats: '\u00bfReiniciar estad\u00edsticas de "{id}"? Esta acci\u00f3n no se puede deshacer.',
                 confirmDeleteSubs: '\u00bfEliminar TODOS los env\u00edos de "{id}"? Esta acci\u00f3n no se puede deshacer.',
-                // Integration / Help
-                // Inbox
+                // Inbox / Outbox
                 inbox: 'Bandeja de Entrada', inboxEmpty: 'Sin env\u00edos recientes. Los nuevos aparecer\u00e1n aqu\u00ed en tiempo real.',
                 inboxConnected: 'Conectado', inboxDisconnected: 'Desconectado', inboxReconnecting: 'Reconectando...',
                 inboxUnknownSender: 'Remitente desconocido',
+                outbox: 'Bandeja de Salida', outboxEmpty: 'Sin mails ni notificaciones recientes. Las nuevas aparecer\u00e1n aqu\u00ed en tiempo real.',
+                mailsLabel: 'Mails', notificationsLabel: 'Notificaciones',
+                totalMails: 'Total Mails', totalNotifications: 'Total Notif.',
                 // Integration / Help
                 copyInstructions: 'Copiar', instructionsCopied: 'Copiado al portapapeles',
                 copyPromptHint: 'Copiar prompt de instrucciones de integración del formulario',
@@ -1439,10 +1483,15 @@
             await loadStatus();
             loadWebsitesWithStats();
             connectInbox();
+            loadRecentOutbox();
             // Restore inbox collapsed state (default: open)
             var collapsed = localStorage.getItem('inbox_collapsed');
             if (collapsed === '1') {
                 document.getElementById('inboxPanel').classList.add('collapsed');
+            }
+            var outboxCollapsed = localStorage.getItem('outbox_collapsed');
+            if (outboxCollapsed === '1') {
+                document.getElementById('outboxPanel').classList.add('collapsed');
             }
         }
 
@@ -1563,6 +1612,7 @@
                     try {
                         var msg = JSON.parse(e.data);
                         if (msg.type === 'submission') addInboxEntry(msg);
+                        else if (msg.type === 'outbox') addOutboxEntry(msg);
                     } catch(err) {}
                 };
                 inboxEventSource.onerror = function() {
@@ -1578,6 +1628,87 @@
         function disconnectInbox() {
             if (inboxEventSource) { inboxEventSource.close(); inboxEventSource = null; }
             setInboxStatus('disconnected');
+        }
+
+        // ========== Outbox ==========
+        var outboxEntries = [];
+        var outboxUnread = 0;
+        var OUTBOX_MAX = 15;
+
+        function toggleOutbox() {
+            var panel = document.getElementById('outboxPanel');
+            panel.classList.toggle('collapsed');
+            if (!panel.classList.contains('collapsed')) {
+                outboxUnread = 0;
+                updateOutboxBadge();
+            }
+            localStorage.setItem('outbox_collapsed', panel.classList.contains('collapsed') ? '1' : '0');
+        }
+
+        function updateOutboxBadge() {
+            var badge = document.getElementById('outboxBadge');
+            if (outboxUnread > 0) {
+                badge.textContent = outboxUnread > 99 ? '99+' : outboxUnread;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        function renderOutboxEntries() {
+            var body = document.getElementById('outboxBody');
+            if (outboxEntries.length === 0) {
+                body.innerHTML = '<div class="inbox-empty">' + L('outboxEmpty') + '</div>';
+                return;
+            }
+            var html = outboxEntries.map(function(entry) {
+                var time = new Date(entry.timestamp);
+                var dateStr = time.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
+                var timeStr = dateStr + ' ' + time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                var channelLabel = entry.channel === 'email' ? 'Mail' : 'Discord';
+                var channelClass = entry.channel === 'email' ? 'email' : 'discord';
+                var statusClass = entry.status === 'ok' ? 'outbox-status-ok' : 'outbox-status-error';
+                var statusText = entry.status === 'ok' ? '✓' : '✗';
+                var detail = entry.channel === 'email' ? (entry.to || '') : '';
+                var subject = entry.subject ? entry.subject.substring(0, 60) : '';
+                return '<div class="inbox-entry">' +
+                    '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
+                    '<span class="outbox-channel ' + channelClass + '">' + channelLabel + '</span>' +
+                    '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
+                    '<div class="inbox-entry-content">' +
+                        '<div class="inbox-entry-sender">' + esc(detail) + ' <span class="' + statusClass + '">' + statusText + '</span></div>' +
+                        (subject ? '<div class="inbox-entry-preview">' + esc(subject) + '</div>' : '') +
+                        (entry.error ? '<div class="inbox-entry-preview" style="color:var(--danger);">' + esc(entry.error) + '</div>' : '') +
+                    '</div>' +
+                '</div>';
+            }).join('');
+            body.innerHTML = html;
+        }
+
+        function addOutboxEntry(entry) {
+            outboxEntries.unshift(entry);
+            if (outboxEntries.length > OUTBOX_MAX) outboxEntries = outboxEntries.slice(0, OUTBOX_MAX);
+            var panel = document.getElementById('outboxPanel');
+            if (panel.classList.contains('collapsed')) {
+                outboxUnread++;
+                updateOutboxBadge();
+            }
+            renderOutboxEntries();
+            loadStatus();
+            loadWebsitesWithStats();
+        }
+
+        async function loadRecentOutbox() {
+            if (!auth) return;
+            try {
+                var res = await fetch('/admin/api/outbox/recent?limit=4', { headers: { Authorization: auth } });
+                if (!res.ok) return;
+                var entries = await res.json();
+                if (outboxEntries.length === 0 && entries.length > 0) {
+                    outboxEntries = entries;
+                    renderOutboxEntries();
+                }
+            } catch(e) {}
         }
 
         // ========== Status Bar ==========
@@ -1604,6 +1735,8 @@
                 var uptimeStr = hours > 0 ? hours + 'h ' + mins + 'm' : mins + 'm';
                 var mem = data.memory;
                 var totalSubs = data.totalSubmissions || 0;
+                var totalMails = data.totalMails || 0;
+                var totalNotifs = data.totalNotifications || 0;
 
                 // Server card
                 document.getElementById('statServerBody').innerHTML =
@@ -1615,9 +1748,9 @@
                 // Data card
                 document.getElementById('statDataBody').innerHTML =
                     '<div class="stat-item"><span class="stat-item-label">' + L('forms') + '</span><span class="stat-item-value accent">' + data.config.websites.length + '</span></div>' +
-                    '<div class="stat-item"><span class="stat-item-label">' + L('statTemplates') + '</span><span class="stat-item-value accent">' + templates.length + '</span></div>' +
-                    '<div class="stat-item"><span class="stat-item-label">Senders</span><span class="stat-item-value accent">' + (data.config.senders || []).length + '</span></div>' +
-                    '<div class="stat-item"><span class="stat-item-label">' + L('totalSubs') + '</span><span class="stat-item-value accent">' + totalSubs + '</span></div>';
+                    '<div class="stat-item"><span class="stat-item-label">' + L('totalSubs') + '</span><span class="stat-item-value accent">' + totalSubs + '</span></div>' +
+                    '<div class="stat-item"><span class="stat-item-label">' + L('totalMails') + '</span><span class="stat-item-value accent">' + totalMails + '</span></div>' +
+                    '<div class="stat-item"><span class="stat-item-label">' + L('totalNotifications') + '</span><span class="stat-item-value accent">' + totalNotifs + '</span></div>';
 
                 // Footer version
                 if (data.version) {
@@ -1646,11 +1779,30 @@
             var canvas = document.getElementById('submissionsChart');
             if (!canvas) return;
 
-            // Collect all dates across all forms
-            var allDates = new Set();
-            for (var formId in data) {
-                for (var date in data[formId]) allDates.add(date);
+            // New format: { submissions: {formId: {date: count}}, mails: {...}, notifications: {...} }
+            var subs = data.submissions || data; // backward compat
+            var mailsData = data.mails || {};
+            var notifsData = data.notifications || {};
+
+            // Aggregate across all forms by date
+            function aggregateByDate(formData) {
+                var totals = {};
+                for (var formId in formData) {
+                    for (var date in formData[formId]) {
+                        totals[date] = (totals[date] || 0) + formData[formId][date];
+                    }
+                }
+                return totals;
             }
+            var subTotals = aggregateByDate(subs);
+            var mailTotals = aggregateByDate(mailsData);
+            var notifTotals = aggregateByDate(notifsData);
+
+            // Collect all dates
+            var allDates = new Set();
+            [subTotals, mailTotals, notifTotals].forEach(function(t) {
+                for (var d in t) allDates.add(d);
+            });
             var dates = Array.from(allDates).sort();
             if (dates.length === 0) {
                 if (submissionsChartInstance) submissionsChartInstance.destroy();
@@ -1658,39 +1810,37 @@
                 return;
             }
 
-            // Build datasets
-            var colors = ['#2c3d7f', '#fe6052', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-            var formIds = Object.keys(data);
-            var datasets = formIds.map(function(formId, i) {
-                return {
-                    label: formId,
-                    data: dates.map(function(d) { return data[formId][d] || 0; }),
-                    borderColor: colors[i % colors.length],
-                    backgroundColor: colors[i % colors.length] + '20',
+            var labels = dates.map(function(d) { return d.substring(5); });
+
+            var datasets = [
+                {
+                    label: L('submissions'),
+                    data: dates.map(function(d) { return subTotals[d] || 0; }),
+                    borderColor: '#2c3d7f',
+                    backgroundColor: 'rgba(44,61,127,0.15)',
                     tension: 0.3,
                     fill: true,
                     pointRadius: 2
-                };
-            });
-
-            // Add total line if more than 1 form
-            if (formIds.length > 1) {
-                datasets.push({
-                    label: 'Total',
-                    data: dates.map(function(d) {
-                        var sum = 0;
-                        for (var fid in data) sum += (data[fid][d] || 0);
-                        return sum;
-                    }),
-                    borderColor: '#6b7280',
-                    borderDash: [4, 4],
+                },
+                {
+                    label: L('mailsLabel'),
+                    data: dates.map(function(d) { return mailTotals[d] || 0; }),
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16,185,129,0.15)',
                     tension: 0.3,
-                    fill: false,
-                    pointRadius: 0
-                });
-            }
-
-            var labels = dates.map(function(d) { return d.substring(5); }); // MM-DD
+                    fill: true,
+                    pointRadius: 2
+                },
+                {
+                    label: L('notificationsLabel'),
+                    data: dates.map(function(d) { return notifTotals[d] || 0; }),
+                    borderColor: '#5865F2',
+                    backgroundColor: 'rgba(88,101,242,0.15)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 2
+                }
+            ];
 
             if (submissionsChartInstance) submissionsChartInstance.destroy();
             submissionsChartInstance = new Chart(canvas, {
@@ -1699,7 +1849,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: formIds.length > 1, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } },
+                    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } },
                     scales: {
                         x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0 } },
                         y: { beginAtZero: true, ticks: { font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } }
@@ -1735,6 +1885,8 @@
                 var id = entry[0], cfg = entry[1];
                 var stat = (stats && stats[id]) || {};
                 var subCount = stat.successfulSubmissions || 0;
+                var mailCount = stat.mailsSent || 0;
+                var notifCount = stat.notificationsSent || 0;
                 var lastSub = stat.lastSubmission
                     ? new Date(stat.lastSubmission).toLocaleString()
                     : L('never');
@@ -1774,6 +1926,8 @@
                     '</div>' +
                     '<div class="card-stats">' +
                         '<div class="card-stat"><span class="card-stat-value">' + subCount + '</span><span class="card-stat-label">' + L('submissions') + '</span></div>' +
+                        '<div class="card-stat"><span class="card-stat-value">' + mailCount + '</span><span class="card-stat-label">' + L('mailsLabel') + '</span></div>' +
+                        '<div class="card-stat"><span class="card-stat-value">' + notifCount + '</span><span class="card-stat-label">' + L('notificationsLabel') + '</span></div>' +
                         '<div class="card-stat"><span class="card-stat-value small">' + esc(lastSub) + '</span><span class="card-stat-label">' + L('lastSubmission') + '</span></div>' +
                     '</div>' +
                     '<div class="website-card-actions">' +

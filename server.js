@@ -126,10 +126,10 @@ const serverMessages = {
 };
 const t = serverMessages[LANG] || serverMessages.es;
 
-// SSE client tracking for real-time inbox
+// SSE client tracking for real-time inbox + outbox
 const sseClients = new Set();
 
-function broadcastInbox(payload) {
+function broadcastSSE(payload) {
     const data = JSON.stringify(payload);
     for (const client of sseClients) {
         client.write(`data: ${data}\n\n`);
@@ -339,6 +339,31 @@ async function loadSubmissions(websiteId) {
     }
 }
 
+// Save outbox entry (mail or notification log)
+async function saveOutboxEntry(websiteId, entry) {
+    await ensureDataDir();
+    const filePath = path.join(DATA_DIR, `outbox-${websiteId}.json`);
+    let entries = [];
+    try {
+        const data = await fs.readFile(filePath, 'utf8');
+        entries = JSON.parse(data);
+    } catch (e) {}
+    entries.unshift(entry);
+    if (entries.length > 500) entries = entries.slice(0, 500);
+    await fs.writeFile(filePath, JSON.stringify(entries, null, 2));
+}
+
+// Load outbox entries
+async function loadOutboxEntries(websiteId) {
+    const filePath = path.join(DATA_DIR, `outbox-${websiteId}.json`);
+    try {
+        const data = await fs.readFile(filePath, 'utf8');
+        return JSON.parse(data);
+    } catch (e) {
+        return [];
+    }
+}
+
 // Convert field name to display label: "correo_electronico" -> "Correo Electronico"
 function fieldToLabel(fieldName) {
     return fieldName
@@ -512,9 +537,24 @@ app.post('/submit', submitLimiter, async (req, res) => {
         };
 
         // Send email
+        let emailOk = false;
+        const emailTimestamp = new Date().toISOString();
         try {
             await senderInfo.transporter.sendMail(mailOptions);
             log.info('Email sent', { formId: website_id, to: recipientConfig.to });
+            emailOk = true;
+
+            // Log to outbox
+            const mailEntry = {
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                timestamp: emailTimestamp,
+                channel: 'email',
+                to: recipientConfig.to,
+                subject: mailOptions.subject,
+                status: 'ok'
+            };
+            saveOutboxEntry(website_id, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
+            broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailEntry });
 
             // Save submission to storage
             try {
@@ -535,7 +575,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 await saveSubmission(website_id, submission);
 
                 // Broadcast to SSE inbox clients
-                broadcastInbox({
+                broadcastSSE({
                     type: 'submission',
                     websiteId: website_id,
                     id: submission.id,
@@ -556,9 +596,10 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 await writeConfigSafe(cfg => {
                     if (!cfg.statistics) cfg.statistics = {};
                     if (!cfg.statistics[website_id]) {
-                        cfg.statistics[website_id] = { successfulSubmissions: 0, lastSubmission: null };
+                        cfg.statistics[website_id] = { successfulSubmissions: 0, lastSubmission: null, mailsSent: 0, notificationsSent: 0 };
                     }
                     cfg.statistics[website_id].successfulSubmissions++;
+                    cfg.statistics[website_id].mailsSent = (cfg.statistics[website_id].mailsSent || 0) + 1;
                     cfg.statistics[website_id].lastSubmission = new Date().toISOString();
                 });
             } catch (statsError) {
@@ -567,6 +608,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
 
             // Send Discord webhook notification if configured
             if (recipientConfig.discordWebhook) {
+                const discordTimestamp = new Date().toISOString();
                 try {
                     const sName = formFields.name || formFields.nombre || formFields.full_name || 'Unknown';
                     const sEmail = email || 'N/A';
@@ -580,12 +622,40 @@ app.post('/submit', submitLimiter, async (req, res) => {
                             color: 0xe8713a,
                             fields: fieldsForDiscord,
                             footer: { text: 'formPost' },
-                            timestamp: new Date().toISOString()
+                            timestamp: discordTimestamp
                         }]
                     }, { timeout: 5000 });
                     log.info('Discord webhook sent', { formId: website_id });
+
+                    // Log to outbox
+                    const discordEntry = {
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                        timestamp: discordTimestamp,
+                        channel: 'discord',
+                        status: 'ok'
+                    };
+                    saveOutboxEntry(website_id, discordEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
+                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...discordEntry });
+
+                    // Update notification count
+                    writeConfigSafe(cfg => {
+                        if (cfg.statistics && cfg.statistics[website_id]) {
+                            cfg.statistics[website_id].notificationsSent = (cfg.statistics[website_id].notificationsSent || 0) + 1;
+                        }
+                    }).catch(() => {});
                 } catch (webhookErr) {
                     log.error('Discord webhook failed', { formId: website_id, error: webhookErr.message });
+
+                    // Log failure to outbox
+                    const discordFailEntry = {
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                        timestamp: discordTimestamp,
+                        channel: 'discord',
+                        status: 'error',
+                        error: webhookErr.message
+                    };
+                    saveOutboxEntry(website_id, discordFailEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...discordFailEntry });
                 }
             }
 
@@ -598,6 +668,20 @@ app.post('/submit', submitLimiter, async (req, res) => {
 
         } catch (error) {
             log.error('Error sending email', { formId: website_id, error: error.message });
+
+            // Log email failure to outbox
+            const mailFailEntry = {
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                timestamp: emailTimestamp,
+                channel: 'email',
+                to: recipientConfig.to,
+                subject: mailOptions.subject,
+                status: 'error',
+                error: error.message
+            };
+            saveOutboxEntry(website_id, mailFailEntry).catch(() => {});
+            broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailFailEntry });
+
             res.status(500).send(t.serverError);
         }
     } catch (templateError) {
@@ -665,9 +749,11 @@ adminRouter.get('/status', async (req, res) => {
     try {
         // Calculate total submissions across all websites
         const stats = config.statistics || {};
-        let totalSubmissions = 0;
+        let totalSubmissions = 0, totalMails = 0, totalNotifications = 0;
         for (const ws of Object.values(stats)) {
             totalSubmissions += (ws.successfulSubmissions || 0);
+            totalMails += (ws.mailsSent || 0);
+            totalNotifications += (ws.notificationsSent || 0);
         }
         res.json({
             status: 'ok',
@@ -676,7 +762,9 @@ adminRouter.get('/status', async (req, res) => {
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             port: PORT,
-            totalSubmissions: totalSubmissions,
+            totalSubmissions,
+            totalMails,
+            totalNotifications,
             memory: {
                 used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
                 total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024 * 100) / 100
@@ -895,20 +983,41 @@ adminRouter.get('/statistics/chart', async (req, res) => {
     else if (period === 'year') { since = new Date(now); since.setFullYear(since.getFullYear() - 1); }
     else { since = new Date(now); since.setDate(since.getDate() - 30); }
 
-    const result = {};
+    const submissions = {};
+    const mails = {};
+    const notifications = {};
     for (const formId of Object.keys(config.recipients)) {
-        const submissions = await loadSubmissions(formId);
-        const dailyCounts = {};
-        for (const sub of submissions) {
+        // Submissions per day
+        const subs = await loadSubmissions(formId);
+        const subCounts = {};
+        for (const sub of subs) {
             if (!sub.timestamp) continue;
             const d = new Date(sub.timestamp);
             if (d < since) continue;
             const key = d.toISOString().substring(0, 10);
-            dailyCounts[key] = (dailyCounts[key] || 0) + 1;
+            subCounts[key] = (subCounts[key] || 0) + 1;
         }
-        result[formId] = dailyCounts;
+        submissions[formId] = subCounts;
+
+        // Outbox entries per day (mails and notifications)
+        const outbox = await loadOutboxEntries(formId);
+        const mailCounts = {};
+        const notifCounts = {};
+        for (const entry of outbox) {
+            if (!entry.timestamp) continue;
+            const d = new Date(entry.timestamp);
+            if (d < since) continue;
+            const key = d.toISOString().substring(0, 10);
+            if (entry.channel === 'email') {
+                mailCounts[key] = (mailCounts[key] || 0) + 1;
+            } else if (entry.channel === 'discord') {
+                notifCounts[key] = (notifCounts[key] || 0) + 1;
+            }
+        }
+        mails[formId] = mailCounts;
+        notifications[formId] = notifCounts;
     }
-    res.json(result);
+    res.json({ submissions, mails, notifications });
 });
 
 // Statistics routes
@@ -949,7 +1058,7 @@ adminRouter.put('/statistics/:id/reset', async (req, res) => {
     try {
         await writeConfigSafe(cfg => {
             if (!cfg.statistics) cfg.statistics = {};
-            cfg.statistics[id] = { successfulSubmissions: 0, lastSubmission: null };
+            cfg.statistics[id] = { successfulSubmissions: 0, lastSubmission: null, mailsSent: 0, notificationsSent: 0 };
         });
         res.json({ message: t.statsReset, websiteId: id });
     } catch (e) {
@@ -1154,6 +1263,20 @@ adminRouter.get('/inbox/recent', async (req, res) => {
                 .slice(0, 2)
                 .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }));
             all.push({ websiteId: formId, id: sub.id, timestamp: sub.timestamp, name, email, preview });
+        }
+    }
+    all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json(all.slice(0, limit));
+});
+
+// Outbox recent entries
+adminRouter.get('/outbox/recent', async (req, res) => {
+    const limit = Math.min(10, Math.max(1, parseInt(req.query.limit) || 4));
+    const all = [];
+    for (const formId of Object.keys(config.recipients)) {
+        const entries = await loadOutboxEntries(formId);
+        for (const entry of entries.slice(0, limit)) {
+            all.push({ websiteId: formId, ...entry });
         }
     }
     all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
