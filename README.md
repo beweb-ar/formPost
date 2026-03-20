@@ -1,8 +1,13 @@
-# Form Backend Server
+<p align="center">
+  <img src="logo.png" alt="formPost" height="80" />
+</p>
 
-> **[Leer en Espanol](README.es.md)**
+<h1 align="center">formPost</h1>
 
-A production-ready Node.js backend for processing website contact forms. Supports multiple websites, HTML email notifications with custom templates, Cloudflare Turnstile bot protection, submission storage with export, a full admin dashboard, and bilingual UI (English / Spanish).
+<p align="center">
+  A production-ready Node.js backend for processing contact form submissions.<br/>
+  <strong><a href="README.es.md">Leer en Español</a></strong>
+</p>
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green?logo=node.js)](https://nodejs.org/)
@@ -27,14 +32,16 @@ A production-ready Node.js backend for processing website contact forms. Support
 
 ## Features
 
-- **Multi-website support** - Handle forms from unlimited websites, each with its own config
-- **HTML email notifications** - Custom email templates per website with dynamic field injection
-- **Cloudflare Turnstile** - Per-website bot protection (optional per site)
-- **Submission storage** - JSON file-based storage, up to 1000 submissions per website
+- **Multi-form support** - Handle unlimited forms, each with its own configuration
+- **HTML email notifications** - Custom email templates per form with dynamic field injection
+- **Cloudflare Turnstile** - Per-form bot protection with enable/disable toggle
+- **Domain restriction** - Allow submissions only from authorized domains (per form)
+- **Submission storage** - JSON file-based storage, up to 1000 submissions per form
 - **Export** - Download submissions as CSV or JSON
-- **Admin dashboard** - Full web UI to manage websites, SMTP, statistics, submissions, and passwords
+- **Admin dashboard** - Full web UI to manage forms, SMTP, statistics, submissions, and passwords
+- **Real-time inbox** - SSE-powered live feed of new submissions
 - **Internationalization** - Server and admin UI available in English and Spanish via `LANG` env var
-- **Statistics** - Per-website and global submission counts
+- **Statistics** - Per-form and global submission counts
 - **Dark / Light theme** - Toggle in admin UI, persisted in localStorage
 - **Rate limiting** - Separate limits for form submissions, admin API, and login attempts
 - **Security headers** - Helmet middleware with CSP, XSS protection
@@ -45,10 +52,10 @@ A production-ready Node.js backend for processing website contact forms. Support
 ### Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/c0deirl/formbackend.git
-cd formbackend
+git clone https://github.com/beweb-ar/formPost.git
+cd formPost
 
-# Edit config.json with your SMTP and website settings, then:
+# Edit config.json with your SMTP and form settings, then:
 docker-compose up -d
 
 # Open http://localhost:3000/admin
@@ -73,15 +80,17 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 ```json
 {
     "recipients": {
-        "my-website": {
+        "my-form": {
             "to": "you@example.com",
             "subjectPrefix": "Contact Form - ",
             "redirectUrl": "https://example.com/thanks",
-            "templatePath": "email-template.html"
+            "templatePath": "email-template.html",
+            "turnstileEnabled": true,
+            "allowedDomains": ["https://example.com", "https://www.example.com"]
         }
     },
     "statistics": {
-        "my-website": {
+        "my-form": {
             "successfulSubmissions": 0,
             "lastSubmission": null
         }
@@ -95,7 +104,7 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
         "pass": "smtp_pass"
     },
     "turnstile": {
-        "my-website": {
+        "my-form": {
             "secretKey": "0x4AAAAA..."
         }
     },
@@ -115,12 +124,23 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 
 | Section | Description |
 |---|---|
-| `recipients` | One entry per website: destination email, subject prefix, redirect URL, template path |
-| `statistics` | Auto-managed submission counters and timestamps per website |
+| `recipients` | One entry per form: destination email, subject prefix, redirect URL, template path, turnstile toggle, allowed domains |
+| `statistics` | Auto-managed submission counters and timestamps per form |
 | `smtp` | SMTP server settings (host, port, secure, from, user, pass) |
-| `turnstile` | Cloudflare Turnstile secret key per website (optional) |
-| `cors` | Array of allowed origins (must include protocol) |
+| `turnstile` | Cloudflare Turnstile secret key per form (optional) |
+| `cors` | Array of allowed origins for CORS (must include protocol) |
 | `admin` | Admin dashboard credentials |
+
+### Per-form options
+
+| Field | Type | Description |
+|---|---|---|
+| `to` | string | Destination email address |
+| `subjectPrefix` | string | Email subject prefix |
+| `redirectUrl` | string | URL to redirect after successful submission (optional) |
+| `templatePath` | string | Path to email template HTML file |
+| `turnstileEnabled` | boolean | Enable/disable Turnstile verification (default: `true` if key exists) |
+| `allowedDomains` | string[] | List of allowed origin domains. Empty = allow all |
 
 ## Environment Variables
 
@@ -167,28 +187,31 @@ environment:
 
 ### Dashboard
 
-- **Status bar** - Server status, port, uptime, memory, site count, **total submissions** (global)
-- **Website cards** - Each website shows: destination email, subject, redirect, template, Turnstile status, submission count, last submission date
+- **Status bar** - Server status, port, uptime, memory, form count, **total submissions** (global)
+- **Form cards** - Each form shows: destination email, subject, redirect, template, Turnstile status, allowed domains, submission count, last submission date
+- **Real-time inbox** - SSE-powered live feed of new submissions
 - **Dark/Light theme** toggle
 
-### Website Management
+### Form Management
 
-- Add, edit, and delete website configurations
+- Add, edit, and delete form configurations
+- Enable/disable Turnstile verification per form
+- Configure allowed domains per form (restrict which origins can submit)
 - Changes are persisted to `config.json` immediately
 
 ### Submissions
 
-- Paginated table per website (50 per page)
-- Click any row to see full JSON detail
+- Paginated table per form (50 per page)
+- Click any row to see full detail
 - **Export CSV** or **Export JSON**
-- **Delete all** submissions for a website
+- **Delete all** submissions for a form
 - IP addresses are anonymized (last octet masked)
 
 ### Statistics
 
-- Per-website submission count and last submission timestamp
-- **Total submissions** across all websites shown in the status bar
-- Reset statistics per website
+- Per-form submission count and last submission timestamp
+- **Total submissions** across all forms shown in the status bar
+- Reset statistics per form
 
 ### Settings
 
@@ -226,12 +249,12 @@ If a template is missing or unreadable, the server generates a basic HTML email 
 
 ```html
 <form action="https://your-server.com/submit" method="POST">
-    <input type="hidden" name="website_id" value="my-website">
+    <input type="hidden" name="website_id" value="my-form">
     <label>Name: <input type="text" name="name" required></label>
     <label>Email: <input type="email" name="email" required></label>
     <label>Message: <textarea name="message"></textarea></label>
 
-    <!-- Cloudflare Turnstile (optional, only if configured) -->
+    <!-- Cloudflare Turnstile (optional, only if configured and enabled) -->
     <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>
 
     <button type="submit">Send</button>
@@ -261,17 +284,17 @@ If a template is missing or unreadable, the server generates a basic HTML email 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/admin/api/status` | Server status, uptime, memory, total submissions, lang |
-| `GET` | `/admin/api/websites` | List all website configs |
-| `POST` | `/admin/api/websites` | Create a new website |
-| `PUT` | `/admin/api/websites/:id` | Update a website |
-| `DELETE` | `/admin/api/websites/:id` | Delete a website |
+| `GET` | `/admin/api/websites` | List all form configs |
+| `POST` | `/admin/api/websites` | Create a new form |
+| `PUT` | `/admin/api/websites/:id` | Update a form |
+| `DELETE` | `/admin/api/websites/:id` | Delete a form |
 | `GET` | `/admin/api/smtp` | Get SMTP config (credentials masked) |
 | `PUT` | `/admin/api/smtp` | Update SMTP config |
-| `GET` | `/admin/api/statistics` | Stats for all websites |
-| `GET` | `/admin/api/statistics/:id` | Stats for one website |
-| `PUT` | `/admin/api/statistics/:id/reset` | Reset stats for a website |
+| `GET` | `/admin/api/statistics` | Stats for all forms |
+| `GET` | `/admin/api/statistics/:id` | Stats for one form |
+| `PUT` | `/admin/api/statistics/:id/reset` | Reset stats for a form |
 | `GET` | `/admin/api/submissions/:id` | Paginated submissions (`?page=1&limit=50`) |
-| `DELETE` | `/admin/api/submissions/:id` | Delete all submissions for a website |
+| `DELETE` | `/admin/api/submissions/:id` | Delete all submissions for a form |
 | `GET` | `/admin/api/submissions/:id/export` | Export submissions (`?format=json` or `csv`) |
 | `PUT` | `/admin/api/admin/reset-password` | Change admin password |
 
@@ -289,10 +312,10 @@ docker-compose restart     # Restart (required after config.json edits outside a
 ### Manual Docker
 
 ```bash
-docker build -t form-processor .
+docker build -t formpost .
 
 docker run -d \
-  --name form-processor \
+  --name formpost \
   -p 3000:3000 \
   -e ADMIN_USERNAME=admin \
   -e ADMIN_PASSWORD=securepassword \
@@ -300,7 +323,7 @@ docker run -d \
   -v ./config.json:/app/config.json \
   -v ./data:/app/data \
   --restart always \
-  form-processor
+  formpost
 ```
 
 ### Docker features
@@ -310,7 +333,7 @@ docker run -d \
 - **Health check** - `/health` every 30s, auto-restart on failure
 - **Resource limits** - 512MB max, 128MB reserved
 - **no-new-privileges** - Prevents privilege escalation
-- **Volumes** - `config.json`, `data/` (submissions), `templates/` (optional)
+- **Volumes** - `config.json`, `data/` (submissions)
 
 ## Security
 
@@ -329,6 +352,11 @@ docker run -d \
 - Email validation with 254 char limit
 - HTML escaping in templates and submissions (XSS prevention)
 
+### Domain Restriction
+
+- Per-form `allowedDomains` validates the `Origin` header on submissions
+- Rejects requests from unauthorized domains with 403
+
 ### Headers & Protections
 
 - Helmet with CSP, XSS filter, HSTS, frameguard
@@ -340,7 +368,7 @@ docker run -d \
 ## File Structure
 
 ```
-formbackend/
+formPost/
 ├── server.js                       # Main application
 ├── config.json                     # Configuration (managed by admin UI)
 ├── package.json                    # Dependencies
@@ -350,12 +378,13 @@ formbackend/
 ├── README.es.md                    # Documentation (Spanish)
 ├── LICENSE                         # ISC License
 ├── logo.png                        # Application logo
+├── fav-icon.png                    # Favicon
 ├── email-template.html             # Default email template
-├── email-template-website-*.html   # Per-website templates
+├── email-template-*.html           # Per-form templates
 ├── admin/
 │   └── index.html                  # Admin dashboard (single-file SPA)
 └── data/
-    └── submissions-{websiteId}.json # Stored submissions per website
+    └── submissions-{formId}.json   # Stored submissions per form
 ```
 
 ## Troubleshooting
@@ -370,30 +399,16 @@ formbackend/
 
 1. Verify the site key matches the domain in Cloudflare
 2. Check the secret key in config.json matches
-3. Set `DEBUG=true` to bypass Turnstile for testing
+3. Ensure `turnstileEnabled` is `true` for the form
+4. Set `DEBUG=true` to bypass Turnstile for testing
 
 ### CORS errors
 
 1. Add the exact origin to `cors.allowedOrigins` (include `https://`)
 2. Restart the container after editing config.json manually
 
-### Statistics not updating
+### Domain restriction blocking submissions
 
-1. Ensure Turnstile passes (or `DEBUG=true`)
-2. Check file permissions on `config.json` and `data/`
-3. Use the admin UI refresh
-
-### Container health
-
-```bash
-docker-compose ps
-curl http://localhost:3000/health
-```
-
-## License
-
-ISC License - See [LICENSE](LICENSE) for details.
-
----
-
-Built for handling form submissions securely and efficiently.
+1. Check `allowedDomains` in the form config includes the submitting origin
+2. Ensure the origin includes the protocol (e.g., `https://example.com`)
+3. Remove `allowedDomains` or leave it empty to allow all origins

@@ -1,67 +1,40 @@
 {
     "recipients": {
-        "website-a": {
-            "to": "YOUR_EMAIL@gmail.com",
-            "subjectPrefix": "Web Form - ",
-            "redirectUrl": "https://YOUR_DOMAIN.com/thanks.html",
-            "templatePath": "email-template.html"
-        },
-        "website-b": {
-            "to": "email2@domain.com",
-            "subjectPrefix": "Website Contact Form - ",
-            "redirectUrl": "https://YOURDOMAIN_2.com/thanks.html",
-            "templatePath": "email-template-website-b.html"
-        },
-        "website-c": {
-            "to": "email3@domain.com",
-            "subjectPrefix": "Web Form - ",
-            "redirectUrl": "https://DOMAIN_3.com/thanks.html",
-            "templatePath": "email-template-website-c.html"
+        "my-form": {
+            "to": "you@example.com",
+            "subjectPrefix": "Contact Form - ",
+            "redirectUrl": "https://example.com/thanks",
+            "templatePath": "email-template.html",
+            "turnstileEnabled": true,
+            "allowedDomains": []
         }
     },
     "statistics": {
-        "website-a": {
-            "successfulSubmissions": 5,
-            "lastSubmission": "2026-01-14T14:14:06.266Z"
-        },
-        "website-b": {
-            "successfulSubmissions": 1,
-            "lastSubmission": "2026-01-14T09:15:00.000Z"
-        },
-        "website-c": {
+        "my-form": {
             "successfulSubmissions": 0,
             "lastSubmission": null
         }
     },
     "smtp": {
-        "host": "smtp.yourdomain.com",
-        "port": 25,
+        "host": "smtp.example.com",
+        "port": 587,
         "secure": false,
-        "from": "user@domain.com",
+        "from": "noreply@example.com",
         "user": "",
         "pass": ""
     },
     "turnstile": {
-        "website-a": {
-            "secretKey": "SECRETKEY1"
-        },
-        "website-b": {
-            "secretKey": "SECRETKEY2"
-        },
-        "website-c": {
-            "secretKey": "SECRETKEY3"
+        "my-form": {
+            "secretKey": "YOUR_TURNSTILE_SECRET_KEY"
         }
     },
     "cors": {
         "allowedOrigins": [
-            "https://DOMAIN1.com",
-            "https://DOMAIN2.com",
-            "https://DOMAIN3.com",
-            "https://DOMAIN4.com"
+            "https://example.com"
         ]
     },
     "admin": {
         "username": "admin",
-        "password": "password"
+        "password": "changeme123"
     }
 }

@@ -28,17 +28,13 @@ logs
 
 # Documentation
 README.md
-HEALTH_CHECK_IMPLEMENTATION.md
+README.es.md
 *.md
 
 # Archives
 *.zip
 *.tar.gz
 *.tar
-
-# Old files
-old_server.js
-oldemail-template.html
 
 # Docker
 Dockerfile
@@ -60,4 +56,6 @@ coverage
 
 # Development
 nodemon.json
-.vscode
+
+# Runtime data (mounted as volumes)
+data

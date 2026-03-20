@@ -29,13 +29,15 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy application files
 COPY server.js ./
 COPY config.json ./
-COPY email-template-website-a.html ./
-COPY email-template-website-b.html ./
-COPY email-template-website-c.html ./
+COPY email-template*.html ./
 COPY logo.png ./
+COPY fav-icon.png ./
 
 # Copy admin directory
 COPY admin ./admin
+
+# Copy templates directory
+COPY templates ./templates
 
 # Create data directory for submission storage
 RUN mkdir -p /app/data
@@ -43,7 +45,8 @@ RUN mkdir -p /app/data
 # Change ownership to non-root user and ensure writable paths
 RUN chown -R nodeuser:nodejs /app && \
     chmod 664 config.json && \
-    chmod 775 /app/data
+    chmod 775 /app/data && \
+    chmod 775 /app/templates
 
 # Switch to non-root user
 USER nodeuser

@@ -1,23 +1,20 @@
 version: '3.8'
 services:
-  form-processor:
-    # Build the image from the Dockerfile in the current directory
+  formpost:
     build: .
-    container_name: form_processor
-    # Restart policy: always restart unless manually stopped
+    container_name: formpost
     restart: always
     ports:
-      # Map the container's port 3000 to the host machine's port 3000
       - "3000:3000"
-    # Environment variables for configuration (override defaults in config.json)
     environment:
       # Admin credentials (CHANGE THESE before deploying!)
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=changeme123
       # Server configuration
       - PORT=3000
-      # Optional: Enable debug logging (set to 'true' to bypass Turnstile for testing)
-      - DEBUG=false
+      - LANG=es
+      # Optional: Enable debug mode (bypasses Turnstile for testing)
+      # - DEBUG=true
       # Optional: Override SMTP settings via environment variables
       # - SMTP_HOST=smtp.example.com
       # - SMTP_PORT=587
@@ -25,22 +22,18 @@ services:
       # - SMTP_FROM=noreply@example.com
       # - SMTP_USER=your_smtp_user
       # - SMTP_PASS=your_smtp_password
-    # Mount the config file and data directory for persistence
     volumes:
       - ./config.json:/app/config.json
       - ./templates:/app/templates
       - ./data:/app/data
-    # Health check configuration
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 3s
       start_period: 10s
       retries: 3
-    # Security and resource limits
     security_opt:
       - no-new-privileges:true
-    # Resource limits (optional, adjust as needed)
     deploy:
       resources:
         limits:

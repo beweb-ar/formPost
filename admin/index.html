@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Form Backend Admin</title>
+    <title>formPost Admin</title>
+    <link rel="icon" type="image/png" href="/fav-icon.png" />
     <style>
         :root {
             --bg-primary: #f8f9fa;
@@ -668,9 +669,10 @@
         <div class="header">
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <img src="/logo.png" alt="Logo" style="height: 40px; width: auto; object-fit: contain;" />
-                <h1>FORMBackend <span style="font-weight:300;color:var(--text-secondary);">|</span> Admin</h1>
+                <h1>formPost <span style="font-weight:300;color:var(--text-secondary);">|</span> Admin</h1>
             </div>
             <div class="header-actions">
+                <button class="header-btn" id="templatesBtn" onclick="openTemplateManager()" data-i18n="templatesBtn">&#9993; Templates</button>
                 <button class="header-btn" id="helpBtn" onclick="openHelpModal()" title="Integration Guide">&#10067;</button>
                 <button class="header-btn" id="changePasswordBtn" data-i18n="passwordBtn">&#128274; Password</button>
                 <button class="theme-toggle" id="themeToggle">
@@ -713,7 +715,7 @@
     <!-- Edit Website Modal -->
     <div class="modal-overlay" id="editModal" style="display:none;">
         <div class="modal">
-            <h3><span data-i18n="editWebsite">Edit Website</span>: <span id="editModalTitle"></span></h3>
+            <h3><span data-i18n="editForm">Edit Form</span>: <span id="editModalTitle"></span></h3>
             <form id="editForm">
                 <input type="hidden" name="editId" id="editId" />
                 <div class="form-group">
@@ -729,12 +731,32 @@
                     <input type="url" name="editRedirectUrl" id="editRedirectUrl" />
                 </div>
                 <div class="form-group">
-                    <label data-i18n="templatePath">Template Path</label>
-                    <input type="text" name="editTemplatePath" id="editTemplatePath" required />
+                    <label data-i18n="templatePath">Template</label>
+                    <select name="editTemplatePath" id="editTemplatePath" required>
+                        <option value="">Loading...</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label data-i18n="turnstileKey">Turnstile Secret Key</label>
                     <input type="text" name="editTurnstileKey" id="editTurnstileKey" />
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" name="editTurnstileEnabled" id="editTurnstileEnabled" />
+                    <label for="editTurnstileEnabled" data-i18n="turnstileEnabledLabel">Enable Turnstile Verification</label>
+                </div>
+                <div class="form-group" style="margin-top:1rem;">
+                    <label data-i18n="allowedDomains">Allowed Domains</label>
+                    <div id="editDomainsContainer"></div>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                        <input type="text" id="editNewDomain" placeholder="https://example.com" style="flex:1;" />
+                        <button type="button" class="btn-sm btn-outline" onclick="addEditDomain()">+</button>
+                    </div>
+                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="allowedDomainsHint">Leave empty to allow all domains</small>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="discordWebhook">Discord Webhook URL</label>
+                    <input type="url" name="editDiscordWebhook" id="editDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." />
+                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="discordWebhookHint">Leave empty to disable Discord notifications</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" onclick="closeEditModal()" data-i18n="cancel">Cancel</button>
@@ -758,7 +780,7 @@
     <!-- Create Website Modal -->
     <div class="modal-overlay" id="createModal" style="display:none;">
         <div class="modal">
-            <h3 data-i18n="addNewWebsite">Add New Website</h3>
+            <h3 data-i18n="addNewForm">Add New Form</h3>
             <form id="createForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -782,17 +804,37 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label data-i18n="templatePath">Template Path</label>
-                        <input type="text" name="templatePath" required placeholder="email-template.html" />
+                        <label data-i18n="templatePath">Template</label>
+                        <select name="templatePath" id="createTemplatePath" required>
+                            <option value="">Loading...</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label data-i18n="turnstileKeyOpt">Turnstile Secret Key (optional)</label>
                         <input type="text" name="turnstileKey" placeholder="0x4AAAAA..." />
                     </div>
                 </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" name="turnstileEnabled" id="createTurnstileEnabled" checked />
+                    <label for="createTurnstileEnabled" data-i18n="turnstileEnabledLabel">Enable Turnstile Verification</label>
+                </div>
+                <div class="form-group" style="margin-top:1rem;">
+                    <label data-i18n="allowedDomains">Allowed Domains</label>
+                    <div id="createDomainsContainer"></div>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                        <input type="text" id="createNewDomain" placeholder="https://example.com" style="flex:1;" />
+                        <button type="button" class="btn-sm btn-outline" onclick="addCreateDomain()">+</button>
+                    </div>
+                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="allowedDomainsHint">Leave empty to allow all domains</small>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="discordWebhook">Discord Webhook URL</label>
+                    <input type="url" name="discordWebhook" id="createDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." />
+                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="discordWebhookHint">Leave empty to disable Discord notifications</small>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" onclick="closeCreateModal()" data-i18n="cancel">Cancel</button>
-                    <button type="submit" id="createWebsiteBtn" data-i18n="addWebsite">Add Website</button>
+                    <button type="submit" id="createWebsiteBtn" data-i18n="addForm">Add Form</button>
                 </div>
             </form>
         </div>
@@ -883,6 +925,44 @@
         </div>
     </div>
 
+    <!-- Template Editor Modal -->
+    <div class="modal-overlay" id="templateEditorModal" style="display:none;">
+        <div class="modal modal-wide">
+            <h3><span data-i18n="templateEditor">Template Editor</span>: <span id="templateEditorTitle"></span></h3>
+            <form id="templateEditorForm">
+                <div class="form-group">
+                    <label data-i18n="templateName">Template Name</label>
+                    <input type="text" id="templateEditorName" required placeholder="my-template.html" />
+                </div>
+                <div class="form-group">
+                    <label data-i18n="templateContent">HTML Content</label>
+                    <textarea id="templateEditorContent" style="width:100%;min-height:300px;font-family:monospace;font-size:0.85rem;padding:0.75rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);resize:vertical;" placeholder="<h2>New submission from {{website_id}}</h2>&#10;<ul>{{fields}}</ul>"></textarea>
+                </div>
+                <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;" data-i18n="templateHint">Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{website_id}} for the form ID.</p>
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" onclick="closeTemplateEditor()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" id="templateEditorSaveBtn" data-i18n="saveTemplate">Save Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Template Manager Modal -->
+    <div class="modal-overlay" id="templateManagerModal" style="display:none;">
+        <div class="modal modal-wide">
+            <div class="submissions-modal-header">
+                <h3 data-i18n="manageTemplates">Email Templates</h3>
+                <button class="btn-sm btn-outline" onclick="openTemplateEditor('', '')" data-i18n="newTemplate">+ New Template</button>
+            </div>
+            <div id="templateManagerContent">
+                <div class="empty-state"><span class="spinner"></span> Loading...</div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" onclick="closeTemplateManager()" data-i18n="close">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Help / Integration Guide Modal -->
     <div class="modal-overlay" id="helpModal" style="display:none;">
         <div class="modal modal-wide">
@@ -906,25 +986,28 @@
                 // Header
                 passwordBtn: '&#128274; Password', logout: 'Logout', settingsBtn: '&#9881; Settings',
                 // Status bar
-                port: 'Port', uptime: 'Uptime', memory: 'Memory', sites: 'Sites', totalSubs: 'Total Subs',
+                port: 'Port', uptime: 'Uptime', memory: 'Memory', forms: 'Forms', totalSubs: 'Total Subs',
                 statusUnavailable: 'Status unavailable',
                 // Cards
                 to: 'To', subject: 'Subject', redirect: 'Redirect', template: 'Template',
-                turnstileEnabled: 'Enabled', submissions: 'Submissions', lastSubmission: 'Last Submission',
-                never: 'Never', addWebsiteCard: 'Add Website', edit: 'Edit', delete: 'Delete',
-                failedLoadWebsites: 'Failed to load websites',
+                turnstileOn: 'Enabled', turnstileOff: 'Disabled', turnstileEnabledLabel: 'Enable Turnstile Verification',
+                submissions: 'Submissions', lastSubmission: 'Last Submission',
+                never: 'Never', addFormCard: 'Add Form', edit: 'Edit', delete: 'Delete',
+                failedLoadForms: 'Failed to load forms',
                 // Modals
-                editWebsite: 'Edit Website', addNewWebsite: 'Add New Website',
+                editForm: 'Edit Form', addNewForm: 'Add New Form',
                 toEmail: 'To Email', subjectPrefix: 'Subject Prefix',
                 redirectUrl: 'Redirect URL', redirectUrlOpt: 'Redirect URL (optional)',
                 templatePath: 'Template Path',
                 turnstileKey: 'Turnstile Secret Key', turnstileKeyOpt: 'Turnstile Secret Key (optional)',
-                cancel: 'Cancel', saveChanges: 'Save Changes', addWebsite: 'Add Website',
+                allowedDomains: 'Allowed Domains', allowedDomainsHint: 'Leave empty to allow all domains',
+                discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Leave empty to disable Discord notifications',
+                cancel: 'Cancel', saveChanges: 'Save Changes', addForm: 'Add Form',
                 close: 'Close', loading: 'Loading...',
                 // Submissions modal
                 submissionDetails: 'Submission Details', date: 'Date',
                 exportCsv: 'Export CSV', exportJson: 'Export JSON',
-                deleteAll: 'Delete All', noSubmissions: 'No submissions yet for this website.',
+                deleteAll: 'Delete All', noSubmissions: 'No submissions yet for this form.',
                 failedLoadSubmissions: 'Failed to load submissions',
                 previous: 'Previous', next: 'Next',
                 page: 'Page', of: 'of', total: 'total',
@@ -940,14 +1023,14 @@
                 usernameOpt: 'Username (optional)', passwordOpt: 'Password (optional)',
                 saveSmtp: 'Save SMTP Settings',
                 // Toasts
-                websiteAdded: 'Website added successfully', websiteUpdated: 'Website updated successfully',
-                websiteDeleted: 'Website deleted', failedAdd: 'Failed to add website',
+                formAdded: 'Form added successfully', formUpdated: 'Form updated successfully',
+                formDeleted: 'Form deleted', failedAdd: 'Failed to add form',
                 failedUpdate: 'Failed to update', failedDelete: 'Failed to delete',
                 smtpSaved: 'SMTP settings saved', failedSmtp: 'Failed to save',
                 statsReset: 'Statistics reset', failedResetStats: 'Failed to reset statistics',
                 exportDownloaded: 'Export downloaded', exportFailed: 'Export failed',
                 subsDeleted: 'All submissions deleted', failedDeleteSubs: 'Failed to delete submissions',
-                failedLoadData: 'Failed to load website data', websiteNotFound: 'Website not found',
+                failedLoadData: 'Failed to load form data', formNotFound: 'Form not found',
                 connError: 'Connection error',
                 // Confirms
                 confirmDelete: 'Are you sure you want to delete "{id}"? This cannot be undone.',
@@ -960,14 +1043,22 @@
                 // Integration / Help
                 copyInstructions: 'Copy Instructions', instructionsCopied: 'Integration instructions copied to clipboard',
                 helpTitle: 'Integration Guide',
-                helpIntro: 'This server processes contact form submissions from your websites. Each configured website has its own endpoint, email destination, and optional bot protection.',
+                helpIntro: 'This server processes contact form submissions. Each configured form has its own endpoint, email destination, and optional bot protection.',
                 helpHowTo: 'How to integrate',
                 helpStep1: 'Create an HTML form with <code>method="POST"</code> and <code>action</code> pointing to this server\'s <code>/submit</code> endpoint.',
-                helpStep2: 'Include a hidden field <code>website_id</code> with the website identifier.',
+                helpStep2: 'Include a hidden field <code>website_id</code> with the form identifier.',
                 helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
                 helpStep4: 'If Turnstile is configured, add the Cloudflare Turnstile widget with your site key.',
                 helpStep5: 'The server will send an HTML email to the configured recipient and optionally redirect the user.',
-                helpCopyTip: 'Use the <strong>clipboard icon</strong> on each website card to copy a detailed, LLM-ready integration prompt specific to that website\'s configuration.',
+                helpCopyTip: 'Use the <strong>clipboard icon</strong> on each form card to copy a detailed, LLM-ready integration prompt specific to that form\'s configuration.',
+                // Templates
+                templatesBtn: '&#9993; Templates', manageTemplates: 'Email Templates',
+                templateEditor: 'Template Editor', templateName: 'Template Name',
+                templatePathLabel: 'Path', templateContent: 'HTML Content',
+                templateHint: 'Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{website_id}} for the form ID.',
+                saveTemplate: 'Save Template', newTemplate: 'New Template',
+                noTemplates: 'No templates found.', templateSaved: 'Template saved successfully',
+                templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
@@ -979,25 +1070,28 @@
                 // Header
                 passwordBtn: '&#128274; Clave', logout: 'Salir', settingsBtn: '&#9881; Configuraci\u00f3n',
                 // Status bar
-                port: 'Puerto', uptime: 'Activo', memory: 'Memoria', sites: 'Sitios', totalSubs: 'Total Env\u00edos',
+                port: 'Puerto', uptime: 'Activo', memory: 'Memoria', forms: 'Formularios', totalSubs: 'Total Env\u00edos',
                 statusUnavailable: 'Estado no disponible',
                 // Cards
                 to: 'Destino', subject: 'Asunto', redirect: 'Redirecci\u00f3n', template: 'Plantilla',
-                turnstileEnabled: 'Activo', submissions: 'Env\u00edos', lastSubmission: '\u00daltimo Env\u00edo',
-                never: 'Nunca', addWebsiteCard: 'Agregar Sitio', edit: 'Editar', delete: 'Eliminar',
-                failedLoadWebsites: 'Error al cargar sitios',
+                turnstileOn: 'Activo', turnstileOff: 'Desactivado', turnstileEnabledLabel: 'Activar Verificaci\u00f3n Turnstile',
+                submissions: 'Env\u00edos', lastSubmission: '\u00daltimo Env\u00edo',
+                never: 'Nunca', addFormCard: 'Agregar Formulario', edit: 'Editar', delete: 'Eliminar',
+                failedLoadForms: 'Error al cargar formularios',
                 // Modals
-                editWebsite: 'Editar Sitio', addNewWebsite: 'Agregar Nuevo Sitio',
+                editForm: 'Editar Formulario', addNewForm: 'Agregar Nuevo Formulario',
                 toEmail: 'Email Destino', subjectPrefix: 'Prefijo de Asunto',
                 redirectUrl: 'URL de Redirecci\u00f3n', redirectUrlOpt: 'URL de Redirecci\u00f3n (opcional)',
                 templatePath: 'Ruta de Plantilla',
                 turnstileKey: 'Clave Secreta Turnstile', turnstileKeyOpt: 'Clave Secreta Turnstile (opcional)',
-                cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addWebsite: 'Agregar Sitio',
+                allowedDomains: 'Dominios Permitidos', allowedDomainsHint: 'Dejar vac\u00edo para permitir todos los dominios',
+                discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Dejar vac\u00edo para desactivar notificaciones Discord',
+                cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addForm: 'Agregar Formulario',
                 close: 'Cerrar', loading: 'Cargando...',
                 // Submissions modal
                 submissionDetails: 'Detalle del Env\u00edo', date: 'Fecha',
                 exportCsv: 'Exportar CSV', exportJson: 'Exportar JSON',
-                deleteAll: 'Eliminar Todo', noSubmissions: 'No hay env\u00edos para este sitio.',
+                deleteAll: 'Eliminar Todo', noSubmissions: 'No hay env\u00edos para este formulario.',
                 failedLoadSubmissions: 'Error al cargar env\u00edos',
                 previous: 'Anterior', next: 'Siguiente',
                 page: 'P\u00e1gina', of: 'de', total: 'total',
@@ -1013,14 +1107,14 @@
                 usernameOpt: 'Usuario (opcional)', passwordOpt: 'Contrase\u00f1a (opcional)',
                 saveSmtp: 'Guardar Config. SMTP',
                 // Toasts
-                websiteAdded: 'Sitio agregado correctamente', websiteUpdated: 'Sitio actualizado correctamente',
-                websiteDeleted: 'Sitio eliminado', failedAdd: 'Error al agregar sitio',
+                formAdded: 'Formulario agregado correctamente', formUpdated: 'Formulario actualizado correctamente',
+                formDeleted: 'Formulario eliminado', failedAdd: 'Error al agregar formulario',
                 failedUpdate: 'Error al actualizar', failedDelete: 'Error al eliminar',
                 smtpSaved: 'Configuraci\u00f3n SMTP guardada', failedSmtp: 'Error al guardar',
                 statsReset: 'Estad\u00edsticas reiniciadas', failedResetStats: 'Error al reiniciar estad\u00edsticas',
                 exportDownloaded: 'Exportaci\u00f3n descargada', exportFailed: 'Error en la exportaci\u00f3n',
                 subsDeleted: 'Todos los env\u00edos eliminados', failedDeleteSubs: 'Error al eliminar env\u00edos',
-                failedLoadData: 'Error al cargar datos del sitio', websiteNotFound: 'Sitio no encontrado',
+                failedLoadData: 'Error al cargar datos del formulario', formNotFound: 'Formulario no encontrado',
                 connError: 'Error de conexi\u00f3n',
                 // Confirms
                 confirmDelete: '\u00bfSeguro que desea eliminar "{id}"? Esta acci\u00f3n no se puede deshacer.',
@@ -1034,14 +1128,22 @@
                 // Integration / Help
                 copyInstructions: 'Copiar Instrucciones', instructionsCopied: 'Instrucciones de integraci\u00f3n copiadas al portapapeles',
                 helpTitle: 'Gu\u00eda de Integraci\u00f3n',
-                helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto de tus sitios web. Cada sitio configurado tiene su propio endpoint, email destino y protecci\u00f3n anti-bot opcional.',
+                helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto. Cada formulario configurado tiene su propio endpoint, email destino y protecci\u00f3n anti-bot opcional.',
                 helpHowTo: 'C\u00f3mo integrar',
                 helpStep1: 'Crea un formulario HTML con <code>method="POST"</code> y <code>action</code> apuntando al endpoint <code>/submit</code> de este servidor.',
-                helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del sitio.',
+                helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del formulario.',
                 helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
                 helpStep4: 'Si Turnstile est\u00e1 configurado, agrega el widget de Cloudflare Turnstile con tu site key.',
                 helpStep5: 'El servidor enviar\u00e1 un email HTML al destinatario configurado y opcionalmente redirigir\u00e1 al usuario.',
-                helpCopyTip: 'Usa el <strong>\u00edcono de portapapeles</strong> en cada tarjeta de sitio para copiar un prompt detallado de integraci\u00f3n espec\u00edfico a la configuraci\u00f3n de ese sitio, listo para usar con un LLM.',
+                helpCopyTip: 'Usa el <strong>\u00edcono de portapapeles</strong> en cada tarjeta de formulario para copiar un prompt detallado de integraci\u00f3n espec\u00edfico a la configuraci\u00f3n de ese formulario, listo para usar con un LLM.',
+                // Templates
+                templatesBtn: '&#9993; Plantillas', manageTemplates: 'Plantillas de Email',
+                templateEditor: 'Editor de Plantilla', templateName: 'Nombre de Plantilla',
+                templatePathLabel: 'Ruta', templateContent: 'Contenido HTML',
+                templateHint: 'Usa {{fields}} para campos dinámicos o {{fieldname}} para campos específicos. {{website_id}} para el ID del formulario.',
+                saveTemplate: 'Guardar Plantilla', newTemplate: 'Nueva Plantilla',
+                noTemplates: 'No se encontraron plantillas.', templateSaved: 'Plantilla guardada correctamente',
+                templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -1231,20 +1333,33 @@
             loadWebsitesWithStats();
         }
 
-        function connectInbox() {
+        async function connectInbox() {
             if (!auth) return;
-            var token = auth.replace('Basic ', '');
             if (inboxEventSource) inboxEventSource.close();
             setInboxStatus('reconnecting');
-            inboxEventSource = new EventSource('/admin/api/inbox/stream?token=' + encodeURIComponent(token));
-            inboxEventSource.onopen = function() { setInboxStatus('connected'); };
-            inboxEventSource.onmessage = function(e) {
-                try {
-                    var data = JSON.parse(e.data);
-                    if (data.type === 'submission') addInboxEntry(data);
-                } catch(err) {}
-            };
-            inboxEventSource.onerror = function() { setInboxStatus('disconnected'); };
+            try {
+                var res = await fetch('/admin/api/inbox/token', {
+                    method: 'POST',
+                    headers: { Authorization: auth }
+                });
+                if (!res.ok) { setInboxStatus('disconnected'); return; }
+                var data = await res.json();
+                inboxEventSource = new EventSource('/admin/api/inbox/stream?token=' + encodeURIComponent(data.token));
+                inboxEventSource.onopen = function() { setInboxStatus('connected'); };
+                inboxEventSource.onmessage = function(e) {
+                    try {
+                        var msg = JSON.parse(e.data);
+                        if (msg.type === 'submission') addInboxEntry(msg);
+                    } catch(err) {}
+                };
+                inboxEventSource.onerror = function() {
+                    setInboxStatus('disconnected');
+                    // Auto-reconnect after 5 seconds with a new token
+                    setTimeout(function() { connectInbox(); }, 5000);
+                };
+            } catch(e) {
+                setInboxStatus('disconnected');
+            }
         }
 
         function disconnectInbox() {
@@ -1273,7 +1388,7 @@
                     '<div class="status-bar-item">' + L('port') + ': <span class="value">' + esc(String(data.port)) + '</span></div>' +
                     '<div class="status-bar-item">' + L('uptime') + ': <span class="value">' + uptimeStr + '</span></div>' +
                     '<div class="status-bar-item">' + L('memory') + ': <span class="value">' + mem.used + '/' + mem.total + ' MB</span></div>' +
-                    '<div class="status-bar-item">' + L('sites') + ': <span class="value">' + data.config.websites.length + '</span></div>' +
+                    '<div class="status-bar-item">' + L('forms') + ': <span class="value">' + data.config.websites.length + '</span></div>' +
                     '<div class="status-bar-item">' + L('totalSubs') + ': <span class="value">' + totalSubs + '</span></div>';
             } catch(e) {
                 document.getElementById('statusItems').innerHTML =
@@ -1294,7 +1409,7 @@
                 renderWebsiteCards(websites, stats);
             } catch(e) {
                 document.getElementById('websiteCards').innerHTML =
-                    '<div class="empty-state">' + L('failedLoadWebsites') + '</div>';
+                    '<div class="empty-state">' + L('failedLoadForms') + '</div>';
             }
         }
 
@@ -1312,8 +1427,19 @@
                 var redirect = cfg.redirectUrl
                     ? '<div class="card-info"><strong>' + L('redirect') + ':</strong> <a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a></div>'
                     : '';
-                var turnstile = cfg.turnstileKey
-                    ? '<div class="card-info"><strong>Turnstile:</strong> ' + L('turnstileEnabled') + '</div>'
+                var turnstile = '';
+                if (cfg.turnstileKey) {
+                    var tsEnabled = cfg.turnstileEnabled !== false;
+                    turnstile = '<div class="card-info"><strong>Turnstile:</strong> ' +
+                        (tsEnabled ? L('turnstileOn') : '<span style="color:var(--danger)">' + L('turnstileOff') + '</span>') +
+                        '</div>';
+                }
+                var domains = '';
+                if (cfg.allowedDomains && cfg.allowedDomains.length > 0) {
+                    domains = '<div class="card-info"><strong>' + L('allowedDomains') + ':</strong> ' + cfg.allowedDomains.map(function(d) { return esc(d); }).join(', ') + '</div>';
+                }
+                var discord = cfg.discordWebhook
+                    ? '<div class="card-info"><strong>Discord:</strong> ' + L('turnstileOn') + '</div>'
                     : '';
 
                 return '<div class="website-card">' +
@@ -1323,7 +1449,7 @@
                     '</div>' +
                     '<div class="card-info"><strong>' + L('to') + ':</strong> ' + esc(cfg.to) + '</div>' +
                     '<div class="card-info"><strong>' + L('subject') + ':</strong> ' + esc(cfg.subjectPrefix) + '</div>' +
-                    redirect + turnstile +
+                    redirect + turnstile + domains + discord +
                     '<div class="card-info"><strong>' + L('template') + ':</strong> ' + esc(cfg.templatePath) + '</div>' +
                     '<div class="card-stats">' +
                         '<div class="card-stat"><span class="card-stat-value">' + subCount + '</span><span class="card-stat-label">' + L('submissions') + '</span></div>' +
@@ -1340,7 +1466,7 @@
             // Add the "+" card
             html += '<div class="add-card" onclick="openCreateModal()">' +
                 '<span class="plus-icon">+</span>' +
-                '<span>' + L('addWebsiteCard') + '</span>' +
+                '<span>' + L('addFormCard') + '</span>' +
                 '</div>';
 
             container.innerHTML = html;
@@ -1433,8 +1559,11 @@
         }
 
         // ========== Create Website Modal ==========
-        function openCreateModal() {
+        async function openCreateModal() {
             document.getElementById('createForm').reset();
+            createDomains = [];
+            renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain');
+            await populateTemplateDropdown('createTemplatePath', '');
             document.getElementById('createModal').style.display = 'flex';
         }
 
@@ -1459,6 +1588,10 @@
             if (redirectUrl) payload.config.redirectUrl = redirectUrl;
             var turnstileKey = formData.get('turnstileKey');
             if (turnstileKey) payload.config.turnstileKey = turnstileKey;
+            payload.config.turnstileEnabled = document.getElementById('createTurnstileEnabled').checked;
+            if (createDomains.length > 0) payload.config.allowedDomains = createDomains.slice();
+            var createDiscord = document.getElementById('createDiscordWebhook').value.trim();
+            if (createDiscord) payload.config.discordWebhook = createDiscord;
             try {
                 var res = await fetch('/admin/api/websites', {
                     method: 'POST',
@@ -1467,7 +1600,7 @@
                 });
                 var result = await res.json();
                 if (res.ok) {
-                    showToast(L('websiteAdded'), 'success');
+                    showToast(L('formAdded'), 'success');
                     closeCreateModal();
                     loadWebsitesWithStats();
                     loadStatus();
@@ -1489,14 +1622,19 @@
                 var data = await res.json();
                 websitesCache = data;
                 var cfg = data[id];
-                if (!cfg) return showToast(L('websiteNotFound'), 'error');
+                if (!cfg) return showToast(L('formNotFound'), 'error');
                 document.getElementById('editId').value = id;
                 document.getElementById('editModalTitle').textContent = id;
                 document.getElementById('editTo').value = cfg.to || '';
                 document.getElementById('editSubjectPrefix').value = cfg.subjectPrefix || '';
                 document.getElementById('editRedirectUrl').value = cfg.redirectUrl || '';
-                document.getElementById('editTemplatePath').value = cfg.templatePath || '';
+                await populateTemplateDropdown('editTemplatePath', cfg.templatePath || '');
                 document.getElementById('editTurnstileKey').value = cfg.turnstileKey || '';
+                document.getElementById('editTurnstileEnabled').checked = cfg.turnstileEnabled !== false;
+                document.getElementById('editDiscordWebhook').value = cfg.discordWebhook || '';
+                editDomains = (cfg.allowedDomains || []).slice();
+                renderDomainList('editDomainsContainer', editDomains, 'removeEditDomain');
+                document.getElementById('editNewDomain').value = '';
                 document.getElementById('editModal').style.display = 'flex';
             } catch(e) {
                 showToast(L('failedLoadData'), 'error');
@@ -1520,6 +1658,10 @@
             };
             var turnstileKey = document.getElementById('editTurnstileKey').value;
             if (turnstileKey) payload.turnstileKey = turnstileKey;
+            payload.turnstileEnabled = document.getElementById('editTurnstileEnabled').checked;
+            payload.allowedDomains = editDomains.slice();
+            var editDiscord = document.getElementById('editDiscordWebhook').value.trim();
+            payload.discordWebhook = editDiscord || '';
             try {
                 var res = await fetch('/admin/api/websites/' + encodeURIComponent(id), {
                     method: 'PUT',
@@ -1528,7 +1670,7 @@
                 });
                 var result = await res.json();
                 if (res.ok) {
-                    showToast(L('websiteUpdated'), 'success');
+                    showToast(L('formUpdated'), 'success');
                     closeEditModal();
                     loadWebsitesWithStats();
                 } else {
@@ -1540,6 +1682,167 @@
             setLoading(btn, false);
         });
 
+        // ========== Template Management ==========
+        var templatesCache = [];
+
+        async function loadTemplatesList() {
+            try {
+                var res = await fetch('/admin/api/templates', { headers: { Authorization: auth } });
+                templatesCache = await res.json();
+            } catch(e) {
+                templatesCache = [];
+            }
+            return templatesCache;
+        }
+
+        async function populateTemplateDropdown(selectId, selectedValue) {
+            var select = document.getElementById(selectId);
+            await loadTemplatesList();
+            select.innerHTML = '';
+            if (templatesCache.length === 0) {
+                select.innerHTML = '<option value="email-template.html">email-template.html</option>';
+            } else {
+                templatesCache.forEach(function(t) {
+                    var opt = document.createElement('option');
+                    opt.value = t.path;
+                    opt.textContent = t.name;
+                    select.appendChild(opt);
+                });
+            }
+            if (selectedValue) select.value = selectedValue;
+        }
+
+        function openTemplateManager() {
+            document.getElementById('templateManagerModal').style.display = 'flex';
+            loadTemplateManager();
+        }
+
+        function closeTemplateManager() {
+            document.getElementById('templateManagerModal').style.display = 'none';
+        }
+
+        async function loadTemplateManager() {
+            var container = document.getElementById('templateManagerContent');
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
+            await loadTemplatesList();
+            if (templatesCache.length === 0) {
+                container.innerHTML = '<div class="empty-state">' + L('noTemplates') + '</div>';
+                return;
+            }
+            var html = '<table class="submissions-table"><thead><tr><th>' + L('templateName') + '</th><th>' + L('templatePathLabel') + '</th><th></th></tr></thead><tbody>';
+            templatesCache.forEach(function(t) {
+                html += '<tr>' +
+                    '<td>' + esc(t.name) + '</td>' +
+                    '<td><code>' + esc(t.path) + '</code></td>' +
+                    '<td style="text-align:right;">' +
+                        '<button class="btn-sm btn-outline" onclick="editTemplate(\'' + esc(t.name) + '\')">' + L('edit') + '</button> ' +
+                        (t.path.startsWith('templates/') ? '<button class="btn-sm btn-danger" onclick="deleteTemplate(\'' + esc(t.name) + '\')">' + L('delete') + '</button>' : '') +
+                    '</td>' +
+                '</tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function editTemplate(name) {
+            try {
+                var res = await fetch('/admin/api/templates/' + encodeURIComponent(name), { headers: { Authorization: auth } });
+                var data = await res.json();
+                openTemplateEditor(data.name, data.content);
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
+        function openTemplateEditor(name, content) {
+            document.getElementById('templateEditorName').value = name || '';
+            document.getElementById('templateEditorName').disabled = !!name;
+            document.getElementById('templateEditorContent').value = content || '';
+            document.getElementById('templateEditorTitle').textContent = name || L('newTemplate');
+            document.getElementById('templateEditorModal').style.display = 'flex';
+        }
+
+        function closeTemplateEditor() {
+            document.getElementById('templateEditorModal').style.display = 'none';
+        }
+
+        document.getElementById('templateEditorForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('templateEditorSaveBtn');
+            setLoading(btn, true);
+            var name = document.getElementById('templateEditorName').value.trim();
+            if (!name.endsWith('.html')) name += '.html';
+            var content = document.getElementById('templateEditorContent').value;
+            try {
+                var res = await fetch('/admin/api/templates/' + encodeURIComponent(name), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ content: content })
+                });
+                if (res.ok) {
+                    showToast(L('templateSaved'), 'success');
+                    closeTemplateEditor();
+                    loadTemplateManager();
+                } else {
+                    var result = await res.json();
+                    showToast(result.error || L('failedUpdate'), 'error');
+                }
+            } catch(err) {
+                showToast(L('connError'), 'error');
+            }
+            setLoading(btn, false);
+        });
+
+        async function deleteTemplate(name) {
+            if (!confirm(L('confirmDeleteTemplate').replace('{name}', name))) return;
+            try {
+                var res = await fetch('/admin/api/templates/' + encodeURIComponent(name), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) {
+                    showToast(L('templateDeleted'), 'success');
+                    loadTemplateManager();
+                } else {
+                    showToast(L('failedDelete'), 'error');
+                }
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
+        // ========== Domain Management ==========
+        var editDomains = [];
+        var createDomains = [];
+
+        function renderDomainList(containerId, list, removeFunc) {
+            var container = document.getElementById(containerId);
+            if (list.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            container.innerHTML = list.map(function(d, i) {
+                return '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">' +
+                    '<span style="flex:1;font-size:0.875rem;padding:0.3rem 0.5rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">' + esc(d) + '</span>' +
+                    '<button type="button" class="btn-sm btn-danger" onclick="' + removeFunc + '(' + i + ')" style="padding:0.2rem 0.5rem;">✕</button>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function addEditDomain() {
+            var input = document.getElementById('editNewDomain');
+            var val = input.value.trim();
+            if (val) { editDomains.push(val); input.value = ''; renderDomainList('editDomainsContainer', editDomains, 'removeEditDomain'); }
+        }
+        function removeEditDomain(i) { editDomains.splice(i, 1); renderDomainList('editDomainsContainer', editDomains, 'removeEditDomain'); }
+
+        function addCreateDomain() {
+            var input = document.getElementById('createNewDomain');
+            var val = input.value.trim();
+            if (val) { createDomains.push(val); input.value = ''; renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain'); }
+        }
+        function removeCreateDomain(i) { createDomains.splice(i, 1); renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain'); }
+
         // ========== Delete Website ==========
         async function deleteWebsite(id) {
             if (!confirm(L('confirmDelete').replace('{id}', id))) return;
@@ -1549,7 +1852,7 @@
                     headers: { Authorization: auth }
                 });
                 if (res.ok) {
-                    showToast(L('websiteDeleted'), 'success');
+                    showToast(L('formDeleted'), 'success');
                     loadWebsitesWithStats();
                     loadStatus();
                 } else {
@@ -1855,7 +2158,7 @@
         document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
 
         // ========== Close modals on overlay click ==========
-        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal'].forEach(function(id) {
+        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal'].forEach(function(id) {
             document.getElementById(id).addEventListener('click', function(e) {
                 if (e.target === this) this.style.display = 'none';
             });

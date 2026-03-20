@@ -6,7 +6,40 @@ const path = require('path');
 const axios = require('axios');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const bcrypt = require('bcrypt');
 const config = require('./config.json');
+const BCRYPT_ROUNDS = 10;
+
+// Structured JSON logger
+const log = {
+    _emit(level, msg, meta = {}) {
+        const entry = { ts: new Date().toISOString(), level, msg, ...meta };
+        process.stdout.write(JSON.stringify(entry) + '\n');
+    },
+    info(msg, meta) { log._emit('info', msg, meta); },
+    warn(msg, meta) { log._emit('warn', msg, meta); },
+    error(msg, meta) { log._emit('error', msg, meta); }
+};
+
+// Simple async mutex for config.json writes with auto-backup
+const CONFIG_PATH = path.join(__dirname, 'config.json');
+const CONFIG_BACKUP_PATH = path.join(__dirname, 'config.backup.json');
+let configWriteLock = Promise.resolve();
+async function writeConfigSafe(mutator) {
+    configWriteLock = configWriteLock.then(async () => {
+        const raw = await fs.readFile(CONFIG_PATH, 'utf8');
+        // Backup current config before writing
+        await fs.writeFile(CONFIG_BACKUP_PATH, raw);
+        const currentConfig = JSON.parse(raw);
+        mutator(currentConfig);
+        await fs.writeFile(CONFIG_PATH, JSON.stringify(currentConfig, null, 4));
+        Object.assign(config, currentConfig);
+    }).catch(e => {
+        log.error('Config write error', { error: e.message });
+        throw e;
+    });
+    return configWriteLock;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,11 +65,11 @@ const serverMessages = {
         authRequired: 'Authentication required',
         forbidden: 'Forbidden',
         missingIdOrConfig: 'Missing id or config',
-        websiteExists: 'Website ID already exists',
-        websiteAdded: 'Website added',
-        websiteNotFound: 'Website not found',
-        websiteUpdated: 'Website updated',
-        websiteRemoved: 'Website removed',
+        formExists: 'Form ID already exists',
+        formAdded: 'Form added',
+        formNotFound: 'Form not found',
+        formUpdated: 'Form updated',
+        formRemoved: 'Form removed',
         invalidSmtp: 'Invalid SMTP config',
         smtpUpdated: 'SMTP config updated',
         failedSaveConfig: 'Failed to save config',
@@ -49,7 +82,8 @@ const serverMessages = {
         passwordIncorrect: 'Current password is incorrect',
         passwordUpdated: 'Password updated successfully',
         failedUpdatePassword: 'Failed to update password',
-        failedRetrieveStatus: 'Failed to retrieve status'
+        failedRetrieveStatus: 'Failed to retrieve status',
+        domainNotAllowed: 'Submissions from this domain are not allowed.'
     },
     es: {
         invalidFormId: 'ID de formulario no v\u00e1lido.',
@@ -68,11 +102,11 @@ const serverMessages = {
         authRequired: 'Autenticaci\u00f3n requerida',
         forbidden: 'Acceso denegado',
         missingIdOrConfig: 'Falta id o configuraci\u00f3n',
-        websiteExists: 'El ID del website ya existe',
-        websiteAdded: 'Website agregado',
-        websiteNotFound: 'Website no encontrado',
-        websiteUpdated: 'Website actualizado',
-        websiteRemoved: 'Website eliminado',
+        formExists: 'El ID del formulario ya existe',
+        formAdded: 'Formulario agregado',
+        formNotFound: 'Formulario no encontrado',
+        formUpdated: 'Formulario actualizado',
+        formRemoved: 'Formulario eliminado',
         invalidSmtp: 'Configuraci\u00f3n SMTP no v\u00e1lida',
         smtpUpdated: 'Configuraci\u00f3n SMTP actualizada',
         failedSaveConfig: 'Error al guardar configuraci\u00f3n',
@@ -85,7 +119,8 @@ const serverMessages = {
         passwordIncorrect: 'La contrase\u00f1a actual es incorrecta',
         passwordUpdated: 'Contrase\u00f1a actualizada correctamente',
         failedUpdatePassword: 'Error al actualizar contrase\u00f1a',
-        failedRetrieveStatus: 'Error al obtener estado'
+        failedRetrieveStatus: 'Error al obtener estado',
+        domainNotAllowed: 'No se permiten envíos desde este dominio.'
     }
 };
 const t = serverMessages[LANG] || serverMessages.es;
@@ -115,6 +150,22 @@ if (process.env.SMTP_FROM) config.smtp.from = process.env.SMTP_FROM;
 if (process.env.SMTP_USER) config.smtp.user = process.env.SMTP_USER;
 if (process.env.SMTP_PASS) config.smtp.pass = process.env.SMTP_PASS;
 
+// Auto-hash admin password if stored in plaintext (migration)
+async function ensurePasswordHashed() {
+    if (config.admin && config.admin.password && !config.admin.password.startsWith('$2b$')) {
+        config.admin.password = await bcrypt.hash(config.admin.password, BCRYPT_ROUNDS);
+        try {
+            const currentConfig = JSON.parse(await fs.readFile('./config.json', 'utf8'));
+            currentConfig.admin.password = config.admin.password;
+            await fs.writeFile('./config.json', JSON.stringify(currentConfig, null, 4));
+            log.info('Admin password auto-hashed on first run');
+        } catch (e) {
+            log.error('Failed to persist hashed password', { error: e.message });
+        }
+    }
+}
+ensurePasswordHashed();
+
 // Security headers
 app.use(helmet({
     contentSecurityPolicy: {
@@ -128,14 +179,27 @@ app.use(helmet({
     }
 }));
 
-// Rate limiting for form submissions
+// Rate limiting for form submissions (per IP)
 const submitLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
+    windowMs: 60 * 1000,
     max: 5,
     message: 'Too many submissions. Please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
 });
+
+// Rate limiting per form ID (global across all IPs)
+const formSubmitCounts = new Map();
+const FORM_RATE_LIMIT = 100; // max submissions per form per minute
+const FORM_RATE_WINDOW = 60 * 1000;
+setInterval(() => formSubmitCounts.clear(), FORM_RATE_WINDOW);
+
+function checkFormRateLimit(formId) {
+    const count = formSubmitCounts.get(formId) || 0;
+    if (count >= FORM_RATE_LIMIT) return false;
+    formSubmitCounts.set(formId, count + 1);
+    return true;
+}
 
 // Rate limiting for admin API
 const adminLimiter = rateLimit({
@@ -172,17 +236,17 @@ app.use((req, res, next) => {
 });
 
 // Configure the Nodemailer transporter
-const transporterConfig = { ...config.smtp };
-if (transporterConfig.user && transporterConfig.pass) {
-    transporterConfig.auth = {
-        type: 'LOGIN',
-        user: transporterConfig.user,
-        pass: transporterConfig.pass
-    };
+let transporter;
+function rebuildTransporter() {
+    const tc = { ...config.smtp };
+    if (tc.user && tc.pass) {
+        tc.auth = { type: 'LOGIN', user: tc.user, pass: tc.pass };
+    }
+    delete tc.user;
+    delete tc.pass;
+    transporter = nodemailer.createTransport(tc);
 }
-delete transporterConfig.user;
-delete transporterConfig.pass;
-const transporter = nodemailer.createTransport(transporterConfig);
+rebuildTransporter();
 
 // HTML escape function to prevent XSS in email templates
 function escapeHtml(str) {
@@ -250,13 +314,41 @@ function fieldToLabel(fieldName) {
 }
 
 app.post('/submit', submitLimiter, async (req, res) => {
-    const { website_id, 'cf-turnstile-response': turnstileToken, ...formFields } = req.body;
+    const { website_id, 'cf-turnstile-response': turnstileToken, _hp_field: honeypot, ...formFields } = req.body;
 
-    // Dynamic routing check
+    // Honeypot check: if the hidden field has a value, silently reject (bot filled it)
+    if (honeypot) {
+        log.warn('Honeypot triggered', { formId: website_id, ip: req.ip });
+        return res.status(200).json({ success: true, message: t.formSuccess }); // Fake success to fool bots
+    }
+
+    // Validate and route
+    if (!website_id || typeof website_id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(website_id)) {
+        return res.status(400).send(t.invalidFormId);
+    }
     const recipientConfig = config.recipients[website_id];
     if (!recipientConfig) {
-        console.error(`Unknown website_id: ${website_id}`);
         return res.status(400).send(t.invalidFormId);
+    }
+
+    // Per-form global rate limit
+    if (!checkFormRateLimit(website_id)) {
+        return res.status(429).send('Too many submissions for this form. Please try again later.');
+    }
+
+    // Domain validation: check Origin against form's allowedDomains
+    if (recipientConfig.allowedDomains && recipientConfig.allowedDomains.length > 0) {
+        const origin = req.headers.origin || req.headers.referer || '';
+        const originHost = (() => {
+            try { return new URL(origin).origin; } catch { return ''; }
+        })();
+        const allowed = recipientConfig.allowedDomains.some(d => {
+            try { return new URL(d).origin === originHost; } catch { return d === originHost; }
+        });
+        if (!allowed) {
+            log.warn('Origin rejected', { formId: website_id, origin });
+            return res.status(403).send(t.domainNotAllowed);
+        }
     }
 
     // Input validation: max 30 fields, each max 5000 chars
@@ -271,16 +363,17 @@ app.post('/submit', submitLimiter, async (req, res) => {
     const email = formFields.email || formFields.correo || formFields.e_mail || '';
     if (email && !isValidEmail(email)) return res.status(400).send(t.invalidEmail);
 
-    // Verify Cloudflare Turnstile token
-    if (!DEBUG) {
+    // Verify Cloudflare Turnstile token (skip if DEBUG or turnstile disabled for this form)
+    const turnstileEnabled = recipientConfig.turnstileEnabled !== false && !!config.turnstile[website_id];
+    if (!DEBUG && turnstileEnabled) {
         if (!turnstileToken) {
-            console.error('No Turnstile token provided');
+            log.warn('No Turnstile token provided', { formId: website_id });
             return res.status(400).send(t.completeCaptcha);
         }
 
         const turnstileConfig = config.turnstile[website_id];
         if (!turnstileConfig) {
-            console.error(`No Turnstile config found for website: ${website_id}`);
+            log.error('No Turnstile config found', { formId: website_id });
             return res.status(400).send(t.invalidSubmission);
         }
 
@@ -297,15 +390,17 @@ app.post('/submit', submitLimiter, async (req, res) => {
 
             const { success, 'error-codes': errorCodes } = verificationResponse.data;
             if (!success) {
-                console.error('Turnstile verification failed:', errorCodes);
+                log.warn('Turnstile verification failed', { formId: website_id, errorCodes });
                 return res.status(400).send(t.captchaFailed);
             }
         } catch (error) {
-            console.error('Error verifying Turnstile token:', error.message);
+            log.error('Error verifying Turnstile token', { formId: website_id, error: error.message });
             return res.status(500).send(t.captchaError);
         }
+    } else if (DEBUG) {
+        log.info('DEBUG mode: Skipping Turnstile verification', { formId: website_id });
     } else {
-        console.log('DEBUG mode: Skipping Turnstile verification');
+        log.info('Turnstile disabled, skipping verification', { formId: website_id });
     }
 
     // Build email from template or generate dynamic email
@@ -313,7 +408,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
         let mailBody;
         const templatePath = path.resolve(__dirname, recipientConfig.templatePath);
         if (!templatePath.startsWith(__dirname)) {
-            console.error('Path traversal attempt detected:', recipientConfig.templatePath);
+            log.error('Path traversal attempt detected', { formId: website_id, path: recipientConfig.templatePath });
             return res.status(500).send(t.templateError);
         }
 
@@ -339,8 +434,9 @@ app.post('/submit', submitLimiter, async (req, res) => {
             // Legacy template: replace individual {{field}} placeholders
             mailBody = templateContent.replace(/{{website_id}}/g, escapeHtml(website_id) || 'Unknown');
             for (const [key, value] of fieldEntries) {
-                const regex = new RegExp(`{{${key}}}`, 'g');
-                mailBody = mailBody.replace(regex, escapeHtml(String(value || '')) || 'Not specified');
+                // Use string split+join to avoid regex injection from user-supplied keys
+                const placeholder = `{{${key}}}`;
+                mailBody = mailBody.split(placeholder).join(escapeHtml(String(value || '')) || 'Not specified');
             }
         } else {
             // No template: generate a simple email
@@ -368,12 +464,15 @@ app.post('/submit', submitLimiter, async (req, res) => {
         // Send email
         try {
             await transporter.sendMail(mailOptions);
-            console.log(`Email successfully sent to ${recipientConfig.to} for ${website_id}`);
+            log.info('Email sent', { formId: website_id, to: recipientConfig.to });
 
             // Save submission to storage
             try {
                 const ip = req.ip || '';
-                const anonIp = ip.replace(/\.\d+$/, '.xxx');
+                // Anonymize: IPv4 last octet, IPv6 last 80 bits
+                const anonIp = ip.includes(':')
+                    ? ip.replace(/(:[0-9a-fA-F]*){5}$/, ':xxxx:xxxx:xxxx:xxxx:xxxx')
+                    : ip.replace(/\.\d+$/, '.xxx');
                 const submission = {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                     timestamp: new Date().toISOString(),
@@ -399,22 +498,45 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }))
                 });
             } catch (storageError) {
-                console.error('Error saving submission:', storageError.message);
+                log.error('Error saving submission', { formId: website_id, error: storageError.message });
             }
 
             // Update statistics
             try {
-                const currentConfig = JSON.parse(await fs.readFile('./config.json', 'utf8'));
-                if (!currentConfig.statistics) currentConfig.statistics = {};
-                if (!currentConfig.statistics[website_id]) {
-                    currentConfig.statistics[website_id] = { successfulSubmissions: 0, lastSubmission: null };
-                }
-                currentConfig.statistics[website_id].successfulSubmissions++;
-                currentConfig.statistics[website_id].lastSubmission = new Date().toISOString();
-                await fs.writeFile('./config.json', JSON.stringify(currentConfig, null, 4));
-                config.statistics = currentConfig.statistics;
+                await writeConfigSafe(cfg => {
+                    if (!cfg.statistics) cfg.statistics = {};
+                    if (!cfg.statistics[website_id]) {
+                        cfg.statistics[website_id] = { successfulSubmissions: 0, lastSubmission: null };
+                    }
+                    cfg.statistics[website_id].successfulSubmissions++;
+                    cfg.statistics[website_id].lastSubmission = new Date().toISOString();
+                });
             } catch (statsError) {
-                console.error('Error updating statistics:', statsError.message);
+                log.error('Error updating statistics', { formId: website_id, error: statsError.message });
+            }
+
+            // Send Discord webhook notification if configured
+            if (recipientConfig.discordWebhook) {
+                try {
+                    const sName = formFields.name || formFields.nombre || formFields.full_name || 'Unknown';
+                    const sEmail = email || 'N/A';
+                    const fieldsForDiscord = fieldEntries
+                        .filter(([k]) => !['website_id','cf-turnstile-response','_hp_field'].includes(k))
+                        .slice(0, 10)
+                        .map(([k, v]) => ({ name: fieldToLabel(k), value: String(v || '').substring(0, 200) || '-', inline: true }));
+                    await axios.post(recipientConfig.discordWebhook, {
+                        embeds: [{
+                            title: `New submission: ${website_id}`,
+                            color: 0xe8713a,
+                            fields: fieldsForDiscord,
+                            footer: { text: 'formPost' },
+                            timestamp: new Date().toISOString()
+                        }]
+                    }, { timeout: 5000 });
+                    log.info('Discord webhook sent', { formId: website_id });
+                } catch (webhookErr) {
+                    log.error('Discord webhook failed', { formId: website_id, error: webhookErr.message });
+                }
             }
 
             // Redirect or respond with success
@@ -425,36 +547,22 @@ app.post('/submit', submitLimiter, async (req, res) => {
             }
 
         } catch (error) {
-            console.error('Error sending email:', error.message);
+            log.error('Error sending email', { formId: website_id, error: error.message });
             res.status(500).send(t.serverError);
         }
     } catch (templateError) {
-        console.error('Error reading email template:', templateError.message);
+        log.error('Error reading email template', { formId: website_id, error: templateError.message });
         res.status(500).send(t.templateReadError);
     }
 });
 
-// Health Check Endpoint - does NOT expose sensitive config
-app.get('/health', async (req, res) => {
-    try {
-        res.status(200).json({
-            status: 'ok',
-            timestamp: new Date().toISOString(),
-            uptime: process.uptime(),
-            memory: {
-                used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
-                total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024 * 100) / 100
-            },
-            websiteCount: Object.keys(config.recipients).length
-        });
-    } catch (error) {
-        console.error('Health check failed:', error.message);
-        res.status(503).json({ status: 'error', timestamp: new Date().toISOString() });
-    }
+// Health Check Endpoint - minimal info, no internals exposed
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Admin authentication middleware
-function adminAuth(req, res, next) {
+async function adminAuth(req, res, next) {
     const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Basic ')) {
         res.set('WWW-Authenticate', 'Basic realm="Admin Area"');
@@ -463,14 +571,15 @@ function adminAuth(req, res, next) {
     const base64Credentials = authHeader.split(' ')[1];
     const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
     const [user, ...passParts] = credentials.split(':');
-    const pass = passParts.join(':'); // Handle passwords containing ':'
+    const pass = passParts.join(':');
 
     if (DEBUG) {
-        console.log('Admin auth attempt:', { user }); // Never log passwords
+        log.info('Admin auth attempt', { user });
     }
 
-    if (config.admin && user === config.admin.username && pass === config.admin.password) {
-        return next();
+    if (config.admin && user === config.admin.username) {
+        const match = await bcrypt.compare(pass, config.admin.password);
+        if (match) return next();
     }
     return res.status(403).send(t.forbidden);
 }
@@ -486,6 +595,10 @@ app.use('/admin', authLimiter, (req, res, next) => {
 // Serve ONLY specific static files (not the entire directory!)
 app.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'logo.png'));
+});
+
+app.get('/fav-icon.png', (req, res) => {
+    res.sendFile(path.join(__dirname, 'fav-icon.png'));
 });
 
 // Admin API routes (protected)
@@ -540,15 +653,24 @@ adminRouter.post('/websites', async (req, res) => {
     if (!id || !siteConfig) {
         return res.status(400).json({ error: t.missingIdOrConfig });
     }
+    if (!/^[a-zA-Z0-9_-]+$/.test(id) || id.length > 64) {
+        return res.status(400).json({ error: t.invalidFormId });
+    }
     if (config.recipients[id]) {
-        return res.status(409).json({ error: t.websiteExists });
+        return res.status(409).json({ error: t.formExists });
     }
-    config.recipients[id] = siteConfig;
-    if (siteConfig.turnstileKey) {
-        config.turnstile[id] = { secretKey: siteConfig.turnstileKey };
+    try {
+        await writeConfigSafe(cfg => {
+            cfg.recipients[id] = siteConfig;
+            if (siteConfig.turnstileKey) {
+                if (!cfg.turnstile) cfg.turnstile = {};
+                cfg.turnstile[id] = { secretKey: siteConfig.turnstileKey };
+            }
+        });
+        res.status(201).json({ message: t.formAdded });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
     }
-    await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
-    res.status(201).json({ message: t.websiteAdded });
 });
 
 // Update existing website configuration
@@ -556,29 +678,44 @@ adminRouter.put('/websites/:id', async (req, res) => {
     const { id } = req.params;
     const siteConfig = req.body;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: t.websiteNotFound });
+        return res.status(404).json({ error: t.formNotFound });
     }
-    config.recipients[id] = { ...config.recipients[id], ...siteConfig };
-    if (siteConfig.turnstileKey) {
-        if (!config.turnstile) config.turnstile = {};
-        config.turnstile[id] = { secretKey: siteConfig.turnstileKey };
+    try {
+        await writeConfigSafe(cfg => {
+            cfg.recipients[id] = { ...cfg.recipients[id], ...siteConfig };
+            if (siteConfig.turnstileKey) {
+                if (!cfg.turnstile) cfg.turnstile = {};
+                cfg.turnstile[id] = { secretKey: siteConfig.turnstileKey };
+            }
+            if (siteConfig.turnstileEnabled === false) {
+                cfg.recipients[id].turnstileEnabled = false;
+            } else if (siteConfig.turnstileEnabled === true) {
+                cfg.recipients[id].turnstileEnabled = true;
+            }
+        });
+        res.json({ message: t.formUpdated });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
     }
-    await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
-    res.json({ message: t.websiteUpdated });
 });
 
 // Delete a website configuration
 adminRouter.delete('/websites/:id', async (req, res) => {
     const { id } = req.params;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: t.websiteNotFound });
+        return res.status(404).json({ error: t.formNotFound });
     }
-    delete config.recipients[id];
-    if (config.turnstile && config.turnstile[id]) {
-        delete config.turnstile[id];
+    try {
+        await writeConfigSafe(cfg => {
+            delete cfg.recipients[id];
+            if (cfg.turnstile && cfg.turnstile[id]) {
+                delete cfg.turnstile[id];
+            }
+        });
+        res.json({ message: t.formRemoved });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
     }
-    await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
-    res.json({ message: t.websiteRemoved });
 });
 
 // SMTP configuration routes
@@ -599,12 +736,15 @@ adminRouter.put('/smtp', async (req, res) => {
     if (!newSmtp || typeof newSmtp !== 'object') {
         return res.status(400).json({ error: t.invalidSmtp });
     }
-    config.smtp = { ...config.smtp, ...newSmtp };
     try {
-        await fs.writeFile(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 4));
+        await writeConfigSafe(cfg => {
+            cfg.smtp = { ...cfg.smtp, ...newSmtp };
+        });
+        // Recreate transporter with new SMTP config
+        rebuildTransporter();
         res.json({ message: t.smtpUpdated });
     } catch (e) {
-        console.error('Failed to write config:', e.message);
+        log.error('Failed to write config', { error: e.message });
         res.status(500).json({ error: t.failedSaveConfig });
     }
 });
@@ -627,7 +767,7 @@ adminRouter.get('/statistics', (req, res) => {
 adminRouter.get('/statistics/:id', (req, res) => {
     const { id } = req.params;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: t.websiteNotFound });
+        return res.status(404).json({ error: t.formNotFound });
     }
     const stats = config.statistics || {};
     const websiteStats = stats[id] || { successfulSubmissions: 0, lastSubmission: null };
@@ -642,17 +782,16 @@ adminRouter.get('/statistics/:id', (req, res) => {
 adminRouter.put('/statistics/:id/reset', async (req, res) => {
     const { id } = req.params;
     if (!config.recipients[id]) {
-        return res.status(404).json({ error: t.websiteNotFound });
+        return res.status(404).json({ error: t.formNotFound });
     }
     try {
-        const currentConfig = JSON.parse(await fs.readFile('./config.json', 'utf8'));
-        if (!currentConfig.statistics) currentConfig.statistics = {};
-        currentConfig.statistics[id] = { successfulSubmissions: 0, lastSubmission: null };
-        await fs.writeFile('./config.json', JSON.stringify(currentConfig, null, 4));
-        config.statistics = currentConfig.statistics;
+        await writeConfigSafe(cfg => {
+            if (!cfg.statistics) cfg.statistics = {};
+            cfg.statistics[id] = { successfulSubmissions: 0, lastSubmission: null };
+        });
         res.json({ message: t.statsReset, websiteId: id });
     } catch (e) {
-        console.error('Failed to reset statistics:', e.message);
+        log.error('Failed to reset statistics', { error: e.message });
         res.status(500).json({ error: t.failedResetStats });
     }
 });
@@ -661,7 +800,7 @@ adminRouter.put('/statistics/:id/reset', async (req, res) => {
 adminRouter.get('/submissions/:websiteId', async (req, res) => {
     const { websiteId } = req.params;
     if (!config.recipients[websiteId]) {
-        return res.status(404).json({ error: t.websiteNotFound });
+        return res.status(404).json({ error: t.formNotFound });
     }
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
@@ -680,7 +819,7 @@ adminRouter.get('/submissions/:websiteId', async (req, res) => {
 adminRouter.delete('/submissions/:websiteId', async (req, res) => {
     const { websiteId } = req.params;
     if (!config.recipients[websiteId]) {
-        return res.status(404).json({ error: t.websiteNotFound });
+        return res.status(404).json({ error: t.formNotFound });
     }
     const filePath = path.join(DATA_DIR, `submissions-${websiteId}.json`);
     try {
@@ -694,7 +833,7 @@ adminRouter.delete('/submissions/:websiteId', async (req, res) => {
 adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
     const { websiteId } = req.params;
     if (!config.recipients[websiteId]) {
-        return res.status(404).json({ error: t.websiteNotFound });
+        return res.status(404).json({ error: t.formNotFound });
     }
     const format = req.query.format || 'json';
     const submissions = await loadSubmissions(websiteId);
@@ -728,6 +867,91 @@ adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
     res.json(submissions);
 });
 
+// Template management routes
+const TEMPLATES_DIR = path.join(__dirname, 'templates');
+async function ensureTemplatesDir() {
+    try { await fs.mkdir(TEMPLATES_DIR, { recursive: true }); } catch (e) {}
+}
+ensureTemplatesDir();
+
+// List all available templates (from templates/ dir + root email-template*.html files)
+adminRouter.get('/templates', async (req, res) => {
+    const templates = [];
+    // Scan templates/ directory
+    try {
+        const files = await fs.readdir(TEMPLATES_DIR);
+        for (const f of files) {
+            if (f.endsWith('.html')) {
+                templates.push({ name: f, path: `templates/${f}` });
+            }
+        }
+    } catch (e) {}
+    // Scan root for legacy email-template*.html files
+    try {
+        const rootFiles = await fs.readdir(__dirname);
+        for (const f of rootFiles) {
+            if (f.startsWith('email-template') && f.endsWith('.html')) {
+                templates.push({ name: f, path: f });
+            }
+        }
+    } catch (e) {}
+    res.json(templates);
+});
+
+// Get template content
+adminRouter.get('/templates/:name', async (req, res) => {
+    const name = req.params.name;
+    // Try templates/ dir first, then root
+    const candidates = [
+        path.join(TEMPLATES_DIR, name),
+        path.join(__dirname, name)
+    ];
+    for (const filePath of candidates) {
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(__dirname)) continue;
+        try {
+            const content = await fs.readFile(resolved, 'utf8');
+            return res.json({ name, path: resolved.startsWith(TEMPLATES_DIR) ? `templates/${name}` : name, content });
+        } catch (e) {}
+    }
+    res.status(404).json({ error: 'Template not found' });
+});
+
+// Create or update a template (always saves to templates/ dir)
+adminRouter.put('/templates/:name', async (req, res) => {
+    const name = req.params.name;
+    if (!name.endsWith('.html') || name.includes('/') || name.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid template name' });
+    }
+    const { content } = req.body;
+    if (typeof content !== 'string') {
+        return res.status(400).json({ error: 'Content is required' });
+    }
+    await ensureTemplatesDir();
+    const filePath = path.join(TEMPLATES_DIR, name);
+    try {
+        await fs.writeFile(filePath, content, 'utf8');
+        res.json({ message: 'Template saved', path: `templates/${name}` });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to save template' });
+    }
+});
+
+// Delete a template (only from templates/ dir)
+adminRouter.delete('/templates/:name', async (req, res) => {
+    const name = req.params.name;
+    if (name.includes('/') || name.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid template name' });
+    }
+    const filePath = path.join(TEMPLATES_DIR, name);
+    try {
+        await fs.unlink(filePath);
+        res.json({ message: 'Template deleted' });
+    } catch (e) {
+        res.status(404).json({ error: 'Template not found' });
+    }
+});
+
 // Reset admin password
 adminRouter.put('/admin/reset-password', async (req, res) => {
     const { currentPassword, newPassword } = req.body;
@@ -737,35 +961,52 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
     if (newPassword.length < 8) {
         return res.status(400).json({ error: t.passwordTooShort });
     }
-    if (currentPassword !== config.admin.password) {
+    const passwordMatch = await bcrypt.compare(currentPassword, config.admin.password);
+    if (!passwordMatch) {
         return res.status(403).json({ error: t.passwordIncorrect });
     }
     try {
-        const configData = await fs.readFile('./config.json', 'utf8');
-        const currentConfig = JSON.parse(configData);
-        currentConfig.admin.password = newPassword;
-        await fs.writeFile('./config.json', JSON.stringify(currentConfig, null, 4));
-        config.admin.password = newPassword;
+        const hashedNew = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+        await writeConfigSafe(cfg => {
+            cfg.admin.password = hashedNew;
+        });
         res.json({ message: t.passwordUpdated });
     } catch (e) {
-        console.error('Failed to update password:', e.message);
+        log.error('Failed to update password', { error: e.message });
         res.status(500).json({ error: t.failedUpdatePassword });
     }
 });
 
-// SSE Inbox Stream - auth via query param (EventSource doesn't support custom headers)
+// SSE token management - temporary tokens instead of credentials in query string
+const sseTokens = new Map(); // token -> { expires }
+const SSE_TOKEN_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_SSE_CLIENTS = 20;
+
+// Issue a short-lived SSE token (requires admin auth)
+adminRouter.post('/inbox/token', (req, res) => {
+    const token = require('crypto').randomBytes(32).toString('hex');
+    sseTokens.set(token, { expires: Date.now() + SSE_TOKEN_TTL });
+    // Cleanup expired tokens
+    for (const [t, v] of sseTokens) {
+        if (v.expires < Date.now()) sseTokens.delete(t);
+    }
+    res.json({ token, expiresIn: SSE_TOKEN_TTL });
+});
+
+// SSE Inbox Stream - auth via temporary token
 app.get('/admin/api/inbox/stream', adminLimiter, (req, res) => {
     const token = req.query.token;
     if (!token) return res.status(401).send(t.authRequired);
-    try {
-        const credentials = Buffer.from(token, 'base64').toString('utf8');
-        const [user, ...passParts] = credentials.split(':');
-        const pass = passParts.join(':');
-        if (!config.admin || user !== config.admin.username || pass !== config.admin.password) {
-            return res.status(403).send(t.forbidden);
-        }
-    } catch (e) {
+    const tokenData = sseTokens.get(token);
+    if (!tokenData || tokenData.expires < Date.now()) {
+        sseTokens.delete(token);
         return res.status(403).send(t.forbidden);
+    }
+    // Token is single-use for connection establishment
+    sseTokens.delete(token);
+
+    if (sseClients.size >= MAX_SSE_CLIENTS) {
+        return res.status(503).send('Too many connections');
     }
 
     res.writeHead(200, {
@@ -785,7 +1026,5 @@ app.use('/admin/api', adminRouter);
 
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Form processing server running on port ${PORT}`);
-    console.log(`Health check available at: http://localhost:${PORT}/health`);
-    console.log(`Admin UI available at: http://localhost:${PORT}/admin`);
+    log.info('formPost server started', { port: PORT, health: `/health`, admin: `/admin` });
 });
