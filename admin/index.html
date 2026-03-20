@@ -447,8 +447,8 @@
         .modal input[type="password"] { max-width: 100%; }
 
         .modal-wide {
-            max-width: 95vw;
-            width: 95%;
+            max-width: 750px;
+            width: 90%;
         }
 
         #detailModal {
@@ -548,7 +548,7 @@
             .header { flex-direction: column; gap: 1rem; align-items: flex-start; }
             .cards-grid { grid-template-columns: 1fr; }
             .status-bar-items { gap: 0.75rem; }
-            .modal-wide { width: 98%; max-width: 98vw; max-height: 90vh; }
+            .modal-wide { width: 95%; max-width: 95vw; max-height: 90vh; }
             input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="password"], select { max-width: 100%; }
             .submissions-table { display: block; overflow-x: auto; }
             .inbox-entry { flex-wrap: wrap; }
@@ -997,7 +997,7 @@
 
     <!-- Template Editor Modal -->
     <div class="modal-overlay" id="templateEditorModal" style="display:none;">
-        <div class="modal modal-wide">
+        <div class="modal" style="max-width:950px;width:95%;">
             <h3><span data-i18n="templateEditor">Template Editor</span>: <span id="templateEditorTitle"></span></h3>
             <form id="templateEditorForm">
                 <div class="form-group">
@@ -1117,10 +1117,17 @@
                 inboxConnected: 'Connected', inboxDisconnected: 'Disconnected', inboxReconnecting: 'Reconnecting...',
                 inboxUnknownSender: 'Unknown sender',
                 // Integration / Help
-                copyInstructions: 'Copy Instructions', instructionsCopied: 'Integration instructions copied to clipboard',
+                copyInstructions: 'Copy', instructionsCopied: 'Copied to clipboard',
                 helpTitle: 'Integration Guide',
                 helpIntro: 'This server processes contact form submissions. Each configured form has its own endpoint, email destination, and optional bot protection.',
                 helpHowTo: 'How to integrate',
+                helpExampleTitle: 'Example HTML Form',
+                helpConstraintsTitle: 'Constraints',
+                helpConstraint1: 'Max 30 fields per submission',
+                helpConstraint2: 'Max 100 characters per field name',
+                helpConstraint3: 'Max 5,000 characters per field value',
+                helpConstraint4: 'Request body max 100KB',
+                helpConstraint5: 'Rate limit: 5 submissions per minute per IP',
                 helpStep1: 'Create an HTML form with <code>method="POST"</code> and <code>action</code> pointing to this server\'s <code>/submit</code> endpoint.',
                 helpStep2: 'Include a hidden field <code>website_id</code> with the form identifier.',
                 helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
@@ -1205,10 +1212,17 @@
                 inboxConnected: 'Conectado', inboxDisconnected: 'Desconectado', inboxReconnecting: 'Reconectando...',
                 inboxUnknownSender: 'Remitente desconocido',
                 // Integration / Help
-                copyInstructions: 'Copiar Instrucciones', instructionsCopied: 'Instrucciones de integraci\u00f3n copiadas al portapapeles',
+                copyInstructions: 'Copiar', instructionsCopied: 'Copiado al portapapeles',
                 helpTitle: 'Gu\u00eda de Integraci\u00f3n',
                 helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto. Cada formulario configurado tiene su propio endpoint, email destino y protecci\u00f3n anti-bot opcional.',
                 helpHowTo: 'C\u00f3mo integrar',
+                helpExampleTitle: 'Ejemplo de Formulario HTML',
+                helpConstraintsTitle: 'Restricciones',
+                helpConstraint1: 'M\u00e1ximo 30 campos por env\u00edo',
+                helpConstraint2: 'M\u00e1ximo 100 caracteres por nombre de campo',
+                helpConstraint3: 'M\u00e1ximo 5.000 caracteres por valor de campo',
+                helpConstraint4: 'Body del request m\u00e1ximo 100KB',
+                helpConstraint5: 'L\u00edmite: 5 env\u00edos por minuto por IP',
                 helpStep1: 'Crea un formulario HTML con <code>method="POST"</code> y <code>action</code> apuntando al endpoint <code>/submit</code> de este servidor.',
                 helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del formulario.',
                 helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
@@ -1638,8 +1652,9 @@
 
         // ========== Help Modal ==========
         function openHelpModal() {
+            var serverUrl = window.location.origin;
             var content = '<p>' + L('helpIntro') + '</p>';
-            content += '<h4>' + L('helpHowTo') + '</h4>';
+            content += '<h4 style="margin-top:1rem;">' + L('helpHowTo') + '</h4>';
             content += '<ol style="line-height:1.8;">';
             content += '<li>' + L('helpStep1') + '</li>';
             content += '<li>' + L('helpStep2') + '</li>';
@@ -1647,9 +1662,65 @@
             content += '<li>' + L('helpStep4') + '</li>';
             content += '<li>' + L('helpStep5') + '</li>';
             content += '</ol>';
-            content += '<p style="margin-top:1rem;padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius);border:1px solid var(--border-color);">' + L('helpCopyTip') + '</p>';
+
+            // Example code block with copy button
+            var exampleCode = '&lt;form action="' + esc(serverUrl) + '/submit" method="POST"&gt;\n' +
+                '    &lt;input type="hidden" name="website_id" value="YOUR_FORM_ID"&gt;\n\n' +
+                '    &lt;!-- Honeypot anti-spam (hidden, do not remove) --&gt;\n' +
+                '    &lt;input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off"&gt;\n\n' +
+                '    &lt;label&gt;Name: &lt;input type="text" name="name" required&gt;&lt;/label&gt;\n' +
+                '    &lt;label&gt;Email: &lt;input type="email" name="email" required&gt;&lt;/label&gt;\n' +
+                '    &lt;label&gt;Phone: &lt;input type="tel" name="phone"&gt;&lt;/label&gt;\n' +
+                '    &lt;label&gt;Message: &lt;textarea name="message"&gt;&lt;/textarea&gt;&lt;/label&gt;\n\n' +
+                '    &lt;!-- Optional: Cloudflare Turnstile (if enabled for this form) --&gt;\n' +
+                '    &lt;!-- &lt;div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt; --&gt;\n\n' +
+                '    &lt;button type="submit"&gt;Send&lt;/button&gt;\n' +
+                '&lt;/form&gt;\n\n' +
+                '&lt;!-- Include Turnstile script only if using Turnstile --&gt;\n' +
+                '&lt;!-- &lt;script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer&gt;&lt;/script&gt; --&gt;';
+
+            var rawCode = '<form action="' + serverUrl + '/submit" method="POST">\n' +
+                '    <input type="hidden" name="website_id" value="YOUR_FORM_ID">\n\n' +
+                '    <!-- Honeypot anti-spam (hidden, do not remove) -->\n' +
+                '    <input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off">\n\n' +
+                '    <label>Name: <input type="text" name="name" required></label>\n' +
+                '    <label>Email: <input type="email" name="email" required></label>\n' +
+                '    <label>Phone: <input type="tel" name="phone"></label>\n' +
+                '    <label>Message: <textarea name="message"></textarea></label>\n\n' +
+                '    <!-- Optional: Cloudflare Turnstile (if enabled for this form) -->\n' +
+                '    <!-- <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div> -->\n\n' +
+                '    <button type="submit">Send</button>\n' +
+                '</form>\n\n' +
+                '<!-- Include Turnstile script only if using Turnstile -->\n' +
+                '<!-- <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script> -->';
+
+            content += '<h4 style="margin-top:1.25rem;">' + L('helpExampleTitle') + '</h4>';
+            content += '<div style="position:relative;">';
+            content += '<button class="btn-sm btn-outline" style="position:absolute;top:0.5rem;right:0.5rem;font-size:0.75rem;z-index:1;" onclick="copyHelpExample()">' + L('copyInstructions') + '</button>';
+            content += '<pre class="json" style="max-height:none;white-space:pre;overflow-x:auto;">' + exampleCode + '</pre>';
+            content += '</div>';
+            content += '<div id="helpExampleRaw" style="display:none;">' + esc(rawCode) + '</div>';
+
+            // Constraints
+            content += '<h4 style="margin-top:1.25rem;">' + L('helpConstraintsTitle') + '</h4>';
+            content += '<ul style="line-height:1.8;padding-left:1.25rem;">';
+            content += '<li>' + L('helpConstraint1') + '</li>';
+            content += '<li>' + L('helpConstraint2') + '</li>';
+            content += '<li>' + L('helpConstraint3') + '</li>';
+            content += '<li>' + L('helpConstraint4') + '</li>';
+            content += '<li>' + L('helpConstraint5') + '</li>';
+            content += '</ul>';
+
+            content += '<p style="margin-top:1rem;padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border-color);font-size:0.875rem;">' + L('helpCopyTip') + '</p>';
             document.getElementById('helpContent').innerHTML = content;
             document.getElementById('helpModal').style.display = 'flex';
+        }
+
+        function copyHelpExample() {
+            var raw = document.getElementById('helpExampleRaw').textContent;
+            navigator.clipboard.writeText(raw).then(function() {
+                showToast(L('instructionsCopied'), 'success');
+            });
         }
 
         // ========== Create Website Modal ==========
