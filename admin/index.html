@@ -59,7 +59,7 @@
         .logout-btn, .header-btn {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
-            color: var(--text-primary);
+            color: var(--accent-primary);
             padding: 0.5rem 1rem;
             border-radius: var(--radius-md);
             cursor: pointer;
@@ -72,11 +72,9 @@
         }
 
         .logout-btn:hover, .header-btn:hover {
-            background: var(--bg-tertiary);
+            border-color: var(--accent-primary);
             transform: translateY(-1px);
         }
-
-        .logout-btn { border-color: var(--danger); color: var(--danger); }
 
 
         /* Cards Grid */
@@ -122,6 +120,7 @@
         .card-stat {
             display: flex;
             flex-direction: column;
+            flex: 1;
         }
 
         .card-stat-value {
@@ -243,8 +242,8 @@
         .btn-danger { background: var(--danger); }
         .btn-danger:hover:not(:disabled) { background: #e5453a; }
         .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
-        .btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.4rem; border-radius: var(--radius); opacity: 0.6; transition: opacity 0.2s; }
-        .btn-icon:hover { opacity: 1; background: var(--bg-tertiary); }
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.4rem; border-radius: var(--radius-sm); color: var(--accent-primary); opacity: 0.7; transition: opacity 0.2s; }
+        .btn-icon:hover { opacity: 1; }
         .btn-outline {
             background: transparent;
             border: 1px solid var(--accent-primary);
@@ -541,13 +540,13 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            padding: 0.75rem 1rem;
-            margin-top: auto;
+            padding: 0.6rem 1rem;
+            margin: 2rem -2rem 0;
             font-size: 0.7rem;
             color: var(--text-secondary);
-            background: rgba(255, 255, 255, 0.85);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.9);
+            border-top: 1px solid var(--border-color);
+            width: calc(100% + 4rem);
         }
         .footer-separator { opacity: 0.5; }
         .footer-made { display: flex; align-items: center; gap: 0.3rem; }
@@ -749,8 +748,8 @@
             <div class="inbox-header" onclick="toggleInbox()">
                 <div class="inbox-title">
                     <span class="inbox-toggle-icon" id="inboxToggleIcon">&#9660;</span>
-                    <span class="live-dot" id="inboxLiveDot" style="display:none;"></span>
                     <span data-i18n="inbox">Inbox</span>
+                    <span class="live-dot" id="inboxLiveDot" style="display:none;"></span>
                     <span class="inbox-badge" id="inboxBadge" style="display:none;">0</span>
                 </div>
                 <span class="inbox-status disconnected" id="inboxStatus" data-i18n="inboxDisconnected">Disconnected</span>
@@ -765,13 +764,14 @@
             <div class="empty-state"><span class="spinner"></span> Loading...</div>
         </div>
 
-        <!-- Footer -->
-        <footer class="app-footer">
-            <span>formPost <span id="footerVersion"></span></span>
-            <span class="footer-separator">-</span>
-            <span class="footer-made">hecho con <span class="footer-heart">&#10084;</span> por <img src="/logo_beweb.png" alt="beWeb" class="footer-beweb-logo" /></span>
-        </footer>
     </div>
+
+    <!-- Footer -->
+    <footer class="app-footer" id="appFooter" style="display:none;">
+        <span>formPost <span id="footerVersion"></span></span>
+        <span class="footer-separator">-</span>
+        <span class="footer-made">hecho con <span class="footer-heart">&#10084;</span> por <img src="/logo_beweb.png" alt="beWeb" class="footer-beweb-logo" /></span>
+    </footer>
 
     <!-- Edit Website Modal -->
     <div class="modal-overlay" id="editModal" style="display:none;">
@@ -1312,6 +1312,7 @@
             if (auth) {
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainContent').style.display = 'block';
+                document.getElementById('appFooter').style.display = 'flex';
                 loadAll();
             }
         }
@@ -1328,6 +1329,7 @@
                     sessionStorage.setItem('adm_auth', auth);
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.getElementById('mainContent').style.display = 'block';
+                    document.getElementById('appFooter').style.display = 'flex';
                     document.getElementById('loginError').textContent = '';
                     loadAll();
                 } else {
@@ -1344,6 +1346,7 @@
             auth = '';
             document.getElementById('loginOverlay').style.display = 'flex';
             document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('appFooter').style.display = 'none';
             document.getElementById('loginUser').value = '';
             document.getElementById('loginPass').value = '';
         });
@@ -1697,7 +1700,7 @@
                     '<div class="website-card-actions">' +
                         '<button class="btn-sm" onclick="openSubmissionsModal(\'' + esc(id) + '\')">' + L('submissions') + '</button>' +
                         '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">' + L('edit') + '</button>' +
-                        '<button class="btn-sm btn-danger" onclick="deleteWebsite(\'' + esc(id) + '\')">' + L('delete') + '</button>' +
+                        '<button class="btn-icon" onclick="deleteWebsite(\'' + esc(id) + '\')" title="' + L('delete') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--danger)" d="M166.2-16c-13.3 0-25.3 8.3-30 20.8L120 48 24 48C10.7 48 0 58.7 0 72S10.7 96 24 96l400 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-96 0-16.2-43.2C307.1-7.7 295.2-16 281.8-16L166.2-16zM32 144l0 304c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-304-48 0 0 304c0 8.8-7.2 16-16 16L96 464c-8.8 0-16-7.2-16-16l0-304-48 0zm160 72c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176zm112 0c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176z"/></svg></button>' +
                     '</div>' +
                     '</div>';
             }).join('');
