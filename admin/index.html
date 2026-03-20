@@ -36,11 +36,14 @@
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' viewBox='0 0 4 4'%3E%3Cpath fill='%239C92AC' fill-opacity='0.4' d='M1 3h1v1H1V3zm2-2h1v1H3V1z'%3E%3C/path%3E%3C/svg%3E");
             color: var(--text-primary);
             line-height: 1.6;
-            padding: 2rem;
+            padding: 0;
+            margin: 0;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        .container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100vh - 4rem); }
+        .container { max-width: 1200px; width: 100%; margin: 0 auto; padding: 2rem; display: flex; flex-direction: column; flex: 1; }
 
         .header {
             display: flex;
@@ -229,7 +232,7 @@
             box-shadow: var(--shadow-sm);
         }
 
-        button:hover:not(:disabled) {
+        button:hover:not(:disabled):not(.header-btn):not(.logout-btn):not(.btn-icon):not(.btn-outline) {
             background: var(--accent-hover);
             transform: translateY(-1px);
             box-shadow: var(--shadow-md);
@@ -242,8 +245,11 @@
         .btn-danger { background: var(--danger); }
         .btn-danger:hover:not(:disabled) { background: #e5453a; }
         .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
-        .btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.4rem; border-radius: var(--radius-sm); color: var(--accent-primary); opacity: 0.7; transition: opacity 0.2s; }
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.3rem 0.4rem; border-radius: var(--radius-sm); color: var(--accent-primary); opacity: 0.7; transition: all 0.2s; }
         .btn-icon:hover { opacity: 1; }
+        .btn-icon-danger { color: var(--danger); }
+        .btn-icon-danger:hover { background: var(--danger); opacity: 1; border-radius: var(--radius-sm); }
+        .btn-icon-danger:hover svg path { fill: white; }
         .btn-outline {
             background: transparent;
             border: 1px solid var(--accent-primary);
@@ -485,7 +491,6 @@
             border-radius: var(--radius-lg);
             padding: 1rem 1.25rem;
             box-shadow: var(--shadow-sm);
-            align-self: start;
         }
         .stat-card h4 {
             font-size: 0.8rem;
@@ -541,12 +546,13 @@
             justify-content: center;
             gap: 0.5rem;
             padding: 0.6rem 1rem;
-            margin: 2rem -2rem 0;
+            margin-top: auto;
             font-size: 0.7rem;
             color: var(--text-secondary);
             background: rgba(255, 255, 255, 0.9);
             border-top: 1px solid var(--border-color);
-            width: calc(100% + 4rem);
+            width: 100%;
+            flex-shrink: 0;
         }
         .footer-separator { opacity: 0.5; }
         .footer-made { display: flex; align-items: center; gap: 0.3rem; }
@@ -554,7 +560,7 @@
         .footer-beweb-logo { height: 11px; width: auto; opacity: 0.85; }
 
         @media (max-width: 768px) {
-            body { padding: 1rem; }
+            .container { padding: 1rem; }
             .header { flex-direction: column; gap: 1rem; align-items: flex-start; }
             .cards-grid { grid-template-columns: 1fr; }
             .stats-grid { grid-template-columns: 1fr; }
@@ -1700,7 +1706,7 @@
                     '<div class="website-card-actions">' +
                         '<button class="btn-sm" onclick="openSubmissionsModal(\'' + esc(id) + '\')">' + L('submissions') + '</button>' +
                         '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">' + L('edit') + '</button>' +
-                        '<button class="btn-icon" onclick="deleteWebsite(\'' + esc(id) + '\')" title="' + L('delete') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--danger)" d="M166.2-16c-13.3 0-25.3 8.3-30 20.8L120 48 24 48C10.7 48 0 58.7 0 72S10.7 96 24 96l400 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-96 0-16.2-43.2C307.1-7.7 295.2-16 281.8-16L166.2-16zM32 144l0 304c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-304-48 0 0 304c0 8.8-7.2 16-16 16L96 464c-8.8 0-16-7.2-16-16l0-304-48 0zm160 72c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176zm112 0c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176z"/></svg></button>' +
+                        '<button class="btn-icon btn-icon-danger" onclick="deleteWebsite(\'' + esc(id) + '\')" title="' + L('delete') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--danger)" d="M166.2-16c-13.3 0-25.3 8.3-30 20.8L120 48 24 48C10.7 48 0 58.7 0 72S10.7 96 24 96l400 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-96 0-16.2-43.2C307.1-7.7 295.2-16 281.8-16L166.2-16zM32 144l0 304c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-304-48 0 0 304c0 8.8-7.2 16-16 16L96 464c-8.8 0-16-7.2-16-16l0-304-48 0zm160 72c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176zm112 0c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176z"/></svg></button>' +
                     '</div>' +
                     '</div>';
             }).join('');
