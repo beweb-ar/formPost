@@ -110,8 +110,8 @@
         .website-card .card-info { margin-bottom: 0.3rem; font-size: 0.82rem; display: flex; gap: 0.35rem; }
         .card-details { overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 500px; opacity: 1; padding-top: 0.75rem; }
         .card-details.collapsed { max-height: 0; opacity: 0; padding-top: 0; }
-        .card-toggle { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 0.2rem; display: flex; align-items: center; transition: transform 0.3s ease; font-size: 0.75rem; }
-        .card-toggle:hover { color: var(--accent-primary); }
+        .card-toggle { background: none; border: none; cursor: pointer; color: var(--accent-primary); opacity: 0.7; padding: 0.3rem 0.4rem; border-radius: var(--radius-sm); display: flex; align-items: center; transition: all 0.2s ease; font-size: 0.75rem; }
+        .card-toggle:hover { opacity: 1; background: var(--accent-primary); color: white; }
         .card-toggle.collapsed { transform: rotate(-90deg); }
         .card-info-label { color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
         .card-info-value { color: var(--accent-primary); font-weight: 500; }
@@ -630,6 +630,18 @@
         }
         .inbox-panel.collapsed .inbox-toggle-icon { transform: rotate(-90deg); }
         .inbox-panel.collapsed .inbox-body { display: none; }
+        .inbox-body-wrap {
+            position: relative;
+        }
+        .inbox-body-wrap::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 40px;
+            background: linear-gradient(transparent, var(--bg-secondary));
+            pointer-events: none;
+            z-index: 1;
+        }
         .inbox-body {
             border-top: 1px solid var(--border-color);
             max-height: 400px;
@@ -652,10 +664,10 @@
             to { opacity: 1; transform: translateY(0); }
         }
         .inbox-entry-time {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--text-secondary);
             white-space: nowrap;
-            min-width: 3.5rem;
+            min-width: 5.5rem;
             padding-top: 0.1rem;
         }
         .inbox-entry-website {
@@ -727,6 +739,7 @@
             <div class="header-actions">
                 <button class="header-btn" id="settingsBtn" onclick="openSettingsModal()" title="Senders">&#9881; Senders</button>
                 <button class="header-btn" id="templatesBtn" onclick="openTemplateManager()" data-i18n="templatesBtn">&#9993; Plantillas</button>
+                <button class="header-btn icon-btn" id="langToggleBtn" onclick="toggleLang()" title="EN / ES" style="font-size:0.75rem;font-weight:700;letter-spacing:0.03em;padding:0.3rem 0.5rem;">ES</button>
                 <button class="header-btn icon-btn" id="helpBtn" onclick="openHelpModal()" title="Guía de integración"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="18" height="18"><path fill="currentColor" d="M256 512a256 256 0 1 0 0-512 256 256 0 1 0 0 512zm0-336c-17.7 0-32 14.3-32 32 0 13.3-10.7 24-24 24s-24-10.7-24-24c0-44.2 35.8-80 80-80s80 35.8 80 80c0 47.2-36 67.2-56 74.5l0 3.8c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-8.1c0-20.5 14.8-35.2 30.1-40.2 6.4-2.1 13.2-5.5 18.2-10.3 4.3-4.2 7.7-10 7.7-19.6 0-17.7-14.3-32-32-32zM224 368a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></svg></button>
                 <button class="header-btn icon-btn" id="changePasswordBtn" title="Cambiar contraseña"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="16" height="16"><path fill="currentColor" d="M128 96l0 64 128 0 0-64c0-35.3-28.7-64-64-64s-64 28.7-64 64zM64 160l0-64C64 25.3 121.3-32 192-32S320 25.3 320 96l0 64c35.3 0 64 28.7 64 64l0 224c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64L0 224c0-35.3 28.7-64 64-64z"/></svg></button>
                 <button class="logout-btn icon-btn" id="logoutBtn" title="Cerrar sesión"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="18" height="18"><path fill="currentColor" d="M160 96c17.7 0 32-14.3 32-32s-14.3-32-32-32L96 32C43 32 0 75 0 128L0 384c0 53 43 96 96 96l64 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-64 0c-17.7 0-32-14.3-32-32l0-256c0-17.7 14.3-32 32-32l64 0zM502.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-128-128c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L402.7 224 192 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l210.7 0-73.4 73.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l128-128z"/></svg></button>
@@ -768,8 +781,10 @@
                 </div>
                 <span class="inbox-status disconnected" id="inboxStatus" data-i18n="inboxDisconnected">Disconnected</span>
             </div>
-            <div class="inbox-body" id="inboxBody">
-                <div class="inbox-empty" data-i18n="inboxEmpty">No recent submissions. New ones will appear here in real time.</div>
+            <div class="inbox-body-wrap">
+                <div class="inbox-body" id="inboxBody">
+                    <div class="inbox-empty" data-i18n="inboxEmpty">No recent submissions. New ones will appear here in real time.</div>
+                </div>
             </div>
         </div>
 
@@ -789,57 +804,59 @@
 
     <!-- Edit Website Modal -->
     <div class="modal-overlay" id="editModal" style="display:none;">
-        <div class="modal">
-            <h3><span data-i18n="editForm">Edit Form</span>: <span id="editModalTitle"></span></h3>
-            <form id="editForm">
+        <div class="modal" style="display:flex;flex-direction:column;overflow:hidden;">
+            <h3 style="flex-shrink:0;"><span data-i18n="editForm">Edit Form</span>: <span id="editModalTitle"></span></h3>
+            <form id="editForm" style="display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0;">
                 <input type="hidden" name="editId" id="editId" />
-                <div class="form-group">
-                    <label data-i18n="toEmail">To Email</label>
-                    <input type="email" name="editTo" id="editTo" required />
-                </div>
-                <div class="form-group">
-                    <label data-i18n="subjectPrefix">Subject Prefix</label>
-                    <input type="text" name="editSubjectPrefix" id="editSubjectPrefix" required />
-                </div>
-                <div class="form-group">
-                    <label data-i18n="redirectUrl">Redirect URL</label>
-                    <input type="url" name="editRedirectUrl" id="editRedirectUrl" />
-                </div>
-                <div class="form-group">
-                    <label data-i18n="templatePath">Template</label>
-                    <select name="editTemplatePath" id="editTemplatePath" required>
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label data-i18n="sender">Sender</label>
-                    <select name="editSenderId" id="editSenderId">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label data-i18n="turnstileKey">Turnstile Secret Key</label>
-                    <input type="text" name="editTurnstileKey" id="editTurnstileKey" />
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" name="editTurnstileEnabled" id="editTurnstileEnabled" />
-                    <label for="editTurnstileEnabled" data-i18n="turnstileEnabledLabel">Enable Turnstile Verification</label>
-                </div>
-                <div class="form-group" style="margin-top:1rem;">
-                    <label data-i18n="allowedDomains">Allowed Domains</label>
-                    <div id="editDomainsContainer"></div>
-                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                        <input type="text" id="editNewDomain" placeholder="https://example.com" style="flex:1;" />
-                        <button type="button" class="btn-sm btn-outline" onclick="addEditDomain()">+</button>
+                <div style="overflow-y:auto;flex:1;min-height:0;padding-right:0.5rem;">
+                    <div class="form-group">
+                        <label data-i18n="toEmail">To Email</label>
+                        <input type="email" name="editTo" id="editTo" required />
                     </div>
-                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="allowedDomainsHint">Leave empty to allow all domains</small>
+                    <div class="form-group">
+                        <label data-i18n="subjectPrefix">Subject Prefix</label>
+                        <input type="text" name="editSubjectPrefix" id="editSubjectPrefix" required />
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="redirectUrl">Redirect URL</label>
+                        <input type="url" name="editRedirectUrl" id="editRedirectUrl" />
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="templatePath">Template</label>
+                        <select name="editTemplatePath" id="editTemplatePath" required>
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="sender">Sender</label>
+                        <select name="editSenderId" id="editSenderId">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="turnstileKey">Turnstile Secret Key</label>
+                        <input type="text" name="editTurnstileKey" id="editTurnstileKey" />
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" name="editTurnstileEnabled" id="editTurnstileEnabled" />
+                        <label for="editTurnstileEnabled" data-i18n="turnstileEnabledLabel">Enable Turnstile Verification</label>
+                    </div>
+                    <div class="form-group" style="margin-top:1rem;">
+                        <label data-i18n="allowedDomains">Allowed Domains</label>
+                        <div id="editDomainsContainer"></div>
+                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                            <input type="text" id="editNewDomain" placeholder="https://example.com" style="flex:1;" />
+                            <button type="button" class="btn-sm btn-outline" onclick="addEditDomain()">+</button>
+                        </div>
+                        <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="allowedDomainsHint">Leave empty to allow all domains</small>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="discordWebhook">Discord Webhook URL</label>
+                        <input type="url" name="editDiscordWebhook" id="editDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." />
+                        <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="discordWebhookHint">Leave empty to disable Discord notifications</small>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label data-i18n="discordWebhook">Discord Webhook URL</label>
-                    <input type="url" name="editDiscordWebhook" id="editDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." />
-                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="discordWebhookHint">Leave empty to disable Discord notifications</small>
-                </div>
-                <div class="modal-actions">
+                <div class="modal-actions" style="flex-shrink:0;border-top:1px solid var(--border-color);padding-top:1rem;">
                     <button type="button" class="btn-outline" onclick="closeEditModal()" data-i18n="cancel">Cancel</button>
                     <button type="submit" id="editSaveBtn" data-i18n="saveChanges">Save Changes</button>
                 </div>
@@ -1298,6 +1315,17 @@
                 var val = L(key);
                 if (val) el.innerHTML = val;
             });
+            // Update lang toggle button label
+            var langBtn = document.getElementById('langToggleBtn');
+            if (langBtn) langBtn.textContent = currentLang === 'es' ? 'EN' : 'ES';
+        }
+
+        function toggleLang() {
+            currentLang = currentLang === 'es' ? 'en' : 'es';
+            localStorage.setItem('formpost_lang', currentLang);
+            applyTranslations();
+            loadWebsitesWithStats();
+            loadStatus();
         }
 
         // ========== HTML Escaping ==========
@@ -1391,8 +1419,8 @@
         }
 
         // ========== Load All ==========
-        function loadAll() {
-            loadStatus();
+        async function loadAll() {
+            await loadStatus();
             loadWebsitesWithStats();
             connectInbox();
             // Restore inbox collapsed state (default: open)
@@ -1452,14 +1480,15 @@
             }
             var html = inboxEntries.map(function(entry) {
                 var time = new Date(entry.timestamp);
-                var timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                var dateStr = time.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
+                var timeStr = dateStr + ' ' + time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 var sender = entry.name || entry.email || L('inboxUnknownSender');
-                var preview = '';
-                if (entry.email && entry.name) preview = entry.email;
+                var previewParts = [];
+                if (entry.email && entry.name) previewParts.push(entry.email);
                 if (entry.preview && entry.preview.length > 0) {
-                    var parts = entry.preview.map(function(p) { return p.label + ': ' + p.value; });
-                    preview += (preview ? ' | ' : '') + parts.join(' | ');
+                    entry.preview.forEach(function(p) { if (p.value) previewParts.push(p.label + ': ' + p.value); });
                 }
+                var preview = previewParts.join(' | ');
                 return '<div class="inbox-entry" onclick="openSubmissionsModal(\'' + esc(entry.websiteId) + '\')">' +
                     '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
                     '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
@@ -1545,11 +1574,14 @@
                 var data = await results[0].json();
                 var templates = await results[1].json();
 
-                // Set lang from server
-                if (data.lang && i18n[data.lang]) {
+                // Set lang: localStorage override > server default
+                var savedLang = localStorage.getItem('formpost_lang');
+                if (savedLang && i18n[savedLang]) {
+                    currentLang = savedLang;
+                } else if (data.lang && i18n[data.lang]) {
                     currentLang = data.lang;
-                    applyTranslations();
                 }
+                applyTranslations();
                 var uptime = Math.floor(data.uptime);
                 var hours = Math.floor(uptime / 3600);
                 var mins = Math.floor((uptime % 3600) / 60);

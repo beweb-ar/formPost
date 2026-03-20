@@ -535,7 +535,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     email: formFields.email || formFields.correo || formFields.e_mail || '',
                     preview: fieldEntries
                         .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response'].includes(k))
-                        .slice(0, 2)
+                        .slice(0, 5)
                         .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }))
                 });
             } catch (storageError) {
