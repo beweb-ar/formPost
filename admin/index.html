@@ -52,7 +52,7 @@
             min-height: 100vh;
         }
 
-        .container { max-width: 1200px; margin: 0 auto; }
+        .container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100vh - 4rem); }
 
         .header {
             display: flex;
@@ -139,6 +139,8 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 1.25rem;
+            flex: 1;
+            align-content: start;
         }
 
         .website-card {
@@ -528,8 +530,8 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            padding: 1.5rem 0 0.5rem;
-            margin-top: 2rem;
+            padding: 1rem 0 0.5rem;
+            margin-top: auto;
             font-size: 0.75rem;
             color: var(--text-secondary);
             border-top: 1px solid var(--border-color);
@@ -696,7 +698,7 @@
         <!-- Header -->
         <div class="header">
             <div style="display: flex; align-items: center; gap: 1rem;">
-                <img src="/logo.png" alt="formPost" style="height: 40px; width: auto; object-fit: contain;" />
+                <img src="/logo.png" alt="formPost" style="height: 50px; width: auto; object-fit: contain;" />
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="templatesBtn" onclick="openTemplateManager()" data-i18n="templatesBtn">&#9993; Templates</button>
