@@ -7,6 +7,15 @@
   <strong><a href="README.es.md">Leer en Español</a></strong>
 </p>
 
+<p align="center">
+  <img src="screenshot.jpg" alt="formPost Admin Dashboard" width="700" />
+</p>
+
+<p align="center">
+  <strong>Sponsor:</strong>&nbsp;
+  <a href="https://beweb.com.ar"><img src="logo_beweb.png" alt="beWeb" height="22" /></a>
+</p>
+
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green?logo=node.js)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-ISC-yellow)](LICENSE)
@@ -31,17 +40,21 @@
 ## Features
 
 - **Multi-form support** - Handle unlimited forms, each with its own configuration
+- **Multi-sender SMTP** - Configure multiple SMTP relays (senders) and assign each form to a specific sender
 - **HTML email notifications** - Custom email templates per form with dynamic field injection
+- **Template management** - Create, edit, and delete email templates from the admin UI
 - **Cloudflare Turnstile** - Per-form bot protection with enable/disable toggle
+- **Honeypot protection** - Hidden field (`_hp_field`) silently rejects bots without user friction
 - **Domain restriction** - Allow submissions only from authorized domains (per form)
+- **Discord notifications** - Optional per-form Discord webhook for real-time submission alerts
 - **Submission storage** - JSON file-based storage, up to 1000 submissions per form
 - **Export** - Download submissions as CSV or JSON
-- **Admin dashboard** - Full web UI to manage forms, SMTP, statistics, submissions, and passwords
+- **Admin dashboard** - Full web UI to manage forms, senders, templates, statistics, submissions, and passwords
 - **Real-time inbox** - SSE-powered live feed of new submissions
 - **Internationalization** - Server and admin UI available in English and Spanish via `LANG` env var
-- **Statistics** - Per-form and global submission counts
+- **Statistics & charts** - Per-form and global submission counts with time-series chart data
 - **Dark / Light theme** - Toggle in admin UI, persisted in localStorage
-- **Rate limiting** - Separate limits for form submissions, admin API, and login attempts
+- **Rate limiting** - Separate limits for form submissions, per-form global limits, admin API, and login attempts
 - **Security headers** - Helmet middleware with CSP, XSS protection
 - **Docker ready** - Multi-stage build, non-root user, health checks, resource limits
 
@@ -82,9 +95,22 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
             "to": "you@example.com",
             "subjectPrefix": "Contact Form - ",
             "redirectUrl": "https://example.com/thanks",
-            "templatePath": "email-template.html",
+            "templatePath": "templates/contact-form.html",
             "turnstileEnabled": true,
-            "allowedDomains": ["https://example.com", "https://www.example.com"]
+            "allowedDomains": ["https://example.com", "https://www.example.com"],
+            "senderId": "default",
+            "discordWebhook": "https://discord.com/api/webhooks/..."
+        }
+    },
+    "senders": {
+        "default": {
+            "name": "Default",
+            "host": "smtp.example.com",
+            "port": 587,
+            "secure": false,
+            "from": "noreply@example.com",
+            "user": "smtp_user",
+            "pass": "smtp_pass"
         }
     },
     "statistics": {
@@ -92,14 +118,6 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
             "successfulSubmissions": 0,
             "lastSubmission": null
         }
-    },
-    "smtp": {
-        "host": "smtp.example.com",
-        "port": 587,
-        "secure": false,
-        "from": "noreply@example.com",
-        "user": "smtp_user",
-        "pass": "smtp_pass"
     },
     "turnstile": {
         "my-form": {
@@ -118,13 +136,15 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 }
 ```
 
+> **Note:** The legacy `smtp` section is auto-migrated to `senders.default` on first run.
+
 ### Sections
 
 | Section | Description |
 |---|---|
-| `recipients` | One entry per form: destination email, subject prefix, redirect URL, template path, turnstile toggle, allowed domains |
+| `recipients` | One entry per form: destination email, subject prefix, redirect URL, template path, turnstile toggle, allowed domains, sender ID, Discord webhook |
+| `senders` | Named SMTP relay configurations. Each sender has its own host, port, credentials, and from address |
 | `statistics` | Auto-managed submission counters and timestamps per form |
-| `smtp` | SMTP server settings (host, port, secure, from, user, pass) |
 | `turnstile` | Cloudflare Turnstile secret key per form (optional) |
 | `cors` | Array of allowed origins for CORS (must include protocol) |
 | `admin` | Admin dashboard credentials |
@@ -139,6 +159,8 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `templatePath` | string | Path to email template HTML file |
 | `turnstileEnabled` | boolean | Enable/disable Turnstile verification (default: `true` if key exists) |
 | `allowedDomains` | string[] | List of allowed origin domains. Empty = allow all |
+| `senderId` | string | ID of the sender (from `senders`) to use for this form (default: `"default"`) |
+| `discordWebhook` | string | Discord webhook URL to send submission notifications (optional) |
 
 ## Environment Variables
 
@@ -211,9 +233,21 @@ environment:
 - **Total submissions** across all forms shown in the status bar
 - Reset statistics per form
 
+### Senders (SMTP)
+
+- Add, edit, and delete SMTP sender configurations
+- Each sender has its own host, port, credentials, and from address
+- Test sender connection directly from the UI
+- Assign a sender to each form via `senderId`
+
+### Templates
+
+- List, create, edit, and delete email templates
+- Templates stored in the `templates/` directory
+- Live editing from the admin UI
+
 ### Settings
 
-- Edit SMTP configuration (credentials are masked in display)
 - Change admin password (requires current password, min 8 chars)
 
 ## Email Templates
@@ -281,20 +315,32 @@ If a template is missing or unreadable, the server generates a basic HTML email 
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/admin/api/status` | Server status, uptime, memory, total submissions, lang |
+| `GET` | `/admin/api/status` | Server status, version, uptime, memory, total submissions, lang |
 | `GET` | `/admin/api/websites` | List all form configs |
 | `POST` | `/admin/api/websites` | Create a new form |
 | `PUT` | `/admin/api/websites/:id` | Update a form |
 | `DELETE` | `/admin/api/websites/:id` | Delete a form |
-| `GET` | `/admin/api/smtp` | Get SMTP config (credentials masked) |
-| `PUT` | `/admin/api/smtp` | Update SMTP config |
+| `GET` | `/admin/api/senders` | List all SMTP senders (credentials masked) |
+| `POST` | `/admin/api/senders` | Create a new sender |
+| `PUT` | `/admin/api/senders/:id` | Update a sender |
+| `DELETE` | `/admin/api/senders/:id` | Delete a sender |
+| `POST` | `/admin/api/senders/:id/test` | Test sender connection (sends test email) |
+| `GET` | `/admin/api/smtp` | Legacy: get default sender config (credentials masked) |
+| `PUT` | `/admin/api/smtp` | Legacy: update default sender config |
+| `GET` | `/admin/api/templates` | List all email templates |
+| `GET` | `/admin/api/templates/:name` | Get template content |
+| `PUT` | `/admin/api/templates/:name` | Create or update a template |
+| `DELETE` | `/admin/api/templates/:name` | Delete a template |
 | `GET` | `/admin/api/statistics` | Stats for all forms |
+| `GET` | `/admin/api/statistics/chart` | Chart data aggregated by day (`?period=week\|month\|year\|today`) |
 | `GET` | `/admin/api/statistics/:id` | Stats for one form |
 | `PUT` | `/admin/api/statistics/:id/reset` | Reset stats for a form |
 | `GET` | `/admin/api/submissions/:id` | Paginated submissions (`?page=1&limit=50`) |
 | `DELETE` | `/admin/api/submissions/:id` | Delete all submissions for a form |
 | `GET` | `/admin/api/submissions/:id/export` | Export submissions (`?format=json` or `csv`) |
 | `PUT` | `/admin/api/admin/reset-password` | Change admin password |
+| `POST` | `/admin/api/inbox/token` | Issue a short-lived SSE token |
+| `GET` | `/admin/api/inbox/stream` | SSE real-time inbox stream (`?token=...`) |
 
 ## Docker Deployment
 
@@ -331,7 +377,7 @@ docker run -d \
 - **Health check** - `/health` every 30s, auto-restart on failure
 - **Resource limits** - 512MB max, 128MB reserved
 - **no-new-privileges** - Prevents privilege escalation
-- **Volumes** - `config.json`, `data/` (submissions)
+- **Volumes** - `config.json`, `data/` (submissions), `templates/` (email templates)
 
 ## Security
 
@@ -340,6 +386,7 @@ docker run -d \
 | Scope | Limit |
 |---|---|
 | Form submissions | 5 per minute per IP |
+| Per-form global | 100 per minute per form (all IPs combined) |
 | Admin API | 30 per minute per IP |
 | Login attempts | 10 per 15 minutes (failures only) |
 
@@ -377,8 +424,10 @@ formPost/
 ├── LICENSE                         # ISC License
 ├── logo.png                        # Application logo
 ├── fav-icon.png                    # Favicon
-├── email-template.html             # Default email template
-├── email-template-*.html           # Per-form templates
+├── screenshot.jpg                  # Admin dashboard screenshot
+├── email-template.html             # Default email template (legacy)
+├── templates/
+│   └── *.html                      # Email templates (managed via admin UI)
 ├── admin/
 │   └── index.html                  # Admin dashboard (single-file SPA)
 └── data/

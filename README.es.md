@@ -7,6 +7,15 @@
   <strong><a href="README.md">Read in English</a></strong>
 </p>
 
+<p align="center">
+  <img src="screenshot.jpg" alt="Panel de Administración formPost" width="700" />
+</p>
+
+<p align="center">
+  <strong>Sponsor:</strong>&nbsp;
+  <a href="https://beweb.com.ar"><img src="logo_beweb.png" alt="beWeb" height="22" /></a>
+</p>
+
 [![Docker](https://img.shields.io/badge/Docker-Listo-blue?logo=docker)](https://www.docker.com/)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green?logo=node.js)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/Licencia-ISC-yellow)](LICENSE)
@@ -31,17 +40,21 @@
 ## Características
 
 - **Soporte multi-formulario** - Maneja formularios ilimitados, cada uno con su propia configuración
+- **Multi-sender SMTP** - Configura múltiples relays SMTP (senders) y asigna cada formulario a un sender específico
 - **Notificaciones por email** - Plantillas HTML personalizadas por formulario con inyección dinámica de campos
+- **Gestión de plantillas** - Crear, editar y eliminar plantillas de email desde el panel admin
 - **Cloudflare Turnstile** - Protección anti-bot por formulario con switch de activación/desactivación
+- **Protección honeypot** - Campo oculto (`_hp_field`) que rechaza bots silenciosamente sin fricción al usuario
 - **Restricción de dominio** - Permitir envíos solo desde dominios autorizados (por formulario)
+- **Notificaciones Discord** - Webhook de Discord opcional por formulario para alertas de envíos en tiempo real
 - **Almacenamiento de envíos** - Almacenamiento en archivos JSON, hasta 1000 envíos por formulario
 - **Exportación** - Descarga de envíos en CSV o JSON
-- **Panel de administración** - Interfaz web completa para gestionar formularios, SMTP, estadísticas, envíos y contraseñas
+- **Panel de administración** - Interfaz web completa para gestionar formularios, senders, plantillas, estadísticas, envíos y contraseñas
 - **Bandeja de entrada en tiempo real** - Feed en vivo de nuevos envíos via SSE
 - **Internacionalización** - Servidor y panel disponibles en Inglés y Español vía variable `LANG`
-- **Estadísticas** - Contadores por formulario y total global de envíos
+- **Estadísticas y gráficos** - Contadores por formulario y total global con datos de gráficos por periodo
 - **Tema oscuro / claro** - Alternancia en el panel, persistido en localStorage
-- **Limitación de tasa** - Límites separados para envíos, API de admin e intentos de login
+- **Limitación de tasa** - Límites separados para envíos, límites globales por formulario, API de admin e intentos de login
 - **Headers de seguridad** - Middleware Helmet con CSP, protección XSS
 - **Listo para Docker** - Build multi-etapa, usuario no-root, health checks, límites de recursos
 
@@ -82,9 +95,22 @@ Toda la configuración está en `config.json`. El panel de admin puede modificar
             "to": "tu@email.com",
             "subjectPrefix": "Formulario de Contacto - ",
             "redirectUrl": "https://ejemplo.com/gracias",
-            "templatePath": "email-template.html",
+            "templatePath": "templates/contact-form.html",
             "turnstileEnabled": true,
-            "allowedDomains": ["https://ejemplo.com", "https://www.ejemplo.com"]
+            "allowedDomains": ["https://ejemplo.com", "https://www.ejemplo.com"],
+            "senderId": "default",
+            "discordWebhook": "https://discord.com/api/webhooks/..."
+        }
+    },
+    "senders": {
+        "default": {
+            "name": "Default",
+            "host": "smtp.ejemplo.com",
+            "port": 587,
+            "secure": false,
+            "from": "noreply@ejemplo.com",
+            "user": "usuario_smtp",
+            "pass": "contraseña_smtp"
         }
     },
     "statistics": {
@@ -92,14 +118,6 @@ Toda la configuración está en `config.json`. El panel de admin puede modificar
             "successfulSubmissions": 0,
             "lastSubmission": null
         }
-    },
-    "smtp": {
-        "host": "smtp.ejemplo.com",
-        "port": 587,
-        "secure": false,
-        "from": "noreply@ejemplo.com",
-        "user": "usuario_smtp",
-        "pass": "contraseña_smtp"
     },
     "turnstile": {
         "mi-formulario": {
@@ -118,13 +136,15 @@ Toda la configuración está en `config.json`. El panel de admin puede modificar
 }
 ```
 
+> **Nota:** La sección legacy `smtp` se migra automáticamente a `senders.default` en el primer inicio.
+
 ### Secciones
 
 | Sección | Descripción |
 |---|---|
-| `recipients` | Una entrada por formulario: email destino, prefijo de asunto, URL de redirección, ruta de plantilla, toggle de turnstile, dominios permitidos |
+| `recipients` | Una entrada por formulario: email destino, prefijo de asunto, URL de redirección, ruta de plantilla, toggle de turnstile, dominios permitidos, sender ID, webhook de Discord |
+| `senders` | Configuraciones de relays SMTP con nombre. Cada sender tiene su propio host, puerto, credenciales y dirección from |
 | `statistics` | Contadores y timestamps de envíos por formulario (gestionado automáticamente) |
-| `smtp` | Configuración del servidor SMTP (host, port, secure, from, user, pass) |
 | `turnstile` | Clave secreta de Cloudflare Turnstile por formulario (opcional) |
 | `cors` | Array de orígenes permitidos para CORS (debe incluir protocolo) |
 | `admin` | Credenciales del panel de administración |
@@ -139,6 +159,8 @@ Toda la configuración está en `config.json`. El panel de admin puede modificar
 | `templatePath` | string | Ruta al archivo HTML de plantilla de email |
 | `turnstileEnabled` | boolean | Activar/desactivar verificación Turnstile (default: `true` si existe la clave) |
 | `allowedDomains` | string[] | Lista de dominios de origen permitidos. Vacío = permitir todos |
+| `senderId` | string | ID del sender (de `senders`) a usar para este formulario (default: `"default"`) |
+| `discordWebhook` | string | URL de webhook de Discord para notificaciones de envíos (opcional) |
 
 ## Variables de Entorno
 
@@ -211,9 +233,21 @@ environment:
 - **Total de envíos** de todos los formularios en la barra de estado
 - Reiniciar estadísticas por formulario
 
+### Senders (SMTP)
+
+- Agregar, editar y eliminar configuraciones de senders SMTP
+- Cada sender tiene su propio host, puerto, credenciales y dirección from
+- Probar la conexión del sender directamente desde la UI
+- Asignar un sender a cada formulario vía `senderId`
+
+### Plantillas
+
+- Listar, crear, editar y eliminar plantillas de email
+- Plantillas almacenadas en el directorio `templates/`
+- Edición en vivo desde el panel admin
+
 ### Configuración
 
-- Editar configuración SMTP (credenciales enmascaradas en la visualización)
 - Cambiar contraseña de admin (requiere contraseña actual, mínimo 8 caracteres)
 
 ## Plantillas de Email
@@ -281,20 +315,32 @@ Si una plantilla no existe o no se puede leer, el servidor genera un email HTML 
 
 | Método | Endpoint | Descripción |
 |---|---|---|
-| `GET` | `/admin/api/status` | Estado del servidor, uptime, memoria, total envíos, idioma |
+| `GET` | `/admin/api/status` | Estado del servidor, versión, uptime, memoria, total envíos, idioma |
 | `GET` | `/admin/api/websites` | Listar todas las configuraciones de formularios |
 | `POST` | `/admin/api/websites` | Crear un nuevo formulario |
 | `PUT` | `/admin/api/websites/:id` | Actualizar un formulario |
 | `DELETE` | `/admin/api/websites/:id` | Eliminar un formulario |
-| `GET` | `/admin/api/smtp` | Obtener config SMTP (credenciales enmascaradas) |
-| `PUT` | `/admin/api/smtp` | Actualizar config SMTP |
+| `GET` | `/admin/api/senders` | Listar todos los senders SMTP (credenciales enmascaradas) |
+| `POST` | `/admin/api/senders` | Crear un nuevo sender |
+| `PUT` | `/admin/api/senders/:id` | Actualizar un sender |
+| `DELETE` | `/admin/api/senders/:id` | Eliminar un sender |
+| `POST` | `/admin/api/senders/:id/test` | Probar conexión del sender (envía email de prueba) |
+| `GET` | `/admin/api/smtp` | Legacy: obtener config del sender por defecto (credenciales enmascaradas) |
+| `PUT` | `/admin/api/smtp` | Legacy: actualizar config del sender por defecto |
+| `GET` | `/admin/api/templates` | Listar todas las plantillas de email |
+| `GET` | `/admin/api/templates/:name` | Obtener contenido de una plantilla |
+| `PUT` | `/admin/api/templates/:name` | Crear o actualizar una plantilla |
+| `DELETE` | `/admin/api/templates/:name` | Eliminar una plantilla |
 | `GET` | `/admin/api/statistics` | Estadísticas de todos los formularios |
+| `GET` | `/admin/api/statistics/chart` | Datos de gráfico por día (`?period=week\|month\|year\|today`) |
 | `GET` | `/admin/api/statistics/:id` | Estadísticas de un formulario |
 | `PUT` | `/admin/api/statistics/:id/reset` | Reiniciar estadísticas de un formulario |
 | `GET` | `/admin/api/submissions/:id` | Envíos paginados (`?page=1&limit=50`) |
 | `DELETE` | `/admin/api/submissions/:id` | Eliminar todos los envíos de un formulario |
 | `GET` | `/admin/api/submissions/:id/export` | Exportar envíos (`?format=json` o `csv`) |
 | `PUT` | `/admin/api/admin/reset-password` | Cambiar contraseña de admin |
+| `POST` | `/admin/api/inbox/token` | Emitir un token SSE temporal |
+| `GET` | `/admin/api/inbox/stream` | Stream SSE de bandeja de entrada en tiempo real (`?token=...`) |
 
 ## Despliegue con Docker
 
@@ -331,7 +377,7 @@ docker run -d \
 - **Health check** - `/health` cada 30s, reinicio automático en falla
 - **Límites de recursos** - 512MB máximo, 128MB reservados
 - **no-new-privileges** - Previene escalación de privilegios
-- **Volúmenes** - `config.json`, `data/` (envíos)
+- **Volúmenes** - `config.json`, `data/` (envíos), `templates/` (plantillas de email)
 
 ## Seguridad
 
@@ -340,6 +386,7 @@ docker run -d \
 | Ámbito | Límite |
 |---|---|
 | Envíos de formularios | 5 por minuto por IP |
+| Global por formulario | 100 por minuto por formulario (todas las IPs combinadas) |
 | API de admin | 30 por minuto por IP |
 | Intentos de login | 10 por 15 minutos (solo fallos) |
 
@@ -377,8 +424,10 @@ formPost/
 ├── LICENSE                         # Licencia ISC
 ├── logo.png                        # Logo de la aplicación
 ├── fav-icon.png                    # Favicon
-├── email-template.html             # Plantilla de email por defecto
-├── email-template-*.html           # Plantillas por formulario
+├── screenshot.jpg                  # Captura del panel de administración
+├── email-template.html             # Plantilla de email por defecto (legacy)
+├── templates/
+│   └── *.html                      # Plantillas de email (gestionadas vía panel admin)
 ├── admin/
 │   └── index.html                  # Panel de administración (SPA single-file)
 └── data/
