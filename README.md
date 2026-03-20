@@ -2,8 +2,6 @@
   <img src="logo.png" alt="formPost" height="80" />
 </p>
 
-<h1 align="center">formPost</h1>
-
 <p align="center">
   A production-ready Node.js backend for processing contact form submissions.<br/>
   <strong><a href="README.es.md">Leer en Español</a></strong>
