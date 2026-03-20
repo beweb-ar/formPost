@@ -532,13 +532,9 @@ app.post('/submit', submitLimiter, async (req, res) => {
 
         // Get the correct transporter for this form's sender
         const senderInfo = getTransporterForForm(recipientConfig);
-        if (!senderInfo) {
-            log.error('No SMTP sender configured', { formId: website_id });
-            return res.status(500).send(t.serverError);
-        }
-        if (senderInfo.inactive) {
+        const skipEmail = !senderInfo || senderInfo.inactive;
+        if (skipEmail && senderInfo && senderInfo.inactive) {
             log.info('Sender disabled, skipping email', { formId: website_id, senderId: senderInfo.senderId });
-            // Log to outbox as skipped
             const skipEntry = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 timestamp: new Date().toISOString(),
@@ -549,14 +545,16 @@ app.post('/submit', submitLimiter, async (req, res) => {
             };
             saveOutboxEntry(website_id, skipEntry).catch(() => {});
             broadcastSSE({ type: 'outbox', websiteId: website_id, ...skipEntry });
+        } else if (!senderInfo) {
+            log.info('No sender configured, skipping email', { formId: website_id });
         }
 
         const emailSubject = `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`;
         const emailTimestamp = new Date().toISOString();
         let emailOk = false;
 
-        // Send email (only if sender is active)
-        if (!senderInfo.inactive) {
+        // Send email (only if sender exists and is active)
+        if (!skipEmail) {
             const mailOptions = {
                 from: `"${escapeHtml(String(senderName))}" <${senderInfo.senderCfg.from}>`,
                 to: recipientConfig.to,
@@ -699,6 +697,122 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     };
                     saveOutboxEntry(website_id, discordFailEntry).catch(() => {});
                     broadcastSSE({ type: 'outbox', websiteId: website_id, ...discordFailEntry });
+                }
+            }
+
+            // Send Telegram notification if configured
+            if (recipientConfig.telegramBotToken && recipientConfig.telegramChatId) {
+                const telegramTimestamp = new Date().toISOString();
+                try {
+                    const tName = formFields.name || formFields.nombre || formFields.full_name || 'Unknown';
+                    const tFields = fieldEntries
+                        .filter(([k]) => !['website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response','_hp_field'].includes(k))
+                        .slice(0, 10)
+                        .map(([k, v]) => `<b>${escapeHtml(fieldToLabel(k))}:</b> ${escapeHtml(String(v || '-').substring(0, 200))}`)
+                        .join('\n');
+                    const telegramText = `📩 <b>New submission: ${escapeHtml(website_id)}</b>\n\n${tFields}\n\n<i>formPost</i>`;
+                    await axios.post(
+                        `https://api.telegram.org/bot${recipientConfig.telegramBotToken}/sendMessage`,
+                        { chat_id: recipientConfig.telegramChatId, text: telegramText, parse_mode: 'HTML' },
+                        { timeout: 5000 }
+                    );
+                    log.info('Telegram notification sent', { formId: website_id });
+
+                    const telegramEntry = {
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                        timestamp: telegramTimestamp,
+                        channel: 'telegram',
+                        status: 'ok'
+                    };
+                    saveOutboxEntry(website_id, telegramEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...telegramEntry });
+
+                    writeConfigSafe(cfg => {
+                        if (cfg.statistics && cfg.statistics[website_id]) {
+                            cfg.statistics[website_id].notificationsSent = (cfg.statistics[website_id].notificationsSent || 0) + 1;
+                        }
+                    }).catch(() => {});
+                } catch (telegramErr) {
+                    log.error('Telegram notification failed', { formId: website_id, error: telegramErr.message });
+
+                    const telegramFailEntry = {
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                        timestamp: telegramTimestamp,
+                        channel: 'telegram',
+                        status: 'error',
+                        error: telegramErr.message
+                    };
+                    saveOutboxEntry(website_id, telegramFailEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...telegramFailEntry });
+                }
+            }
+
+            // Send generic webhook if configured
+            if (recipientConfig.webhookUrl) {
+                try {
+                    const webhookPayload = {
+                        formId: website_id,
+                        timestamp: new Date().toISOString(),
+                        fields: {}
+                    };
+                    for (const [k, v] of fieldEntries) {
+                        webhookPayload.fields[k] = String(v || '');
+                    }
+                    await axios.post(recipientConfig.webhookUrl, webhookPayload, {
+                        timeout: 5000,
+                        headers: { 'Content-Type': 'application/json', 'User-Agent': 'formPost/' + pkg.version }
+                    });
+                    log.info('Webhook sent', { formId: website_id, url: recipientConfig.webhookUrl });
+                } catch (webhookErr) {
+                    log.error('Webhook failed', { formId: website_id, error: webhookErr.message });
+                }
+            }
+
+            // Auto-responder: send confirmation email to the submitter
+            if (recipientConfig.autoReplyEnabled && senderEmail && !skipEmail) {
+                try {
+                    const autoReplyTemplatePath = path.resolve(__dirname, recipientConfig.autoReplyTemplate || 'templates/auto-reply.html');
+                    let autoReplyBody;
+                    try {
+                        const arTemplate = await fs.readFile(autoReplyTemplatePath, 'utf8');
+                        let arFields = '';
+                        for (const [key, value] of fieldEntries) {
+                            if (value) arFields += `<li><strong>${escapeHtml(fieldToLabel(key))}:</strong> ${escapeHtml(String(value))}</li>\n`;
+                        }
+                        autoReplyBody = arTemplate
+                            .replace(/{{website_id}}/g, escapeHtml(website_id))
+                            .replace(/{{fields}}/g, arFields);
+                    } catch (e) {
+                        autoReplyBody = '<h2>Thank you for your submission</h2><p>We have received your message and will get back to you soon.</p>';
+                    }
+                    const arSubject = recipientConfig.autoReplySubject || 'Thank you for your submission';
+                    await senderInfo.transporter.sendMail({
+                        from: `"${escapeHtml(String(senderInfo.senderCfg.name || 'No Reply'))}" <${senderInfo.senderCfg.from}>`,
+                        to: senderEmail,
+                        subject: arSubject,
+                        html: autoReplyBody
+                    });
+                    log.info('Auto-reply sent', { formId: website_id, to: senderEmail });
+
+                    const arEntry = {
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                        timestamp: new Date().toISOString(),
+                        channel: 'email',
+                        to: senderEmail,
+                        subject: arSubject,
+                        status: 'ok',
+                        autoReply: true
+                    };
+                    saveOutboxEntry(website_id, arEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...arEntry });
+
+                    writeConfigSafe(cfg => {
+                        if (cfg.statistics && cfg.statistics[website_id]) {
+                            cfg.statistics[website_id].mailsSent = (cfg.statistics[website_id].mailsSent || 0) + 1;
+                        }
+                    }).catch(() => {});
+                } catch (arErr) {
+                    log.error('Auto-reply failed', { formId: website_id, error: arErr.message });
                 }
             }
 
@@ -1100,7 +1214,15 @@ adminRouter.get('/submissions/:websiteId', async (req, res) => {
     }
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
-    const submissions = await loadSubmissions(websiteId);
+    const q = (req.query.q || '').toLowerCase().trim();
+    let submissions = await loadSubmissions(websiteId);
+    if (q) {
+        submissions = submissions.filter(s => {
+            const name = (s.name || s.nombre || s.full_name || '').toLowerCase();
+            const email = (s.email || s.correo || s.e_mail || '').toLowerCase();
+            return name.includes(q) || email.includes(q);
+        });
+    }
     const start = (page - 1) * limit;
     const paged = submissions.slice(start, start + limit);
     res.json({
@@ -1367,6 +1489,72 @@ app.get('/admin/api/inbox/stream', adminLimiter, (req, res) => {
 
     const keepalive = setInterval(() => res.write(': keepalive\n\n'), 30000);
     req.on('close', () => { clearInterval(keepalive); sseClients.delete(res); });
+});
+
+// Backup: export full config + templates
+adminRouter.get('/backup', async (req, res) => {
+    try {
+        const backup = {
+            version: pkg.version,
+            timestamp: new Date().toISOString(),
+            recipients: config.recipients,
+            senders: config.senders || {},
+            captcha: config.captcha || {},
+            cors: config.cors || {},
+            smtp: config.smtp || {},
+            templates: {}
+        };
+        // Include template files
+        const templatesDir = path.join(__dirname, 'templates');
+        try {
+            const files = await fs.readdir(templatesDir);
+            for (const file of files) {
+                if (file.endsWith('.html')) {
+                    backup.templates[file] = await fs.readFile(path.join(templatesDir, file), 'utf8');
+                }
+            }
+        } catch (e) {}
+        // Include root email template if exists
+        try {
+            backup.templates['email-template.html'] = await fs.readFile(path.join(__dirname, 'email-template.html'), 'utf8');
+        } catch (e) {}
+        res.setHeader('Content-Disposition', 'attachment; filename="formpost-backup-' + new Date().toISOString().substring(0, 10) + '.json"');
+        res.json(backup);
+    } catch (e) {
+        res.status(500).json({ error: 'Backup failed' });
+    }
+});
+
+// Restore: import config + templates
+adminRouter.post('/restore', async (req, res) => {
+    const backup = req.body;
+    if (!backup || !backup.recipients) {
+        return res.status(400).json({ error: 'Invalid backup file' });
+    }
+    try {
+        await writeConfigSafe(cfg => {
+            if (backup.recipients) cfg.recipients = backup.recipients;
+            if (backup.senders) cfg.senders = backup.senders;
+            if (backup.captcha) cfg.captcha = backup.captcha;
+            if (backup.cors) cfg.cors = backup.cors;
+            if (backup.smtp) cfg.smtp = backup.smtp;
+        });
+        // Restore templates
+        if (backup.templates) {
+            const templatesDir = path.join(__dirname, 'templates');
+            await fs.mkdir(templatesDir, { recursive: true }).catch(() => {});
+            for (const [filename, content] of Object.entries(backup.templates)) {
+                const filePath = filename === 'email-template.html'
+                    ? path.join(__dirname, filename)
+                    : path.join(templatesDir, filename);
+                await fs.writeFile(filePath, content);
+            }
+        }
+        rebuildAllTransporters();
+        res.json({ message: 'Backup restored successfully' });
+    } catch (e) {
+        res.status(500).json({ error: 'Restore failed: ' + e.message });
+    }
 });
 
 app.use('/admin/api', adminRouter);

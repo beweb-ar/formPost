@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thank you for your submission</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #2c3e50;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .header {
+            background: linear-gradient(135deg, #4a5568 0%, #e8713a 100%);
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .content {
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid #e9ecef;
+        }
+        .details-list {
+            background-color: #f1f3f5;
+            padding: 18px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #e8713a;
+        }
+        .details-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .details-list li {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .footer {
+            margin-top: 25px;
+            font-size: 12px;
+            color: #6c757d;
+            text-align: center;
+            padding: 15px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        h2 { margin: 0; font-size: 24px; font-weight: 600; }
+        h3 { color: #2c3e50; margin-top: 0; font-size: 18px; font-weight: 600; }
+        strong { color: #34495e; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Thank you for contacting us</h2>
+    </div>
+
+    <div class="content">
+        <p>We have received your submission and will get back to you as soon as possible.</p>
+
+        <div class="details-list">
+            <h3>Your submission</h3>
+            <ul>
+                {{fields}}
+            </ul>
+        </div>
+
+        <p>If you need immediate assistance, please don't hesitate to reach out again.</p>
+    </div>
+
+    <div class="footer">
+        <p>This is an automated confirmation email. Please do not reply directly to this message.</p>
+    </div>
+</body>
+</html>

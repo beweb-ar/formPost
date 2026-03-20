@@ -402,8 +402,8 @@
         .modal input[type="password"] { max-width: 100%; }
 
         .modal-wide {
-            max-width: 750px;
-            width: 90%;
+            max-width: 950px;
+            width: 95%;
         }
 
         #detailModal {
@@ -723,6 +723,7 @@
         }
         .outbox-channel.email { background: var(--accent-primary); color: white; }
         .outbox-channel.discord { background: #5865F2; color: white; }
+        .outbox-channel.telegram { background: #26A5E4; color: white; }
         .outbox-status-ok { color: var(--success); font-weight: 600; font-size: 0.7rem; }
         .outbox-status-error { color: var(--danger); font-weight: 600; font-size: 0.7rem; }
     </style>
@@ -770,7 +771,7 @@
         <!-- Stats Cards -->
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card" id="statServer">
-                <h4>Servidor</h4>
+                <h4 data-i18n="statServer">Server</h4>
                 <div class="stat-card-body" id="statServerBody"><span class="spinner"></span></div>
             </div>
             <div class="stat-card" id="statData">
@@ -781,10 +782,10 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <h4 data-i18n="statChartTitle">Envíos</h4>
                     <select id="chartPeriod" onchange="loadChartData()" style="font-size:0.75rem;padding:0.2rem 0.4rem;border-radius:var(--radius-sm);border:1px solid var(--border-color);background:var(--bg-solid);max-width:120px;">
-                        <option value="month" selected>Este mes</option>
-                        <option value="week">Esta semana</option>
-                        <option value="today">Hoy</option>
-                        <option value="year">Este año</option>
+                        <option value="month" selected data-i18n="chartMonth">This month</option>
+                        <option value="week" data-i18n="chartWeek">This week</option>
+                        <option value="today" data-i18n="chartToday">Today</option>
+                        <option value="year" data-i18n="chartYear">This year</option>
                     </select>
                 </div>
                 <canvas id="submissionsChart" height="120"></canvas>
@@ -851,8 +852,12 @@
                 <input type="hidden" name="editId" id="editId" />
                 <div style="overflow-y:auto;flex:1;min-height:0;padding-right:0.5rem;">
                     <div class="form-group">
-                        <label data-i18n="toEmail">To Email</label>
-                        <input type="email" name="editTo" id="editTo" required />
+                        <label data-i18n="toEmail">To Email(s)</label>
+                        <div id="editRecipientsContainer"></div>
+                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                            <input type="email" id="editNewRecipient" placeholder="admin@example.com" style="flex:1;" />
+                            <button type="button" class="btn-sm btn-outline" onclick="addEditRecipient()">+</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label data-i18n="subjectPrefix">Subject Prefix</label>
@@ -905,6 +910,41 @@
                         <input type="url" name="editDiscordWebhook" id="editDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." />
                         <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="discordWebhookHint">Leave empty to disable Discord notifications</small>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label data-i18n="telegramBotToken">Telegram Bot Token</label>
+                            <input type="text" id="editTelegramBotToken" placeholder="123456:ABC-DEF..." />
+                            <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="telegramHint">Leave empty to disable Telegram notifications</small>
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="telegramChatId">Telegram Chat ID</label>
+                            <input type="text" id="editTelegramChatId" placeholder="-100123456789" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="webhookUrl">Webhook URL</label>
+                        <input type="url" id="editWebhookUrl" placeholder="https://hooks.example.com/..." />
+                        <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="webhookHint">POST with JSON payload on each submission</small>
+                    </div>
+                    <div class="checkbox-group" style="margin-top:0.75rem;">
+                        <input type="checkbox" id="editAutoReplyEnabled" />
+                        <label for="editAutoReplyEnabled" data-i18n="autoReplyEnabled">Enable auto-reply to sender</label>
+                    </div>
+                    <div class="form-row" id="editAutoReplyOptions" style="margin-top:0.5rem;">
+                        <div class="form-group">
+                            <label data-i18n="autoReplySubject">Auto-reply Subject</label>
+                            <input type="text" id="editAutoReplySubject" placeholder="Thank you for your submission" />
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="autoReplyTemplate">Auto-reply Template</label>
+                            <select id="editAutoReplyTemplate"></select>
+                        </div>
+                    </div>
+                    <div style="margin-top:1.5rem;border-top:1px solid var(--border-color);padding-top:1rem;">
+                        <h4 style="margin-bottom:0.5rem;" data-i18n="integrationTitle">Integration</h4>
+                        <div id="editIntegrationCode" style="position:relative;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:1rem;font-family:monospace;font-size:0.8rem;white-space:pre;overflow-x:auto;max-height:300px;line-height:1.5;"></div>
+                        <button type="button" class="btn-sm btn-outline" style="margin-top:0.5rem;" onclick="copyIntegrationCode()" data-i18n="copyInstructions">Copy</button>
+                    </div>
                 </div>
                 <div class="modal-actions" style="flex-shrink:0;border-top:1px solid var(--border-color);padding-top:1rem;">
                     <button type="button" class="btn-outline" onclick="closeEditModal()" data-i18n="cancel">Cancel</button>
@@ -936,8 +976,12 @@
                         <input type="text" name="id" required placeholder="website-id" />
                     </div>
                     <div class="form-group">
-                        <label data-i18n="toEmail">To Email</label>
-                        <input type="email" name="to" required placeholder="admin@example.com" />
+                        <label data-i18n="toEmail">To Email(s)</label>
+                        <div id="createRecipientsContainer"></div>
+                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                            <input type="email" id="createNewRecipient" placeholder="admin@example.com" style="flex:1;" />
+                            <button type="button" class="btn-sm btn-outline" onclick="addCreateRecipient()">+</button>
+                        </div>
                     </div>
                 </div>
                 <div class="form-row">
@@ -995,6 +1039,22 @@
                     <input type="url" name="discordWebhook" id="createDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." />
                     <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="discordWebhookHint">Leave empty to disable Discord notifications</small>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label data-i18n="telegramBotToken">Telegram Bot Token</label>
+                        <input type="text" id="createTelegramBotToken" placeholder="123456:ABC-DEF..." />
+                        <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="telegramHint">Leave empty to disable Telegram notifications</small>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="telegramChatId">Telegram Chat ID</label>
+                        <input type="text" id="createTelegramChatId" placeholder="-100123456789" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="webhookUrl">Webhook URL</label>
+                    <input type="url" id="createWebhookUrl" placeholder="https://hooks.example.com/..." />
+                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="webhookHint">POST with JSON payload on each submission</small>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" onclick="closeCreateModal()" data-i18n="cancel">Cancel</button>
                     <button type="submit" id="createWebsiteBtn" data-i18n="addForm">Add Form</button>
@@ -1009,6 +1069,7 @@
             <div class="submissions-modal-header">
                 <h3><span data-i18n="submissions">Submissions</span>: <span id="submissionsModalTitle"></span></h3>
                 <div class="submissions-modal-actions">
+                    <input type="text" id="submissionsSearch" placeholder="Search name / email..." style="font-size:0.85rem;padding:0.35rem 0.6rem;border-radius:var(--radius-sm);border:1px solid var(--border-color);width:180px;" oninput="searchSubmissionsDebounced()" />
                     <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'csv')" data-i18n="exportCsv">Export CSV</button>
                     <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'json')" data-i18n="exportJson">Export JSON</button>
                     <button class="btn-sm btn-danger" onclick="deleteAllSubmissions(submissionsModalWebsiteId)" data-i18n="deleteAll">Delete All</button>
@@ -1062,7 +1123,7 @@
 
     <!-- Settings / Senders Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none;">
-        <div class="modal" style="max-width:700px;width:90%;">
+        <div class="modal" style="max-width:900px;width:95%;">
             <div class="submissions-modal-header">
                 <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
                 <button class="btn-sm btn-outline" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
@@ -1070,7 +1131,12 @@
             <div id="sendersListContent">
                 <div class="empty-state"><span class="spinner"></span> Loading...</div>
             </div>
-            <div class="modal-actions">
+            <div class="modal-actions" style="justify-content:space-between;">
+                <div style="display:flex;gap:0.5rem;">
+                    <button type="button" class="btn-sm btn-outline" onclick="downloadBackup()" data-i18n="backupBtn">Backup</button>
+                    <button type="button" class="btn-sm btn-outline" onclick="document.getElementById('restoreFileInput').click()" data-i18n="restoreBtn">Restore</button>
+                    <input type="file" id="restoreFileInput" accept=".json" style="display:none;" onchange="restoreBackup(this)" />
+                </div>
                 <button type="button" class="btn-outline" onclick="closeSettingsModal()" data-i18n="close">Close</button>
             </div>
         </div>
@@ -1195,8 +1261,9 @@
                 passwordBtn: '&#128274; Password', logout: 'Logout', sendersBtn: '&#9881; Senders',
                 // Status bar
                 port: 'Port', uptime: 'Uptime', memory: 'Memory', forms: 'Forms', totalSubs: 'Total Subs',
-                statStatus: 'Status', statTemplates: 'Templates',
+                statServer: 'Server', statStatus: 'Status', statTemplates: 'Templates',
                 statDataTitle: 'Data', statChartTitle: 'Submissions',
+                chartMonth: 'This month', chartWeek: 'This week', chartToday: 'Today', chartYear: 'This year',
                 statusUnavailable: 'Status unavailable',
                 // Cards
                 to: 'To', subject: 'Subject', redirect: 'Redirect', template: 'Template',
@@ -1212,6 +1279,10 @@
                 templatePath: 'Template Path',
                 allowedDomains: 'Allowed Domains', allowedDomainsHint: 'Leave empty to allow all domains',
                 discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Leave empty to disable Discord notifications',
+                telegramBotToken: 'Telegram Bot Token', telegramChatId: 'Telegram Chat ID', telegramHint: 'Leave empty to disable Telegram notifications',
+                webhookUrl: 'Webhook URL', webhookHint: 'POST with JSON payload on each submission',
+                autoReplyEnabled: 'Enable auto-reply to sender', autoReplySubject: 'Auto-reply Subject', autoReplyTemplate: 'Auto-reply Template',
+                backupBtn: 'Backup', restoreBtn: 'Restore',
                 cancel: 'Cancel', saveChanges: 'Save Changes', addForm: 'Add Form',
                 close: 'Close', loading: 'Loading...',
                 // Submissions modal
@@ -1255,7 +1326,7 @@
                 totalMails: 'Total Mails', totalNotifications: 'Total Notif.',
                 // Integration / Help
                 copyInstructions: 'Copy', instructionsCopied: 'Copied to clipboard',
-                copyPromptHint: 'Copy integration prompt for this form',
+                integrationTitle: 'Integration',
                 helpTitle: 'Integration Guide',
                 helpIntro: 'This server processes contact form submissions. Each configured form has its own endpoint, email destination, and optional bot protection.',
                 helpHowTo: 'How to integrate',
@@ -1295,8 +1366,9 @@
                 passwordBtn: '&#128274; Clave', logout: 'Salir', sendersBtn: '&#9881; Senders',
                 // Status bar
                 port: 'Puerto', uptime: 'Activo', memory: 'Memoria', forms: 'Formularios', totalSubs: 'Total Env\u00edos',
-                statStatus: 'Estado', statTemplates: 'Plantillas',
+                statServer: 'Servidor', statStatus: 'Estado', statTemplates: 'Plantillas',
                 statDataTitle: 'Datos', statChartTitle: 'Env\u00edos',
+                chartMonth: 'Este mes', chartWeek: 'Esta semana', chartToday: 'Hoy', chartYear: 'Este a\u00f1o',
                 statusUnavailable: 'Estado no disponible',
                 // Cards
                 to: 'Destino', subject: 'Asunto', redirect: 'Redirecci\u00f3n', template: 'Plantilla',
@@ -1312,6 +1384,10 @@
                 templatePath: 'Ruta de Plantilla',
                 allowedDomains: 'Dominios Permitidos', allowedDomainsHint: 'Dejar vac\u00edo para permitir todos los dominios',
                 discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Dejar vac\u00edo para desactivar notificaciones Discord',
+                telegramBotToken: 'Telegram Bot Token', telegramChatId: 'Telegram Chat ID', telegramHint: 'Dejar vac\u00edo para desactivar notificaciones Telegram',
+                webhookUrl: 'Webhook URL', webhookHint: 'POST con JSON en cada env\u00edo',
+                autoReplyEnabled: 'Activar auto-respuesta al remitente', autoReplySubject: 'Asunto de auto-respuesta', autoReplyTemplate: 'Template de auto-respuesta',
+                backupBtn: 'Backup', restoreBtn: 'Restaurar',
                 cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addForm: 'Agregar Formulario',
                 close: 'Cerrar', loading: 'Cargando...',
                 // Submissions modal
@@ -1355,7 +1431,7 @@
                 totalMails: 'Total Mails', totalNotifications: 'Total Notif.',
                 // Integration / Help
                 copyInstructions: 'Copiar', instructionsCopied: 'Copiado al portapapeles',
-                copyPromptHint: 'Copiar prompt de instrucciones de integración del formulario',
+                integrationTitle: 'Integraci\u00f3n',
                 helpTitle: 'Gu\u00eda de Integraci\u00f3n',
                 helpIntro: 'Este servidor procesa env\u00edos de formularios de contacto. Cada formulario configurado tiene su propio endpoint, email destino y protecci\u00f3n anti-bot opcional.',
                 helpHowTo: 'C\u00f3mo integrar',
@@ -1690,8 +1766,8 @@
                 var time = new Date(entry.timestamp);
                 var dateStr = time.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
                 var timeStr = dateStr + ' ' + time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                var channelLabel = entry.channel === 'email' ? 'Mail' : 'Discord';
-                var channelClass = entry.channel === 'email' ? 'email' : 'discord';
+                var channelLabel = entry.channel === 'email' ? 'Mail' : entry.channel === 'telegram' ? 'Telegram' : 'Discord';
+                var channelClass = entry.channel;
                 var statusClass = entry.status === 'ok' ? 'outbox-status-ok' : 'outbox-status-error';
                 var statusText = entry.status === 'ok' ? '✓' : '✗';
                 var detail = entry.channel === 'email' ? (entry.to || '') : '';
@@ -1989,6 +2065,9 @@
                     senderLabel = ci(L('sender'), esc(cfg.senderId));
                 }
                 var discord = cfg.discordWebhook ? ci('Discord', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
+                var telegram = (cfg.telegramBotToken && cfg.telegramChatId) ? ci('Telegram', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
+                var webhook = cfg.webhookUrl ? ci('Webhook', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
+                var autoReply = cfg.autoReplyEnabled ? ci('Auto-reply', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
 
                 return '<div class="website-card">' +
                     '<div style="display:flex;align-items:center;justify-content:space-between;">' +
@@ -1996,12 +2075,11 @@
                             '<button class="card-toggle collapsed" onclick="toggleCardDetails(this)" title="Expand">&#9660;</button>' +
                             '<h4>' + esc(id) + '</h4>' +
                         '</div>' +
-                        '<button class="btn-icon btn-icon-accent" onclick="copyIntegrationPrompt(\'' + esc(id) + '\')" title="' + L('copyPromptHint') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="14" height="14"><path fill="currentColor" d="M232 96l-80 0c-13.3 0-24-10.7-24-24s10.7-24 24-24l80 0c13.3 0 24 10.7 24 24s-10.7 24-24 24zm0 48c37.1 0 67.6-28 71.6-64L320 80c8.8 0 16 7.2 16 16l0 352c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16L48 96c0-8.8 7.2-16 16-16l16.4 0c4 36 34.5 64 71.6 64l80 0zM291.9 32C279 12.7 257 0 232 0L152 0c-25 0-47 12.7-59.9 32L64 32C28.7 32 0 60.7 0 96L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-352c0-35.3-28.7-64-64-64l-28.1 0z"/></svg></button>' +
                     '</div>' +
                     '<div class="card-details collapsed">' +
                         ci(L('to'), esc(cfg.to)) +
                         ci(L('subject'), esc(cfg.subjectPrefix)) +
-                        redirect + captchaInfo + domains + senderLabel + discord +
+                        redirect + captchaInfo + domains + senderLabel + discord + telegram + webhook + autoReply +
                         ci(L('template'), esc(cfg.templatePath)) +
                     '</div>' +
                     '<div class="card-stats">' +
@@ -2032,87 +2110,6 @@
             var details = btn.closest('.website-card').querySelector('.card-details');
             btn.classList.toggle('collapsed');
             details.classList.toggle('collapsed');
-        }
-
-        // ========== Integration Prompt Copy ==========
-        function copyIntegrationPrompt(websiteId) {
-            var cfg = websitesCache[websiteId];
-            if (!cfg) return;
-            var serverUrl = window.location.origin;
-            var hasCaptcha = !!(cfg.captchaKey || cfg.turnstileKey);
-            var captchaProvider = cfg.captchaProvider || 'turnstile';
-
-            var prompt = '## Form Integration Instructions for "' + websiteId + '"\n\n';
-            prompt += 'I need you to create a contact form that submits data to my form processing backend.\n\n';
-            prompt += '### Server Endpoint\n';
-            prompt += '- **URL:** `' + serverUrl + '/submit`\n';
-            prompt += '- **Method:** `POST`\n';
-            prompt += '- **Content-Type:** `application/x-www-form-urlencoded` (standard HTML form) or `application/json`\n\n';
-            prompt += '### Required Hidden Field\n';
-            prompt += '```html\n<input type="hidden" name="website_id" value="' + websiteId + '">\n```\n\n';
-            prompt += '### Website Configuration\n';
-            prompt += '- **Email destination:** `' + cfg.to + '`\n';
-            prompt += '- **Subject prefix:** `' + cfg.subjectPrefix + '`\n';
-            if (cfg.redirectUrl) {
-                prompt += '- **Post-submit redirect:** `' + cfg.redirectUrl + '`\n';
-            }
-            prompt += '\n### Form Fields\n';
-            prompt += 'The server accepts **any form fields dynamically**. There is no fixed schema. Common fields include:\n';
-            prompt += '- `name` or `nombre` - User\'s name\n';
-            prompt += '- `email` or `correo` - User\'s email (validated server-side)\n';
-            prompt += '- `phone` or `telefono` - Phone number\n';
-            prompt += '- `message` or `mensaje` - Message body\n';
-            prompt += '- Any custom fields you need (e.g. `company`, `budget`, `service`, `rooms`)\n\n';
-            prompt += 'Field names are auto-converted to labels in the email (e.g. `correo_electronico` becomes `Correo Electronico`).\n\n';
-            if (hasCaptcha && captchaProvider === 'hcaptcha') {
-                prompt += '### Bot Protection (hCaptcha)\n';
-                prompt += 'This website has hCaptcha enabled. You must:\n';
-                prompt += '1. Add the hCaptcha script: `<script src="https://js.hcaptcha.com/1/api.js" async defer><\/script>`\n';
-                prompt += '2. Add the widget inside the form: `<div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div>`\n';
-                prompt += '3. The `h-captcha-response` field is automatically added and verified server-side.\n\n';
-            } else if (hasCaptcha) {
-                prompt += '### Bot Protection (Cloudflare Turnstile)\n';
-                prompt += 'This website has Turnstile enabled. You must:\n';
-                prompt += '1. Add the Turnstile script: `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script>`\n';
-                prompt += '2. Add the widget inside the form: `<div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>`\n';
-                prompt += '3. The `cf-turnstile-response` field is automatically added and verified server-side.\n\n';
-            }
-            prompt += '### Constraints\n';
-            prompt += '- Max 30 fields per submission\n';
-            prompt += '- Max 100 chars per field name\n';
-            prompt += '- Max 5000 chars per field value\n';
-            prompt += '- Request body max 100KB\n';
-            prompt += '- Rate limit: 5 submissions per minute per IP\n\n';
-            prompt += '### Example Form\n';
-            prompt += '```html\n';
-            prompt += '<form action="' + serverUrl + '/submit" method="POST">\n';
-            prompt += '    <input type="hidden" name="website_id" value="' + websiteId + '">\n';
-            prompt += '    <label>Name: <input type="text" name="name" required></label>\n';
-            prompt += '    <label>Email: <input type="email" name="email" required></label>\n';
-            prompt += '    <label>Message: <textarea name="message"></textarea></label>\n';
-            if (hasCaptcha && captchaProvider === 'hcaptcha') {
-                prompt += '    <div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div>\n';
-            } else if (hasCaptcha) {
-                prompt += '    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>\n';
-            }
-            prompt += '    <button type="submit">Send</button>\n';
-            prompt += '</form>\n';
-            if (hasCaptcha && captchaProvider === 'hcaptcha') {
-                prompt += '<script src="https://js.hcaptcha.com/1/api.js" async defer><\/script>\n';
-            } else if (hasCaptcha) {
-                prompt += '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script>\n';
-            }
-            prompt += '```\n\n';
-            prompt += 'The server will send an HTML email with all submitted fields to `' + cfg.to + '` and ';
-            if (cfg.redirectUrl) {
-                prompt += 'redirect the user to `' + cfg.redirectUrl + '`.';
-            } else {
-                prompt += 'return a JSON success response.';
-            }
-
-            navigator.clipboard.writeText(prompt).then(function() {
-                showToast(L('instructionsCopied'), 'success');
-            });
         }
 
         // ========== Help Modal ==========
@@ -2216,7 +2213,7 @@
             var payload = {
                 id: formData.get('id'),
                 config: {
-                    to: formData.get('to'),
+                    to: createRecipients.join(', '),
                     subjectPrefix: formData.get('subjectPrefix'),
                     templatePath: formData.get('templatePath')
                 }
@@ -2232,6 +2229,12 @@
             if (createDomains.length > 0) payload.config.allowedDomains = createDomains.slice();
             var createDiscord = document.getElementById('createDiscordWebhook').value.trim();
             if (createDiscord) payload.config.discordWebhook = createDiscord;
+            var createTgToken = document.getElementById('createTelegramBotToken').value.trim();
+            var createTgChat = document.getElementById('createTelegramChatId').value.trim();
+            if (createTgToken) payload.config.telegramBotToken = createTgToken;
+            if (createTgChat) payload.config.telegramChatId = createTgChat;
+            var createWh = document.getElementById('createWebhookUrl').value.trim();
+            if (createWh) payload.config.webhookUrl = createWh;
             try {
                 var res = await fetch('/admin/api/websites', {
                     method: 'POST',
@@ -2265,7 +2268,6 @@
                 if (!cfg) return showToast(L('formNotFound'), 'error');
                 document.getElementById('editId').value = id;
                 document.getElementById('editModalTitle').textContent = id;
-                document.getElementById('editTo').value = cfg.to || '';
                 document.getElementById('editSubjectPrefix').value = cfg.subjectPrefix || '';
                 document.getElementById('editRedirectUrl').value = cfg.redirectUrl || '';
                 await Promise.all([
@@ -2276,9 +2278,20 @@
                 document.getElementById('editCaptchaEnabled').checked = (cfg.captchaEnabled !== undefined ? cfg.captchaEnabled : cfg.turnstileEnabled) !== false;
                 document.getElementById('editCaptchaProvider').value = cfg.captchaProvider || 'turnstile';
                 document.getElementById('editDiscordWebhook').value = cfg.discordWebhook || '';
+                document.getElementById('editTelegramBotToken').value = cfg.telegramBotToken || '';
+                document.getElementById('editTelegramChatId').value = cfg.telegramChatId || '';
+                document.getElementById('editWebhookUrl').value = cfg.webhookUrl || '';
+                document.getElementById('editAutoReplyEnabled').checked = !!cfg.autoReplyEnabled;
+                document.getElementById('editAutoReplySubject').value = cfg.autoReplySubject || '';
+                populateTemplateDropdown('editAutoReplyTemplate', cfg.autoReplyTemplate || 'templates/auto-reply.html');
+                // Multiple recipients
+                var toStr = cfg.to || '';
+                editRecipients = toStr.split(',').map(function(e) { return e.trim(); }).filter(Boolean);
+                renderDomainList('editRecipientsContainer', editRecipients, 'removeEditRecipient');
                 editDomains = (cfg.allowedDomains || []).slice();
                 renderDomainList('editDomainsContainer', editDomains, 'removeEditDomain');
                 document.getElementById('editNewDomain').value = '';
+                generateIntegrationCode(id, cfg);
                 document.getElementById('editModal').style.display = 'flex';
             } catch(e) {
                 showToast(L('failedLoadData'), 'error');
@@ -2289,13 +2302,49 @@
             document.getElementById('editModal').style.display = 'none';
         }
 
+        function generateIntegrationCode(id, cfg) {
+            var serverUrl = window.location.origin;
+            var hasCaptcha = !!(cfg.captchaKey || cfg.turnstileKey);
+            var provider = cfg.captchaProvider || 'turnstile';
+            var code = '&lt;form action="' + esc(serverUrl) + '/submit" method="POST"&gt;\n';
+            code += '    &lt;input type="hidden" name="website_id" value="' + esc(id) + '"&gt;\n\n';
+            code += '    &lt;!-- Honeypot anti-spam (hidden, do not remove) --&gt;\n';
+            code += '    &lt;input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off"&gt;\n\n';
+            code += '    &lt;label&gt;Name: &lt;input type="text" name="name" required&gt;&lt;/label&gt;\n';
+            code += '    &lt;label&gt;Email: &lt;input type="email" name="email" required&gt;&lt;/label&gt;\n';
+            code += '    &lt;label&gt;Phone: &lt;input type="tel" name="phone"&gt;&lt;/label&gt;\n';
+            code += '    &lt;label&gt;Message: &lt;textarea name="message"&gt;&lt;/textarea&gt;&lt;/label&gt;\n\n';
+            if (hasCaptcha && provider === 'hcaptcha') {
+                code += '    &lt;div class="h-captcha" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt;\n\n';
+            } else if (hasCaptcha) {
+                code += '    &lt;div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt;\n\n';
+            }
+            code += '    &lt;button type="submit"&gt;Send&lt;/button&gt;\n';
+            code += '&lt;/form&gt;\n';
+            if (hasCaptcha && provider === 'hcaptcha') {
+                code += '\n&lt;script src="https://js.hcaptcha.com/1/api.js" async defer&gt;&lt;/script&gt;';
+            } else if (hasCaptcha) {
+                code += '\n&lt;script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer&gt;&lt;/script&gt;';
+            }
+            document.getElementById('editIntegrationCode').innerHTML = code;
+        }
+
+        var integrationRawCode = '';
+        function copyIntegrationCode() {
+            var el = document.getElementById('editIntegrationCode');
+            var text = el.textContent;
+            navigator.clipboard.writeText(text).then(function() {
+                showToast(L('instructionsCopied'), 'success');
+            });
+        }
+
         document.getElementById('editForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             var btn = document.getElementById('editSaveBtn');
             setLoading(btn, true);
             var id = document.getElementById('editId').value;
             var payload = {
-                to: document.getElementById('editTo').value,
+                to: editRecipients.join(', '),
                 subjectPrefix: document.getElementById('editSubjectPrefix').value,
                 redirectUrl: document.getElementById('editRedirectUrl').value,
                 templatePath: document.getElementById('editTemplatePath').value,
@@ -2308,6 +2357,12 @@
             payload.allowedDomains = editDomains.slice();
             var editDiscord = document.getElementById('editDiscordWebhook').value.trim();
             payload.discordWebhook = editDiscord || '';
+            payload.telegramBotToken = document.getElementById('editTelegramBotToken').value.trim() || '';
+            payload.telegramChatId = document.getElementById('editTelegramChatId').value.trim() || '';
+            payload.webhookUrl = document.getElementById('editWebhookUrl').value.trim() || '';
+            payload.autoReplyEnabled = document.getElementById('editAutoReplyEnabled').checked;
+            payload.autoReplySubject = document.getElementById('editAutoReplySubject').value.trim() || '';
+            payload.autoReplyTemplate = document.getElementById('editAutoReplyTemplate').value || '';
             try {
                 var res = await fetch('/admin/api/websites/' + encodeURIComponent(id), {
                     method: 'PUT',
@@ -2511,6 +2566,24 @@
             if (val) { createDomains.push(val); input.value = ''; renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain'); }
         }
         function removeCreateDomain(i) { createDomains.splice(i, 1); renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain'); }
+
+        // Multiple recipients chip management
+        var editRecipients = [];
+        var createRecipients = [];
+
+        function addEditRecipient() {
+            var input = document.getElementById('editNewRecipient');
+            var val = input.value.trim();
+            if (val) { editRecipients.push(val); input.value = ''; renderDomainList('editRecipientsContainer', editRecipients, 'removeEditRecipient'); }
+        }
+        function removeEditRecipient(i) { editRecipients.splice(i, 1); renderDomainList('editRecipientsContainer', editRecipients, 'removeEditRecipient'); }
+
+        function addCreateRecipient() {
+            var input = document.getElementById('createNewRecipient');
+            var val = input.value.trim();
+            if (val) { createRecipients.push(val); input.value = ''; renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient'); }
+        }
+        function removeCreateRecipient(i) { createRecipients.splice(i, 1); renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient'); }
 
         // ========== Delete Website ==========
         async function deleteWebsite(id) {
@@ -2727,6 +2800,49 @@
             btn.textContent = origText;
         }
 
+        // ========== Backup / Restore ==========
+        async function downloadBackup() {
+            try {
+                var res = await fetch('/admin/api/backup', { headers: { Authorization: auth } });
+                var blob = await res.blob();
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'formpost-backup-' + new Date().toISOString().substring(0, 10) + '.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('Backup downloaded', 'success');
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
+        async function restoreBackup(input) {
+            var file = input.files[0];
+            if (!file) return;
+            if (!confirm('Restore backup? This will overwrite current configuration.')) { input.value = ''; return; }
+            try {
+                var text = await file.text();
+                var data = JSON.parse(text);
+                var res = await fetch('/admin/api/restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify(data)
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast(result.message || 'Restored', 'success');
+                    loadAll();
+                    loadSendersList();
+                } else {
+                    showToast(result.error || 'Restore failed', 'error');
+                }
+            } catch(e) {
+                showToast('Invalid backup file', 'error');
+            }
+            input.value = '';
+        }
+
         // ========== Statistics ==========
         async function resetStatistics(websiteId) {
             if (!confirm(L('confirmResetStats').replace('{id}', websiteId))) return;
@@ -2750,10 +2866,20 @@
         var submissionsModalWebsiteId = '';
         var submissionsModalPage = 1;
 
+        var submissionsSearchTimer = null;
+        function searchSubmissionsDebounced() {
+            clearTimeout(submissionsSearchTimer);
+            submissionsSearchTimer = setTimeout(function() {
+                submissionsModalPage = 1;
+                loadModalSubmissions();
+            }, 300);
+        }
+
         function openSubmissionsModal(websiteId) {
             submissionsModalWebsiteId = websiteId;
             submissionsModalPage = 1;
             document.getElementById('submissionsModalTitle').textContent = websiteId;
+            document.getElementById('submissionsSearch').value = '';
             document.getElementById('submissionsModal').style.display = 'flex';
             loadModalSubmissions();
         }
@@ -2766,9 +2892,12 @@
             if (page) submissionsModalPage = page;
             var container = document.getElementById('submissionsModalContent');
             container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
+            var q = (document.getElementById('submissionsSearch').value || '').trim();
             try {
-                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(submissionsModalWebsiteId) +
-                    '?page=' + submissionsModalPage + '&limit=20', {
+                var url = '/admin/api/submissions/' + encodeURIComponent(submissionsModalWebsiteId) +
+                    '?page=' + submissionsModalPage + '&limit=10';
+                if (q) url += '&q=' + encodeURIComponent(q);
+                var res = await fetch(url, {
                     headers: { Authorization: auth }
                 });
                 var data = await res.json();
@@ -2790,7 +2919,7 @@
                 return;
             }
             // Detect dynamic columns from submissions (exclude metadata)
-            var meta = ['id', 'timestamp', 'ip'];
+            var meta = ['id', 'timestamp', 'ip', '_hp_field'];
             var colSet = {};
             data.submissions.forEach(function(s) {
                 Object.keys(s).forEach(function(k) {
@@ -2836,7 +2965,7 @@
                 content += '<div><strong>' + L('date') + ':</strong> ' + esc(new Date(s.timestamp).toLocaleString()) + '</div>';
             }
             // Show all dynamic fields (skip metadata)
-            var meta = ['id', 'timestamp', 'ip'];
+            var meta = ['id', 'timestamp', 'ip', '_hp_field'];
             Object.keys(s).forEach(function(key) {
                 if (meta.indexOf(key) === -1 && s[key]) {
                     content += '<div><strong>' + esc(fieldLabel(key)) + ':</strong> ' + esc(String(s[key])) + '</div>';

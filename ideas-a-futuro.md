@@ -1,3 +1,1 @@
-- captcha opcional Turnstile / hcaptcha : https://docs.hcaptcha.com/
-- en bandeja de netrada siempre mostrar los ultimos 3
-- 
+- captcha opcional Turnstile / hcaptcha : https://docs.hcaptcha.com/- 
