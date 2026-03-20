@@ -5,7 +5,8 @@
             "subjectPrefix": "Contact Form - ",
             "redirectUrl": "https://example.com/thanks",
             "templatePath": "email-template.html",
-            "turnstileEnabled": true,
+            "captchaEnabled": true,
+            "captchaProvider": "turnstile",
             "allowedDomains": []
         }
     },
@@ -23,9 +24,9 @@
         "user": "",
         "pass": ""
     },
-    "turnstile": {
+    "captcha": {
         "my-form": {
-            "secretKey": "YOUR_TURNSTILE_SECRET_KEY"
+            "secretKey": "YOUR_CAPTCHA_SECRET_KEY"
         }
     },
     "cors": {

@@ -637,8 +637,8 @@
             content: '';
             position: absolute;
             bottom: 0; left: 0; right: 0;
-            height: 40px;
-            background: linear-gradient(transparent, var(--bg-secondary));
+            height: 80px;
+            background: linear-gradient(rgba(255,255,255,0), var(--bg-secondary) 90%);
             pointer-events: none;
             z-index: 1;
         }
@@ -739,7 +739,7 @@
             <div class="header-actions">
                 <button class="header-btn" id="settingsBtn" onclick="openSettingsModal()" title="Senders">&#9881; Senders</button>
                 <button class="header-btn" id="templatesBtn" onclick="openTemplateManager()" data-i18n="templatesBtn">&#9993; Plantillas</button>
-                <button class="header-btn icon-btn" id="langToggleBtn" onclick="toggleLang()" title="EN / ES" style="font-size:0.75rem;font-weight:700;letter-spacing:0.03em;padding:0.3rem 0.5rem;">ES</button>
+                <button class="header-btn icon-btn" id="langToggleBtn" onclick="toggleLang()" title="EN / ES" style="font-size:0.75rem;font-weight:700;letter-spacing:0.03em;">ES</button>
                 <button class="header-btn icon-btn" id="helpBtn" onclick="openHelpModal()" title="Guía de integración"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="18" height="18"><path fill="currentColor" d="M256 512a256 256 0 1 0 0-512 256 256 0 1 0 0 512zm0-336c-17.7 0-32 14.3-32 32 0 13.3-10.7 24-24 24s-24-10.7-24-24c0-44.2 35.8-80 80-80s80 35.8 80 80c0 47.2-36 67.2-56 74.5l0 3.8c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-8.1c0-20.5 14.8-35.2 30.1-40.2 6.4-2.1 13.2-5.5 18.2-10.3 4.3-4.2 7.7-10 7.7-19.6 0-17.7-14.3-32-32-32zM224 368a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></svg></button>
                 <button class="header-btn icon-btn" id="changePasswordBtn" title="Cambiar contraseña"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="16" height="16"><path fill="currentColor" d="M128 96l0 64 128 0 0-64c0-35.3-28.7-64-64-64s-64 28.7-64 64zM64 160l0-64C64 25.3 121.3-32 192-32S320 25.3 320 96l0 64c35.3 0 64 28.7 64 64l0 224c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64L0 224c0-35.3 28.7-64 64-64z"/></svg></button>
                 <button class="logout-btn icon-btn" id="logoutBtn" title="Cerrar sesión"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="18" height="18"><path fill="currentColor" d="M160 96c17.7 0 32-14.3 32-32s-14.3-32-32-32L96 32C43 32 0 75 0 128L0 384c0 53 43 96 96 96l64 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-64 0c-17.7 0-32-14.3-32-32l0-256c0-17.7 14.3-32 32-32l64 0zM502.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-128-128c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L402.7 224 192 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l210.7 0-73.4 73.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l128-128z"/></svg></button>
@@ -833,13 +833,22 @@
                             <option value="">Loading...</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label data-i18n="turnstileKey">Turnstile Secret Key</label>
-                        <input type="text" name="editTurnstileKey" id="editTurnstileKey" />
-                    </div>
                     <div class="checkbox-group">
-                        <input type="checkbox" name="editTurnstileEnabled" id="editTurnstileEnabled" />
-                        <label for="editTurnstileEnabled" data-i18n="turnstileEnabledLabel">Enable Turnstile Verification</label>
+                        <input type="checkbox" name="editCaptchaEnabled" id="editCaptchaEnabled" />
+                        <label for="editCaptchaEnabled" data-i18n="captchaEnabledLabel">Enable Captcha Verification</label>
+                    </div>
+                    <div class="form-row" id="editCaptchaOptions" style="margin-top:0.5rem;">
+                        <div class="form-group">
+                            <label data-i18n="captchaProvider">Captcha Provider</label>
+                            <select name="editCaptchaProvider" id="editCaptchaProvider">
+                                <option value="turnstile">Cloudflare Turnstile</option>
+                                <option value="hcaptcha">hCaptcha</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="captchaKey">Secret Key</label>
+                            <input type="text" name="editCaptchaKey" id="editCaptchaKey" />
+                        </div>
                     </div>
                     <div class="form-group" style="margin-top:1rem;">
                         <label data-i18n="allowedDomains">Allowed Domains</label>
@@ -914,16 +923,22 @@
                         </select>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label data-i18n="turnstileKeyOpt">Turnstile Secret Key (optional)</label>
-                        <input type="text" name="turnstileKey" placeholder="0x4AAAAA..." />
-                    </div>
-                    <div class="form-group"></div>
-                </div>
                 <div class="checkbox-group">
-                    <input type="checkbox" name="turnstileEnabled" id="createTurnstileEnabled" checked />
-                    <label for="createTurnstileEnabled" data-i18n="turnstileEnabledLabel">Enable Turnstile Verification</label>
+                    <input type="checkbox" name="captchaEnabled" id="createCaptchaEnabled" checked />
+                    <label for="createCaptchaEnabled" data-i18n="captchaEnabledLabel">Enable Captcha Verification</label>
+                </div>
+                <div class="form-row" id="createCaptchaOptions" style="margin-top:0.5rem;">
+                    <div class="form-group">
+                        <label data-i18n="captchaProvider">Captcha Provider</label>
+                        <select name="captchaProvider" id="createCaptchaProvider">
+                            <option value="turnstile">Cloudflare Turnstile</option>
+                            <option value="hcaptcha">hCaptcha</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="captchaKeyOpt">Secret Key (optional)</label>
+                        <input type="text" name="captchaKey" placeholder="0x4AAAAA..." />
+                    </div>
                 </div>
                 <div class="form-group" style="margin-top:1rem;">
                     <label data-i18n="allowedDomains">Allowed Domains</label>
@@ -1124,7 +1139,8 @@
                 statusUnavailable: 'Status unavailable',
                 // Cards
                 to: 'To', subject: 'Subject', redirect: 'Redirect', template: 'Template',
-                turnstileOn: 'Enabled', turnstileOff: 'Disabled', turnstileEnabledLabel: 'Enable Turnstile Verification',
+                captchaOn: 'Enabled', captchaOff: 'Disabled', captchaEnabledLabel: 'Enable Captcha Verification',
+                captchaProvider: 'Captcha Provider', captchaKey: 'Secret Key', captchaKeyOpt: 'Secret Key (optional)',
                 submissions: 'Submissions', lastSubmission: 'Last Submission',
                 never: 'Never', addFormCard: 'Add Form', edit: 'Edit', delete: 'Delete',
                 failedLoadForms: 'Failed to load forms',
@@ -1133,7 +1149,6 @@
                 toEmail: 'To Email', subjectPrefix: 'Subject Prefix',
                 redirectUrl: 'Redirect URL', redirectUrlOpt: 'Redirect URL (optional)',
                 templatePath: 'Template Path',
-                turnstileKey: 'Turnstile Secret Key', turnstileKeyOpt: 'Turnstile Secret Key (optional)',
                 allowedDomains: 'Allowed Domains', allowedDomainsHint: 'Leave empty to allow all domains',
                 discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Leave empty to disable Discord notifications',
                 cancel: 'Cancel', saveChanges: 'Save Changes', addForm: 'Add Form',
@@ -1190,7 +1205,7 @@
                 helpStep1: 'Create an HTML form with <code>method="POST"</code> and <code>action</code> pointing to this server\'s <code>/submit</code> endpoint.',
                 helpStep2: 'Include a hidden field <code>website_id</code> with the form identifier.',
                 helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
-                helpStep4: 'If Turnstile is configured, add the Cloudflare Turnstile widget with your site key.',
+                helpStep4: 'If captcha is configured, add the corresponding widget (Cloudflare Turnstile or hCaptcha) with your site key.',
                 helpStep5: 'The server will send an HTML email to the configured recipient and optionally redirect the user.',
                 helpCopyTip: 'Use the <strong>clipboard icon</strong> on each form card to copy a detailed, LLM-ready integration prompt specific to that form\'s configuration.',
                 // Templates
@@ -1221,7 +1236,8 @@
                 statusUnavailable: 'Estado no disponible',
                 // Cards
                 to: 'Destino', subject: 'Asunto', redirect: 'Redirecci\u00f3n', template: 'Plantilla',
-                turnstileOn: 'Activo', turnstileOff: 'Desactivado', turnstileEnabledLabel: 'Activar Verificaci\u00f3n Turnstile',
+                captchaOn: 'Activo', captchaOff: 'Desactivado', captchaEnabledLabel: 'Activar Verificaci\u00f3n Captcha',
+                captchaProvider: 'Proveedor de Captcha', captchaKey: 'Clave Secreta', captchaKeyOpt: 'Clave Secreta (opcional)',
                 submissions: 'Env\u00edos', lastSubmission: '\u00daltimo Env\u00edo',
                 never: 'Nunca', addFormCard: 'Agregar Formulario', edit: 'Editar', delete: 'Eliminar',
                 failedLoadForms: 'Error al cargar formularios',
@@ -1230,7 +1246,6 @@
                 toEmail: 'Email Destino', subjectPrefix: 'Prefijo de Asunto',
                 redirectUrl: 'URL de Redirecci\u00f3n', redirectUrlOpt: 'URL de Redirecci\u00f3n (opcional)',
                 templatePath: 'Ruta de Plantilla',
-                turnstileKey: 'Clave Secreta Turnstile', turnstileKeyOpt: 'Clave Secreta Turnstile (opcional)',
                 allowedDomains: 'Dominios Permitidos', allowedDomainsHint: 'Dejar vac\u00edo para permitir todos los dominios',
                 discordWebhook: 'Discord Webhook URL', discordWebhookHint: 'Dejar vac\u00edo para desactivar notificaciones Discord',
                 cancel: 'Cancelar', saveChanges: 'Guardar Cambios', addForm: 'Agregar Formulario',
@@ -1288,7 +1303,7 @@
                 helpStep1: 'Crea un formulario HTML con <code>method="POST"</code> y <code>action</code> apuntando al endpoint <code>/submit</code> de este servidor.',
                 helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del formulario.',
                 helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
-                helpStep4: 'Si Turnstile est\u00e1 configurado, agrega el widget de Cloudflare Turnstile con tu site key.',
+                helpStep4: 'Si el captcha est\u00e1 configurado, agrega el widget correspondiente (Cloudflare Turnstile o hCaptcha) con tu site key.',
                 helpStep5: 'El servidor enviar\u00e1 un email HTML al destinatario configurado y opcionalmente redirigir\u00e1 al usuario.',
                 helpCopyTip: 'Usa el <strong>\u00edcono de portapapeles</strong> en cada tarjeta de formulario para copiar un prompt detallado de integraci\u00f3n espec\u00edfico a la configuraci\u00f3n de ese formulario, listo para usar con un LLM.',
                 // Templates
@@ -1724,10 +1739,11 @@
                     : L('never');
                 var ci = function(label, value) { return '<div class="card-info"><span class="card-info-label">' + label + ':</span> <span class="card-info-value">' + value + '</span></div>'; };
                 var redirect = cfg.redirectUrl ? ci(L('redirect'), '<a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a>') : '';
-                var turnstile = '';
-                if (cfg.turnstileKey) {
-                    var tsEnabled = cfg.turnstileEnabled !== false;
-                    turnstile = ci('Turnstile', tsEnabled ? '<span style="color:var(--success)">' + L('turnstileOn') + '</span>' : '<span style="color:var(--danger)">' + L('turnstileOff') + '</span>');
+                var captchaInfo = '';
+                if (cfg.captchaKey || cfg.turnstileKey) {
+                    var capEnabled = (cfg.captchaEnabled !== undefined ? cfg.captchaEnabled : cfg.turnstileEnabled) !== false;
+                    var providerLabel = (cfg.captchaProvider || 'turnstile') === 'hcaptcha' ? 'hCaptcha' : 'Turnstile';
+                    captchaInfo = ci('Captcha (' + providerLabel + ')', capEnabled ? '<span style="color:var(--success)">' + L('captchaOn') + '</span>' : '<span style="color:var(--danger)">' + L('captchaOff') + '</span>');
                 }
                 var domains = '';
                 if (cfg.allowedDomains && cfg.allowedDomains.length > 0) {
@@ -1739,7 +1755,7 @@
                 } else if (cfg.senderId) {
                     senderLabel = ci(L('sender'), esc(cfg.senderId));
                 }
-                var discord = cfg.discordWebhook ? ci('Discord', '<span style="color:var(--success)">' + L('turnstileOn') + '</span>') : '';
+                var discord = cfg.discordWebhook ? ci('Discord', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
 
                 return '<div class="website-card">' +
                     '<div style="display:flex;align-items:center;justify-content:space-between;">' +
@@ -1752,7 +1768,7 @@
                     '<div class="card-details collapsed">' +
                         ci(L('to'), esc(cfg.to)) +
                         ci(L('subject'), esc(cfg.subjectPrefix)) +
-                        redirect + turnstile + domains + senderLabel + discord +
+                        redirect + captchaInfo + domains + senderLabel + discord +
                         ci(L('template'), esc(cfg.templatePath)) +
                     '</div>' +
                     '<div class="card-stats">' +
@@ -1788,7 +1804,8 @@
             var cfg = websitesCache[websiteId];
             if (!cfg) return;
             var serverUrl = window.location.origin;
-            var hasTurnstile = !!cfg.turnstileKey;
+            var hasCaptcha = !!(cfg.captchaKey || cfg.turnstileKey);
+            var captchaProvider = cfg.captchaProvider || 'turnstile';
 
             var prompt = '## Form Integration Instructions for "' + websiteId + '"\n\n';
             prompt += 'I need you to create a contact form that submits data to my form processing backend.\n\n';
@@ -1812,7 +1829,13 @@
             prompt += '- `message` or `mensaje` - Message body\n';
             prompt += '- Any custom fields you need (e.g. `company`, `budget`, `service`, `rooms`)\n\n';
             prompt += 'Field names are auto-converted to labels in the email (e.g. `correo_electronico` becomes `Correo Electronico`).\n\n';
-            if (hasTurnstile) {
+            if (hasCaptcha && captchaProvider === 'hcaptcha') {
+                prompt += '### Bot Protection (hCaptcha)\n';
+                prompt += 'This website has hCaptcha enabled. You must:\n';
+                prompt += '1. Add the hCaptcha script: `<script src="https://js.hcaptcha.com/1/api.js" async defer><\/script>`\n';
+                prompt += '2. Add the widget inside the form: `<div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div>`\n';
+                prompt += '3. The `h-captcha-response` field is automatically added and verified server-side.\n\n';
+            } else if (hasCaptcha) {
                 prompt += '### Bot Protection (Cloudflare Turnstile)\n';
                 prompt += 'This website has Turnstile enabled. You must:\n';
                 prompt += '1. Add the Turnstile script: `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script>`\n';
@@ -1832,12 +1855,16 @@
             prompt += '    <label>Name: <input type="text" name="name" required></label>\n';
             prompt += '    <label>Email: <input type="email" name="email" required></label>\n';
             prompt += '    <label>Message: <textarea name="message"></textarea></label>\n';
-            if (hasTurnstile) {
+            if (hasCaptcha && captchaProvider === 'hcaptcha') {
+                prompt += '    <div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div>\n';
+            } else if (hasCaptcha) {
                 prompt += '    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>\n';
             }
             prompt += '    <button type="submit">Send</button>\n';
             prompt += '</form>\n';
-            if (hasTurnstile) {
+            if (hasCaptcha && captchaProvider === 'hcaptcha') {
+                prompt += '<script src="https://js.hcaptcha.com/1/api.js" async defer><\/script>\n';
+            } else if (hasCaptcha) {
                 prompt += '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script>\n';
             }
             prompt += '```\n\n';
@@ -1875,12 +1902,14 @@
                 '    &lt;label&gt;Email: &lt;input type="email" name="email" required&gt;&lt;/label&gt;\n' +
                 '    &lt;label&gt;Phone: &lt;input type="tel" name="phone"&gt;&lt;/label&gt;\n' +
                 '    &lt;label&gt;Message: &lt;textarea name="message"&gt;&lt;/textarea&gt;&lt;/label&gt;\n\n' +
-                '    &lt;!-- Optional: Cloudflare Turnstile (if enabled for this form) --&gt;\n' +
-                '    &lt;!-- &lt;div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt; --&gt;\n\n' +
+                '    &lt;!-- Optional: Captcha (Turnstile or hCaptcha, if enabled) --&gt;\n' +
+                '    &lt;!-- Turnstile: &lt;div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt; --&gt;\n' +
+                '    &lt;!-- hCaptcha:   &lt;div class="h-captcha" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt; --&gt;\n\n' +
                 '    &lt;button type="submit"&gt;Send&lt;/button&gt;\n' +
                 '&lt;/form&gt;\n\n' +
-                '&lt;!-- Include Turnstile script only if using Turnstile --&gt;\n' +
-                '&lt;!-- &lt;script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer&gt;&lt;/script&gt; --&gt;';
+                '&lt;!-- Include captcha script only if using captcha --&gt;\n' +
+                '&lt;!-- Turnstile: &lt;script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer&gt;&lt;/script&gt; --&gt;\n' +
+                '&lt;!-- hCaptcha:   &lt;script src="https://js.hcaptcha.com/1/api.js" async defer&gt;&lt;/script&gt; --&gt;';
 
             var rawCode = '<form action="' + serverUrl + '/submit" method="POST">\n' +
                 '    <input type="hidden" name="website_id" value="YOUR_FORM_ID">\n\n' +
@@ -1890,12 +1919,14 @@
                 '    <label>Email: <input type="email" name="email" required></label>\n' +
                 '    <label>Phone: <input type="tel" name="phone"></label>\n' +
                 '    <label>Message: <textarea name="message"></textarea></label>\n\n' +
-                '    <!-- Optional: Cloudflare Turnstile (if enabled for this form) -->\n' +
-                '    <!-- <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div> -->\n\n' +
+                '    <!-- Optional: Captcha (Turnstile or hCaptcha, if enabled) -->\n' +
+                '    <!-- Turnstile: <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div> -->\n' +
+                '    <!-- hCaptcha:   <div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div> -->\n\n' +
                 '    <button type="submit">Send</button>\n' +
                 '</form>\n\n' +
-                '<!-- Include Turnstile script only if using Turnstile -->\n' +
-                '<!-- <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script> -->';
+                '<!-- Include captcha script only if using captcha -->\n' +
+                '<!-- Turnstile: <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer><\/script> -->\n' +
+                '<!-- hCaptcha:   <script src="https://js.hcaptcha.com/1/api.js" async defer><\/script> -->';
 
             content += '<h4 style="margin-top:1.25rem;">' + L('helpExampleTitle') + '</h4>';
             content += '<div style="position:relative;">';
@@ -1959,9 +1990,10 @@
             if (redirectUrl) payload.config.redirectUrl = redirectUrl;
             var senderId = formData.get('senderId');
             if (senderId) payload.config.senderId = senderId;
-            var turnstileKey = formData.get('turnstileKey');
-            if (turnstileKey) payload.config.turnstileKey = turnstileKey;
-            payload.config.turnstileEnabled = document.getElementById('createTurnstileEnabled').checked;
+            var captchaKey = formData.get('captchaKey');
+            if (captchaKey) payload.config.captchaKey = captchaKey;
+            payload.config.captchaEnabled = document.getElementById('createCaptchaEnabled').checked;
+            payload.config.captchaProvider = document.getElementById('createCaptchaProvider').value;
             if (createDomains.length > 0) payload.config.allowedDomains = createDomains.slice();
             var createDiscord = document.getElementById('createDiscordWebhook').value.trim();
             if (createDiscord) payload.config.discordWebhook = createDiscord;
@@ -2005,8 +2037,9 @@
                     populateTemplateDropdown('editTemplatePath', cfg.templatePath || ''),
                     populateSenderDropdown('editSenderId', cfg.senderId || '')
                 ]);
-                document.getElementById('editTurnstileKey').value = cfg.turnstileKey || '';
-                document.getElementById('editTurnstileEnabled').checked = cfg.turnstileEnabled !== false;
+                document.getElementById('editCaptchaKey').value = cfg.captchaKey || cfg.turnstileKey || '';
+                document.getElementById('editCaptchaEnabled').checked = (cfg.captchaEnabled !== undefined ? cfg.captchaEnabled : cfg.turnstileEnabled) !== false;
+                document.getElementById('editCaptchaProvider').value = cfg.captchaProvider || 'turnstile';
                 document.getElementById('editDiscordWebhook').value = cfg.discordWebhook || '';
                 editDomains = (cfg.allowedDomains || []).slice();
                 renderDomainList('editDomainsContainer', editDomains, 'removeEditDomain');
@@ -2033,9 +2066,10 @@
                 templatePath: document.getElementById('editTemplatePath').value,
                 senderId: document.getElementById('editSenderId').value
             };
-            var turnstileKey = document.getElementById('editTurnstileKey').value;
-            if (turnstileKey) payload.turnstileKey = turnstileKey;
-            payload.turnstileEnabled = document.getElementById('editTurnstileEnabled').checked;
+            var captchaKey = document.getElementById('editCaptchaKey').value;
+            if (captchaKey) payload.captchaKey = captchaKey;
+            payload.captchaEnabled = document.getElementById('editCaptchaEnabled').checked;
+            payload.captchaProvider = document.getElementById('editCaptchaProvider').value;
             payload.allowedDomains = editDomains.slice();
             var editDiscord = document.getElementById('editDiscordWebhook').value.trim();
             payload.discordWebhook = editDiscord || '';

@@ -348,7 +348,7 @@ function fieldToLabel(fieldName) {
 }
 
 app.post('/submit', submitLimiter, async (req, res) => {
-    const { website_id, 'cf-turnstile-response': turnstileToken, _hp_field: honeypot, ...formFields } = req.body;
+    const { website_id, 'cf-turnstile-response': turnstileToken, 'h-captcha-response': hcaptchaToken, 'g-recaptcha-response': gRecaptchaToken, _hp_field: honeypot, ...formFields } = req.body;
 
     // Honeypot check: if the hidden field has a value, silently reject (bot filled it)
     if (honeypot) {
@@ -397,26 +397,35 @@ app.post('/submit', submitLimiter, async (req, res) => {
     const email = formFields.email || formFields.correo || formFields.e_mail || '';
     if (email && !isValidEmail(email)) return res.status(400).send(t.invalidEmail);
 
-    // Verify Cloudflare Turnstile token (skip if DEBUG or turnstile disabled for this form)
-    const turnstileEnabled = recipientConfig.turnstileEnabled !== false && !!config.turnstile[website_id];
-    if (!DEBUG && turnstileEnabled) {
-        if (!turnstileToken) {
-            log.warn('No Turnstile token provided', { formId: website_id });
+    // Verify captcha token (skip if DEBUG or captcha disabled for this form)
+    // Backward compat: support both config.captcha and config.turnstile, and both captchaEnabled and turnstileEnabled
+    const captchaSecrets = config.captcha || config.turnstile || {};
+    const captchaEnabled = (recipientConfig.captchaEnabled !== undefined ? recipientConfig.captchaEnabled : recipientConfig.turnstileEnabled) !== false && !!captchaSecrets[website_id];
+    if (!DEBUG && captchaEnabled) {
+        const provider = recipientConfig.captchaProvider || 'turnstile';
+        const captchaToken = provider === 'hcaptcha' ? (hcaptchaToken || gRecaptchaToken) : turnstileToken;
+
+        if (!captchaToken) {
+            log.warn('No captcha token provided', { formId: website_id, provider });
             return res.status(400).send(t.completeCaptcha);
         }
 
-        const turnstileConfig = config.turnstile[website_id];
-        if (!turnstileConfig) {
-            log.error('No Turnstile config found', { formId: website_id });
+        const captchaConfig = captchaSecrets[website_id];
+        if (!captchaConfig) {
+            log.error('No captcha config found', { formId: website_id, provider });
             return res.status(400).send(t.invalidSubmission);
         }
 
+        const verifyUrl = provider === 'hcaptcha'
+            ? 'https://api.hcaptcha.com/siteverify'
+            : 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+
         try {
             const verificationResponse = await axios.post(
-                'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+                verifyUrl,
                 new URLSearchParams({
-                    secret: turnstileConfig.secretKey,
-                    response: turnstileToken,
+                    secret: captchaConfig.secretKey,
+                    response: captchaToken,
                     remoteip: req.ip
                 }),
                 { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
@@ -424,17 +433,17 @@ app.post('/submit', submitLimiter, async (req, res) => {
 
             const { success, 'error-codes': errorCodes } = verificationResponse.data;
             if (!success) {
-                log.warn('Turnstile verification failed', { formId: website_id, errorCodes });
+                log.warn('Captcha verification failed', { formId: website_id, provider, errorCodes });
                 return res.status(400).send(t.captchaFailed);
             }
         } catch (error) {
-            log.error('Error verifying Turnstile token', { formId: website_id, error: error.message });
+            log.error('Error verifying captcha token', { formId: website_id, provider, error: error.message });
             return res.status(500).send(t.captchaError);
         }
     } else if (DEBUG) {
-        log.info('DEBUG mode: Skipping Turnstile verification', { formId: website_id });
+        log.info('DEBUG mode: Skipping captcha verification', { formId: website_id });
     } else {
-        log.info('Turnstile disabled, skipping verification', { formId: website_id });
+        log.info('Captcha disabled, skipping verification', { formId: website_id });
     }
 
     // Build email from template or generate dynamic email
@@ -534,7 +543,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     name: formFields.name || formFields.nombre || formFields.full_name || '',
                     email: formFields.email || formFields.correo || formFields.e_mail || '',
                     preview: fieldEntries
-                        .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response'].includes(k))
+                        .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
                         .slice(0, 5)
                         .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }))
                 });
@@ -562,7 +571,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     const sName = formFields.name || formFields.nombre || formFields.full_name || 'Unknown';
                     const sEmail = email || 'N/A';
                     const fieldsForDiscord = fieldEntries
-                        .filter(([k]) => !['website_id','cf-turnstile-response','_hp_field'].includes(k))
+                        .filter(([k]) => !['website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response','_hp_field'].includes(k))
                         .slice(0, 10)
                         .map(([k, v]) => ({ name: fieldToLabel(k), value: String(v || '').substring(0, 200) || '-', inline: true }));
                     await axios.post(recipientConfig.discordWebhook, {
@@ -675,7 +684,7 @@ adminRouter.get('/status', async (req, res) => {
             config: {
                 websites: Object.keys(config.recipients),
                 senders: Object.keys(config.senders || {}),
-                turnstile: Object.keys(config.turnstile || {})
+                captcha: Object.keys(config.captcha || config.turnstile || {})
             }
         });
     } catch (e) {
@@ -703,9 +712,9 @@ adminRouter.post('/websites', async (req, res) => {
     try {
         await writeConfigSafe(cfg => {
             cfg.recipients[id] = siteConfig;
-            if (siteConfig.turnstileKey) {
-                if (!cfg.turnstile) cfg.turnstile = {};
-                cfg.turnstile[id] = { secretKey: siteConfig.turnstileKey };
+            if (siteConfig.captchaKey) {
+                if (!cfg.captcha) cfg.captcha = {};
+                cfg.captcha[id] = { secretKey: siteConfig.captchaKey };
             }
         });
         res.status(201).json({ message: t.formAdded });
@@ -724,14 +733,17 @@ adminRouter.put('/websites/:id', async (req, res) => {
     try {
         await writeConfigSafe(cfg => {
             cfg.recipients[id] = { ...cfg.recipients[id], ...siteConfig };
-            if (siteConfig.turnstileKey) {
-                if (!cfg.turnstile) cfg.turnstile = {};
-                cfg.turnstile[id] = { secretKey: siteConfig.turnstileKey };
+            if (siteConfig.captchaKey) {
+                if (!cfg.captcha) cfg.captcha = {};
+                cfg.captcha[id] = { secretKey: siteConfig.captchaKey };
             }
-            if (siteConfig.turnstileEnabled === false) {
-                cfg.recipients[id].turnstileEnabled = false;
-            } else if (siteConfig.turnstileEnabled === true) {
-                cfg.recipients[id].turnstileEnabled = true;
+            if (siteConfig.captchaEnabled === false) {
+                cfg.recipients[id].captchaEnabled = false;
+            } else if (siteConfig.captchaEnabled === true) {
+                cfg.recipients[id].captchaEnabled = true;
+            }
+            if (siteConfig.captchaProvider) {
+                cfg.recipients[id].captchaProvider = siteConfig.captchaProvider;
             }
         });
         res.json({ message: t.formUpdated });
@@ -749,6 +761,10 @@ adminRouter.delete('/websites/:id', async (req, res) => {
     try {
         await writeConfigSafe(cfg => {
             delete cfg.recipients[id];
+            if (cfg.captcha && cfg.captcha[id]) {
+                delete cfg.captcha[id];
+            }
+            // Backward compat cleanup
             if (cfg.turnstile && cfg.turnstile[id]) {
                 delete cfg.turnstile[id];
             }
@@ -1134,7 +1150,7 @@ adminRouter.get('/inbox/recent', async (req, res) => {
             const name = sub.name || sub.nombre || sub.full_name || '';
             const email = sub.email || sub.correo || sub.e_mail || '';
             const preview = fields
-                .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response'].includes(k))
+                .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
                 .slice(0, 2)
                 .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }));
             all.push({ websiteId: formId, id: sub.id, timestamp: sub.timestamp, name, email, preview });
