@@ -176,7 +176,7 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
             scriptSrcAttr: ["'unsafe-inline'"],
             imgSrc: ["'self'", "data:"],
             frameSrc: ["'self'"],
@@ -914,6 +914,32 @@ adminRouter.put('/statistics/:id/reset', async (req, res) => {
         log.error('Failed to reset statistics', { error: e.message });
         res.status(500).json({ error: t.failedResetStats });
     }
+});
+
+// Submissions chart data: aggregated by day per form
+adminRouter.get('/statistics/chart', async (req, res) => {
+    const period = req.query.period || 'month';
+    const now = new Date();
+    let since;
+    if (period === 'today') since = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    else if (period === 'week') { since = new Date(now); since.setDate(since.getDate() - 7); }
+    else if (period === 'year') { since = new Date(now); since.setFullYear(since.getFullYear() - 1); }
+    else { since = new Date(now); since.setDate(since.getDate() - 30); }
+
+    const result = {};
+    for (const formId of Object.keys(config.recipients)) {
+        const submissions = await loadSubmissions(formId);
+        const dailyCounts = {};
+        for (const sub of submissions) {
+            if (!sub.timestamp) continue;
+            const d = new Date(sub.timestamp);
+            if (d < since) continue;
+            const key = d.toISOString().substring(0, 10);
+            dailyCounts[key] = (dailyCounts[key] || 0) + 1;
+        }
+        result[formId] = dailyCounts;
+    }
+    res.json(result);
 });
 
 // Submissions routes
