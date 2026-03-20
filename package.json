@@ -1,6 +1,6 @@
 {
   "name": "formpost",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Form processing backend with email routing, Turnstile protection, and admin panel",
   "main": "server.js",
   "scripts": {

@@ -1123,6 +1123,27 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
     }
 });
 
+// Recent inbox entries (last N submissions across all forms)
+adminRouter.get('/inbox/recent', async (req, res) => {
+    const limit = Math.min(10, Math.max(1, parseInt(req.query.limit) || 4));
+    const all = [];
+    for (const formId of Object.keys(config.recipients)) {
+        const subs = await loadSubmissions(formId);
+        for (const sub of subs.slice(0, limit)) {
+            const fields = Object.entries(sub).filter(([k]) => !['id','timestamp','ip'].includes(k));
+            const name = sub.name || sub.nombre || sub.full_name || '';
+            const email = sub.email || sub.correo || sub.e_mail || '';
+            const preview = fields
+                .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response'].includes(k))
+                .slice(0, 2)
+                .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }));
+            all.push({ websiteId: formId, id: sub.id, timestamp: sub.timestamp, name, email, preview });
+        }
+    }
+    all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json(all.slice(0, limit));
+});
+
 // SSE token management - temporary tokens instead of credentials in query string
 const sseTokens = new Map(); // token -> { expires }
 const SSE_TOKEN_TTL = 5 * 60 * 1000; // 5 minutes

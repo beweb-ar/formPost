@@ -106,8 +106,13 @@
             border-color: var(--accent-primary);
         }
 
-        .website-card h4 { margin: 0 0 0.75rem 0; color: var(--accent-primary); font-weight: 700; font-size: 1.05rem; }
+        .website-card h4 { margin: 0; color: var(--accent-primary); font-weight: 700; font-size: 1.05rem; }
         .website-card .card-info { margin-bottom: 0.3rem; font-size: 0.82rem; display: flex; gap: 0.35rem; }
+        .card-details { overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 500px; opacity: 1; padding-top: 0.75rem; }
+        .card-details.collapsed { max-height: 0; opacity: 0; padding-top: 0; }
+        .card-toggle { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 0.2rem; display: flex; align-items: center; transition: transform 0.3s ease; font-size: 0.75rem; }
+        .card-toggle:hover { color: var(--accent-primary); }
+        .card-toggle.collapsed { transform: rotate(-90deg); }
         .card-info-label { color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
         .card-info-value { color: var(--accent-primary); font-weight: 500; }
         .website-card a { color: var(--accent-primary); text-decoration: none; font-weight: 500; }
@@ -693,7 +698,7 @@
     <!-- Login Overlay -->
     <div class="login-overlay" id="loginOverlay">
         <div class="login-box">
-            <h2 data-i18n="loginTitle">Admin Login</h2>
+            <p style="text-align:center;margin-bottom:1.5rem;"><img src="/logo.png" alt="formPost" style="height:48px;" /></p>
             <form id="loginForm">
                 <div class="form-group">
                     <label for="loginUser" data-i18n="username">Username</label>
@@ -779,7 +784,7 @@
     <footer class="app-footer" id="appFooter" style="display:none;">
         <span>formPost <span id="footerVersion"></span></span>
         <span class="footer-separator">-</span>
-        <span class="footer-made">hecho con <span class="footer-heart">&#10084;</span> por <img src="/logo_beweb.png" alt="beWeb" class="footer-beweb-logo" /></span>
+        <span class="footer-made">hecho con <span class="footer-heart">&#10084;</span> por <a href="https://beweb.com.ar" target="_blank" rel="noopener noreferrer"><img src="/logo_beweb.png" alt="beWeb" class="footer-beweb-logo" /></a></span>
     </footer>
 
     <!-- Edit Website Modal -->
@@ -1480,10 +1485,26 @@
             loadWebsitesWithStats();
         }
 
+        async function loadRecentInbox() {
+            if (!auth) return;
+            try {
+                var res = await fetch('/admin/api/inbox/recent?limit=4', { headers: { Authorization: auth } });
+                if (!res.ok) return;
+                var entries = await res.json();
+                // Only load if inbox is empty (don't overwrite live entries)
+                if (inboxEntries.length === 0 && entries.length > 0) {
+                    inboxEntries = entries;
+                    renderInboxEntries();
+                }
+            } catch(e) {}
+        }
+
         async function connectInbox() {
             if (!auth) return;
             if (inboxEventSource) inboxEventSource.close();
             setInboxStatus('reconnecting');
+            // Load recent submissions so inbox is never empty on start
+            await loadRecentInbox();
             try {
                 var res = await fetch('/admin/api/inbox/token', {
                     method: 'POST',
@@ -1690,13 +1711,18 @@
 
                 return '<div class="website-card">' +
                     '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-                        '<h4 style="margin:0;">' + esc(id) + '</h4>' +
+                        '<div style="display:flex;align-items:center;gap:0.4rem;">' +
+                            '<button class="card-toggle collapsed" onclick="toggleCardDetails(this)" title="Expand">&#9660;</button>' +
+                            '<h4>' + esc(id) + '</h4>' +
+                        '</div>' +
                         '<button class="btn-icon btn-icon-accent" onclick="copyIntegrationPrompt(\'' + esc(id) + '\')" title="' + L('copyPromptHint') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="14" height="14"><path fill="currentColor" d="M232 96l-80 0c-13.3 0-24-10.7-24-24s10.7-24 24-24l80 0c13.3 0 24 10.7 24 24s-10.7 24-24 24zm0 48c37.1 0 67.6-28 71.6-64L320 80c8.8 0 16 7.2 16 16l0 352c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16L48 96c0-8.8 7.2-16 16-16l16.4 0c4 36 34.5 64 71.6 64l80 0zM291.9 32C279 12.7 257 0 232 0L152 0c-25 0-47 12.7-59.9 32L64 32C28.7 32 0 60.7 0 96L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-352c0-35.3-28.7-64-64-64l-28.1 0z"/></svg></button>' +
                     '</div>' +
-                    ci(L('to'), esc(cfg.to)) +
-                    ci(L('subject'), esc(cfg.subjectPrefix)) +
-                    redirect + turnstile + domains + senderLabel + discord +
-                    ci(L('template'), esc(cfg.templatePath)) +
+                    '<div class="card-details collapsed">' +
+                        ci(L('to'), esc(cfg.to)) +
+                        ci(L('subject'), esc(cfg.subjectPrefix)) +
+                        redirect + turnstile + domains + senderLabel + discord +
+                        ci(L('template'), esc(cfg.templatePath)) +
+                    '</div>' +
                     '<div class="card-stats">' +
                         '<div class="card-stat"><span class="card-stat-value">' + subCount + '</span><span class="card-stat-label">' + L('submissions') + '</span></div>' +
                         '<div class="card-stat"><span class="card-stat-value small">' + esc(lastSub) + '</span><span class="card-stat-label">' + L('lastSubmission') + '</span></div>' +
@@ -1716,6 +1742,13 @@
                 '</div>';
 
             container.innerHTML = html;
+        }
+
+        // ========== Card Details Toggle ==========
+        function toggleCardDetails(btn) {
+            var details = btn.closest('.website-card').querySelector('.card-details');
+            btn.classList.toggle('collapsed');
+            details.classList.toggle('collapsed');
         }
 
         // ========== Integration Prompt Copy ==========
