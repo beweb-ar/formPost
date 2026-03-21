@@ -721,11 +721,21 @@
             border-radius: 4px;
             white-space: nowrap;
         }
-        .outbox-channel.email { background: var(--accent-primary); color: white; }
+        .outbox-channel.email { background: #e8713a; color: white; }
         .outbox-channel.discord { background: #5865F2; color: white; }
         .outbox-channel.telegram { background: #26A5E4; color: white; }
         .outbox-status-ok { color: var(--success); font-weight: 600; font-size: 0.7rem; }
         .outbox-status-error { color: var(--danger); font-weight: 600; font-size: 0.7rem; }
+        .submit-method-badge {
+            font-size: 0.6rem;
+            font-weight: 600;
+            padding: 0.1rem 0.35rem;
+            border-radius: 4px;
+            white-space: nowrap;
+            margin-left: 0.2rem;
+        }
+        .submit-method-badge.html { background: #10b981; color: white; }
+        .submit-method-badge.js { background: #f59e0b; color: white; }
     </style>
 </head>
 <body>
@@ -878,6 +888,10 @@
                         <select name="editSenderId" id="editSenderId">
                             <option value="">Loading...</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="senderAlias">Sender Alias (From name)</label>
+                        <input type="text" name="editSenderAlias" id="editSenderAlias" placeholder="e.g. My Company" />
                     </div>
                     <div class="checkbox-group">
                         <input type="checkbox" name="editCaptchaEnabled" id="editCaptchaEnabled" />
@@ -1379,7 +1393,7 @@
                 templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
                 // Senders
                 senders: 'Senders (SMTP Relays)', newSender: '+ New Sender',
-                senderName: 'Name / Alias', sender: 'Sender', senderActive: 'Active',
+                senderName: 'Name / Alias', sender: 'Sender', senderAlias: 'Sender Alias (From name)', senderActive: 'Active',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
@@ -1487,7 +1501,7 @@
                 templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
                 // Senders
                 senders: 'Senders (SMTP Relays)', newSender: '+ Nuevo Sender',
-                senderName: 'Nombre / Alias', sender: 'Sender', senderActive: 'Activo',
+                senderName: 'Nombre / Alias', sender: 'Sender', senderAlias: 'Alias del Sender (nombre del remitente)', senderActive: 'Activo',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -1684,9 +1698,12 @@
                     entry.preview.forEach(function(p) { if (p.value) previewParts.push(p.label + ': ' + p.value); });
                 }
                 var preview = previewParts.join(' | ');
+                var methodLabel = entry.submitMethod === 'js' ? 'JS' : 'POST';
+                var methodClass = entry.submitMethod === 'js' ? 'js' : 'html';
                 return '<div class="inbox-entry" onclick="openSubmissionsModal(\'' + esc(entry.websiteId) + '\')">' +
                     '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
                     '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
+                    '<span class="submit-method-badge ' + methodClass + '">' + methodLabel + '</span>' +
                     '<div class="inbox-entry-content">' +
                         '<div class="inbox-entry-sender">' + esc(sender) + '</div>' +
                         '<div class="inbox-entry-preview">' + esc(preview) + '</div>' +
@@ -1866,8 +1883,8 @@
                 var html = '<table class="submissions-table"><thead><tr><th>' + L('date') + '</th><th>Channel</th><th>To / ' + L('statStatus') + '</th><th>' + L('subject') + '</th><th>' + L('statStatus') + '</th></tr></thead><tbody>';
                 data.entries.forEach(function(entry) {
                     var time = new Date(entry.timestamp).toLocaleString();
-                    var channelLabel = entry.channel === 'email' ? 'Mail' : 'Discord';
-                    var channelClass = entry.channel === 'email' ? 'email' : 'discord';
+                    var channelLabel = entry.channel === 'email' ? 'Mail' : entry.channel === 'telegram' ? 'Telegram' : 'Discord';
+                    var channelClass = entry.channel;
                     var statusColor = entry.status === 'ok' ? 'var(--success)' : entry.status === 'skipped' ? '#f59e0b' : 'var(--danger)';
                     var statusText = entry.status === 'ok' ? 'OK' : entry.status === 'skipped' ? 'Skipped' : 'Error';
                     html += '<tr>' +
@@ -2308,6 +2325,7 @@
                     populateTemplateDropdown('editTemplatePath', cfg.templatePath || ''),
                     populateSenderDropdown('editSenderId', cfg.senderId || '')
                 ]);
+                document.getElementById('editSenderAlias').value = cfg.senderAlias || '';
                 document.getElementById('editCaptchaKey').value = cfg.captchaKey || cfg.turnstileKey || '';
                 document.getElementById('editCaptchaEnabled').checked = (cfg.captchaEnabled !== undefined ? cfg.captchaEnabled : cfg.turnstileEnabled) !== false;
                 document.getElementById('editCaptchaProvider').value = cfg.captchaProvider || 'turnstile';
@@ -2385,7 +2403,8 @@
                 subjectPrefix: document.getElementById('editSubjectPrefix').value,
                 redirectUrl: document.getElementById('editRedirectUrl').value,
                 templatePath: document.getElementById('editTemplatePath').value,
-                senderId: document.getElementById('editSenderId').value
+                senderId: document.getElementById('editSenderId').value,
+                senderAlias: document.getElementById('editSenderAlias').value.trim()
             };
             var captchaKey = document.getElementById('editCaptchaKey').value;
             if (captchaKey) payload.captchaKey = captchaKey;

@@ -420,6 +420,10 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
     const formId = form_id || website_id; // backward compat
     const uploadedFiles = req.files || [];
 
+    // Detect submission method: HTML form POST vs JS fetch/XHR
+    const fetchMode = req.headers['sec-fetch-mode'];
+    const submitMethod = fetchMode === 'navigate' ? 'html' : 'js';
+
     // Clean up temp files when response finishes (covers all exit paths)
     const cleanupFiles = () => {
         for (const f of uploadedFiles) fs.unlink(f.path).catch(() => {});
@@ -569,7 +573,9 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
         }
 
         // Detect name and email for mail metadata
-        const senderName = formFields.name || formFields.nombre || formFields.full_name || 'Contact';
+        const submitterName = formFields.name || formFields.nombre || formFields.full_name || 'Contact';
+        const senderAlias = recipientConfig.senderAlias || '';
+        const senderName = senderAlias || submitterName;
         const senderEmail = email || '';
 
         // Get the correct transporter for this form's sender
@@ -653,7 +659,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                 const submission = {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                     timestamp: new Date().toISOString(),
-                    ip: anonIp
+                    ip: anonIp,
+                    submitMethod
                 };
                 // Store all form fields dynamically
                 for (const [key, value] of fieldEntries) {
@@ -667,6 +674,7 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     websiteId: formId,
                     id: submission.id,
                     timestamp: submission.timestamp,
+                    submitMethod,
                     name: formFields.name || formFields.nombre || formFields.full_name || '',
                     email: formFields.email || formFields.correo || formFields.e_mail || '',
                     preview: fieldEntries
@@ -733,6 +741,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                         timestamp: discordTimestamp,
                         channel: 'discord',
+                        to: 'Discord Webhook',
+                        subject: `${submitterName} - ${email || 'N/A'}`,
                         status: 'ok'
                     };
                     saveOutboxEntry(formId, discordEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
@@ -752,6 +762,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                         timestamp: discordTimestamp,
                         channel: 'discord',
+                        to: 'Discord Webhook',
+                        subject: `${submitterName} - ${email || 'N/A'}`,
                         status: 'error',
                         error: webhookErr.message
                     };
@@ -793,6 +805,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                         timestamp: telegramTimestamp,
                         channel: 'telegram',
+                        to: `Chat ${recipientConfig.telegramChatId}`,
+                        subject: `${submitterName} - ${email || 'N/A'}`,
                         status: 'ok'
                     };
                     saveOutboxEntry(formId, telegramEntry).catch(() => {});
@@ -810,6 +824,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                         timestamp: telegramTimestamp,
                         channel: 'telegram',
+                        to: `Chat ${recipientConfig.telegramChatId}`,
+                        subject: `${submitterName} - ${email || 'N/A'}`,
                         status: 'error',
                         error: telegramErr.message
                     };
@@ -858,7 +874,7 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     }
                     const arSubject = recipientConfig.autoReplySubject || 'Thank you for your submission';
                     await senderInfo.transporter.sendMail({
-                        from: `"${escapeHtml(String(senderInfo.senderCfg.name || 'No Reply'))}" <${senderInfo.senderCfg.from}>`,
+                        from: `"${escapeHtml(String(senderAlias || senderInfo.senderCfg.name || 'No Reply'))}" <${senderInfo.senderCfg.from}>`,
                         to: senderEmail,
                         subject: arSubject,
                         html: autoReplyBody,
@@ -1519,14 +1535,14 @@ adminRouter.get('/inbox/recent', async (req, res) => {
     for (const formId of Object.keys(config.recipients)) {
         const subs = await loadSubmissions(formId);
         for (const sub of subs.slice(0, limit)) {
-            const fields = Object.entries(sub).filter(([k]) => !['id','timestamp','ip'].includes(k));
+            const fields = Object.entries(sub).filter(([k]) => !['id','timestamp','ip','submitMethod'].includes(k));
             const name = sub.name || sub.nombre || sub.full_name || '';
             const email = sub.email || sub.correo || sub.e_mail || '';
             const preview = fields
                 .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','form_id','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
                 .slice(0, 2)
                 .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }));
-            all.push({ websiteId: formId, id: sub.id, timestamp: sub.timestamp, name, email, preview });
+            all.push({ websiteId: formId, id: sub.id, timestamp: sub.timestamp, submitMethod: sub.submitMethod || 'html', name, email, preview });
         }
     }
     all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
