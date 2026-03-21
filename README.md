@@ -44,13 +44,14 @@
 - **Multi-sender SMTP** - Configure multiple SMTP relays with active/disabled toggle per sender
 - **Multiple recipients** - Send to multiple email addresses per form (comma-separated, chip UI)
 - **HTML email notifications** - Custom email templates per form with dynamic field injection
+- **File attachments** - Accept file uploads (max 5 files, 10 MB each) and forward them via email, Discord, and Telegram
 - **Template management** - Create, edit, and delete email templates from the admin UI
 - **Auto-responder** - Automatic confirmation email to the person who submitted the form, with selectable template
 - **Forms without sender** - Forms can work with notifications only (Discord, Telegram, Webhook) without an SMTP sender
 
 ### Notifications
-- **Discord notifications** - Optional per-form Discord webhook for real-time submission alerts
-- **Telegram notifications** - Per-form Telegram bot notifications with automatic Chat ID discovery via "Fetch" button
+- **Discord notifications** - Optional per-form Discord webhook for real-time submission alerts (with file attachments)
+- **Telegram notifications** - Per-form Telegram bot notifications with automatic Chat ID discovery via "Fetch" button (with file attachments)
 - **Generic webhook** - POST JSON payload to any URL on each submission (Slack, Zapier, n8n, custom backends)
 
 ### Bot Protection
@@ -257,20 +258,22 @@ Templates are HTML files with placeholders:
 
 ```html
 <!-- Dynamic mode (recommended) -->
-<h2>New submission from {{website_id}}</h2>
+<h2>New submission from {{form_id}}</h2>
 <ul>{{fields}}</ul>
 
 <!-- Legacy mode -->
 <p><strong>Name:</strong> {{name}}</p>
 ```
 
+> Both `{{form_id}}` and `{{website_id}}` are supported for backward compatibility.
+
 An auto-reply template (`templates/auto-reply.html`) is included for the auto-responder feature.
 
 ## HTML Form Example
 
 ```html
-<form action="https://your-server.com/submit" method="POST">
-    <input type="hidden" name="website_id" value="my-form">
+<form action="https://your-server.com/submit" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="form_id" value="my-form">
 
     <!-- Honeypot anti-spam (hidden, do not remove) -->
     <input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off">
@@ -280,6 +283,9 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
     <label>Phone: <input type="tel" name="phone"></label>
     <label>Message: <textarea name="message"></textarea></label>
 
+    <!-- File attachments (optional, max 5 files, 10 MB each) -->
+    <label>Attachments: <input type="file" name="attachments" multiple></label>
+
     <!-- Captcha (if configured) -->
     <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>
     <!-- or: <div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div> -->
@@ -288,6 +294,8 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 </form>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 ```
+
+> The field `website_id` is still accepted for backward compatibility, but `form_id` is preferred.
 
 ## API Reference
 
@@ -345,6 +353,8 @@ docker-compose down        # Stop
 | Per-form global | 100 per minute per form |
 | Admin API | 30 per minute per IP |
 | Login attempts | 20 per 7 minutes (failures only) |
+| File attachments | Max 5 files, 10 MB each |
+| Blocked file types | `.exe`, `.bat`, `.cmd`, `.sh`, `.ps1`, `.msi`, `.dll`, `.com`, `.scr`, `.pif`, `.vbs`, `.js`, `.jar`, `.cpl`, `.inf`, `.reg` |
 
 ## File Structure
 

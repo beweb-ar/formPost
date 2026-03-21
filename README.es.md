@@ -43,13 +43,14 @@
 - **Multi-sender SMTP** - Múltiples relays SMTP con toggle activo/desactivado por sender
 - **Múltiples destinatarios** - Enviar a varias direcciones email por formulario (separados por coma, UI de chips)
 - **Notificaciones por email** - Plantillas HTML personalizadas con inyección dinámica de campos
+- **Archivos adjuntos** - Recibe archivos (máx 5, 10 MB cada uno) y los reenvía por email, Discord y Telegram
 - **Gestión de plantillas** - Crear, editar y eliminar plantillas desde el panel admin
 - **Auto-respuesta** - Email de confirmación automático al remitente, con plantilla seleccionable
 - **Formularios sin sender** - Los formularios pueden funcionar solo con notificaciones (Discord, Telegram, Webhook) sin sender SMTP
 
 ### Notificaciones
-- **Discord** - Webhook opcional por formulario para alertas en tiempo real
-- **Telegram** - Notificaciones via bot con descubrimiento automático del Chat ID mediante botón "Obtener"
+- **Discord** - Webhook opcional por formulario para alertas en tiempo real (con archivos adjuntos)
+- **Telegram** - Notificaciones via bot con descubrimiento automático del Chat ID mediante botón "Obtener" (con archivos adjuntos)
 - **Webhook genérico** - POST con JSON a cualquier URL en cada envío (Slack, Zapier, n8n, backends custom)
 
 ### Protección anti-bot
@@ -231,17 +232,19 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 
 ```html
 <!-- Modo dinámico -->
-<h2>Nuevo envío de {{website_id}}</h2>
+<h2>Nuevo envío de {{form_id}}</h2>
 <ul>{{fields}}</ul>
 ```
+
+> Tanto `{{form_id}}` como `{{website_id}}` son soportados por compatibilidad.
 
 Incluye plantilla de auto-respuesta: `templates/auto-reply.html`
 
 ## Ejemplo de Formulario HTML
 
 ```html
-<form action="https://tu-servidor.com/submit" method="POST">
-    <input type="hidden" name="website_id" value="mi-form">
+<form action="https://tu-servidor.com/submit" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="form_id" value="mi-form">
     <input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off">
 
     <label>Nombre: <input type="text" name="nombre" required></label>
@@ -249,11 +252,16 @@ Incluye plantilla de auto-respuesta: `templates/auto-reply.html`
     <label>Teléfono: <input type="tel" name="telefono"></label>
     <label>Mensaje: <textarea name="mensaje"></textarea></label>
 
+    <!-- Archivos adjuntos (opcional, máx 5 archivos, 10 MB cada uno) -->
+    <label>Adjuntos: <input type="file" name="attachments" multiple></label>
+
     <div class="cf-turnstile" data-sitekey="TU_SITE_KEY"></div>
     <button type="submit">Enviar</button>
 </form>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 ```
+
+> El campo `website_id` sigue siendo aceptado por compatibilidad, pero se recomienda usar `form_id`.
 
 ## Seguridad
 
@@ -263,6 +271,8 @@ Incluye plantilla de auto-respuesta: `templates/auto-reply.html`
 | Global por form | 100 por minuto |
 | API admin | 30 por minuto por IP |
 | Login | 20 por 7 minutos (solo fallos) |
+| Archivos adjuntos | Máx 5 archivos, 10 MB cada uno |
+| Tipos bloqueados | `.exe`, `.bat`, `.cmd`, `.sh`, `.ps1`, `.msi`, `.dll`, `.com`, `.scr`, `.pif`, `.vbs`, `.js`, `.jar`, `.cpl`, `.inf`, `.reg` |
 
 ## Estructura de Archivos
 

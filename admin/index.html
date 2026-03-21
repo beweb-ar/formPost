@@ -1228,14 +1228,14 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.5rem;">
                     <div class="form-group" style="margin-bottom:0;">
                         <label data-i18n="templateContent">HTML Content</label>
-                        <textarea id="templateEditorContent" oninput="updateTemplatePreview()" style="width:100%;min-height:400px;font-family:monospace;font-size:0.85rem;padding:0.75rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);resize:vertical;" placeholder="<h2>New submission from {{website_id}}</h2>&#10;<ul>{{fields}}</ul>"></textarea>
+                        <textarea id="templateEditorContent" oninput="updateTemplatePreview()" style="width:100%;min-height:400px;font-family:monospace;font-size:0.85rem;padding:0.75rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);resize:vertical;" placeholder="<h2>New submission from {{form_id}}</h2>&#10;<ul>{{fields}}</ul>"></textarea>
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
                         <label>Preview</label>
                         <iframe id="templatePreviewFrame" style="width:100%;min-height:400px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:#fff;" sandbox="allow-same-origin"></iframe>
                     </div>
                 </div>
-                <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;" data-i18n="templateHint">Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{website_id}} for the form ID.</p>
+                <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;" data-i18n="templateHint">Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{form_id}} for the form ID.</p>
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" onclick="closeTemplateEditor()" data-i18n="cancel">Cancel</button>
                     <button type="submit" id="templateEditorSaveBtn" data-i18n="saveTemplate">Save Template</button>
@@ -1363,16 +1363,17 @@
                 helpConstraint4: 'Request body max 100KB',
                 helpConstraint5: 'Rate limit: 5 submissions per minute per IP',
                 helpStep1: 'Create an HTML form with <code>method="POST"</code> and <code>action</code> pointing to this server\'s <code>/submit</code> endpoint.',
-                helpStep2: 'Include a hidden field <code>website_id</code> with the form identifier.',
+                helpStep2: 'Include a hidden field <code>form_id</code> with the form identifier.',
                 helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
-                helpStep4: 'If captcha is configured, add the corresponding widget (Cloudflare Turnstile or hCaptcha) with your site key.',
-                helpStep5: 'The server sends the email, saves the submission, triggers notifications (Discord, Telegram, webhook), sends the auto-reply if enabled, and redirects or responds with JSON.',
+                helpStep4: 'To accept file attachments, add <code>&lt;input type="file" name="attachments" multiple&gt;</code> and set <code>enctype="multipart/form-data"</code> on the form. Limits: max 5 files, 10 MB each. Attachments are forwarded via email, Discord and Telegram.',
+                helpStep5: 'If captcha is configured, add the corresponding widget (Cloudflare Turnstile or hCaptcha) with your site key.',
+                helpStep6: 'The server sends the email, saves the submission, triggers notifications (Discord, Telegram, webhook), sends the auto-reply if enabled, and redirects or responds with JSON.',
                 helpCopyTip: 'Use the <strong>Integration</strong> section at the bottom of each form\'s edit modal to copy ready-to-use HTML code.',
                 // Templates
                 templatesBtn: '&#9993; Templates', manageTemplates: 'Email Templates',
                 templateEditor: 'Template Editor', templateName: 'Template Name',
                 templatePathLabel: 'Path', templateContent: 'HTML Content',
-                templateHint: 'Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{website_id}} for the form ID.',
+                templateHint: 'Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{form_id}} for the form ID.',
                 saveTemplate: 'Save Template', newTemplate: 'New Template', templateCopyFrom: 'Copy from',
                 noTemplates: 'No templates found.', templateSaved: 'Template saved successfully',
                 templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
@@ -1470,16 +1471,17 @@
                 helpConstraint4: 'Body del request m\u00e1ximo 100KB',
                 helpConstraint5: 'L\u00edmite: 5 env\u00edos por minuto por IP',
                 helpStep1: 'Crea un formulario HTML con <code>method="POST"</code> y <code>action</code> apuntando al endpoint <code>/submit</code> de este servidor.',
-                helpStep2: 'Incluye un campo oculto <code>website_id</code> con el identificador del formulario.',
+                helpStep2: 'Incluye un campo oculto <code>form_id</code> con el identificador del formulario.',
                 helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
-                helpStep4: 'Si el captcha est\u00e1 configurado, agrega el widget correspondiente (Cloudflare Turnstile o hCaptcha) con tu site key.',
-                helpStep5: 'El servidor env\u00eda el email, guarda el env\u00edo, dispara notificaciones (Discord, Telegram, webhook), env\u00eda auto-respuesta si est\u00e1 habilitada, y redirige o responde con JSON.',
+                helpStep4: 'Para aceptar archivos adjuntos, agrega <code>&lt;input type="file" name="attachments" multiple&gt;</code> y <code>enctype="multipart/form-data"</code> en el form. L\u00edmites: m\u00e1x 5 archivos, 10 MB cada uno. Los adjuntos se reenv\u00edan por email, Discord y Telegram.',
+                helpStep5: 'Si el captcha est\u00e1 configurado, agrega el widget correspondiente (Cloudflare Turnstile o hCaptcha) con tu site key.',
+                helpStep6: 'El servidor env\u00eda el email, guarda el env\u00edo, dispara notificaciones (Discord, Telegram, webhook), env\u00eda auto-respuesta si est\u00e1 habilitada, y redirige o responde con JSON.',
                 helpCopyTip: 'Us\u00e1 la secci\u00f3n <strong>Integraci\u00f3n</strong> al final del modal de edici\u00f3n de cada formulario para copiar c\u00f3digo HTML listo para usar.',
                 // Templates
                 templatesBtn: '&#9993; Plantillas', manageTemplates: 'Plantillas de Email',
                 templateEditor: 'Editor de Plantilla', templateName: 'Nombre de Plantilla',
                 templatePathLabel: 'Ruta', templateContent: 'Contenido HTML',
-                templateHint: 'Usa {{fields}} para campos dinámicos o {{fieldname}} para campos específicos. {{website_id}} para el ID del formulario.',
+                templateHint: 'Usa {{fields}} para campos din\u00e1micos o {{fieldname}} para campos espec\u00edficos. {{form_id}} para el ID del formulario.',
                 saveTemplate: 'Guardar Plantilla', newTemplate: 'Nueva Plantilla', templateCopyFrom: 'Copiar desde',
                 noTemplates: 'No se encontraron plantillas.', templateSaved: 'Plantilla guardada correctamente',
                 templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
@@ -2150,17 +2152,20 @@
             content += '<li>' + L('helpStep3') + '</li>';
             content += '<li>' + L('helpStep4') + '</li>';
             content += '<li>' + L('helpStep5') + '</li>';
+            content += '<li>' + L('helpStep6') + '</li>';
             content += '</ol>';
 
             // Example code block with copy button
-            var exampleCode = '&lt;form action="' + esc(serverUrl) + '/submit" method="POST"&gt;\n' +
-                '    &lt;input type="hidden" name="website_id" value="YOUR_FORM_ID"&gt;\n\n' +
+            var exampleCode = '&lt;form action="' + esc(serverUrl) + '/submit" method="POST" enctype="multipart/form-data"&gt;\n' +
+                '    &lt;input type="hidden" name="form_id" value="YOUR_FORM_ID"&gt;\n\n' +
                 '    &lt;!-- Honeypot anti-spam (hidden, do not remove) --&gt;\n' +
                 '    &lt;input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off"&gt;\n\n' +
                 '    &lt;label&gt;Name: &lt;input type="text" name="name" required&gt;&lt;/label&gt;\n' +
                 '    &lt;label&gt;Email: &lt;input type="email" name="email" required&gt;&lt;/label&gt;\n' +
                 '    &lt;label&gt;Phone: &lt;input type="tel" name="phone"&gt;&lt;/label&gt;\n' +
                 '    &lt;label&gt;Message: &lt;textarea name="message"&gt;&lt;/textarea&gt;&lt;/label&gt;\n\n' +
+                '    &lt;!-- File attachments (optional, max 5 files, 10MB each) --&gt;\n' +
+                '    &lt;label&gt;Attachments: &lt;input type="file" name="attachments" multiple&gt;&lt;/label&gt;\n\n' +
                 '    &lt;!-- Optional: Captcha (Turnstile or hCaptcha, if enabled) --&gt;\n' +
                 '    &lt;!-- Turnstile: &lt;div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt; --&gt;\n' +
                 '    &lt;!-- hCaptcha:   &lt;div class="h-captcha" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt; --&gt;\n\n' +
@@ -2170,14 +2175,16 @@
                 '&lt;!-- Turnstile: &lt;script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer&gt;&lt;/script&gt; --&gt;\n' +
                 '&lt;!-- hCaptcha:   &lt;script src="https://js.hcaptcha.com/1/api.js" async defer&gt;&lt;/script&gt; --&gt;';
 
-            var rawCode = '<form action="' + serverUrl + '/submit" method="POST">\n' +
-                '    <input type="hidden" name="website_id" value="YOUR_FORM_ID">\n\n' +
+            var rawCode = '<form action="' + serverUrl + '/submit" method="POST" enctype="multipart/form-data">\n' +
+                '    <input type="hidden" name="form_id" value="YOUR_FORM_ID">\n\n' +
                 '    <!-- Honeypot anti-spam (hidden, do not remove) -->\n' +
                 '    <input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off">\n\n' +
                 '    <label>Name: <input type="text" name="name" required></label>\n' +
                 '    <label>Email: <input type="email" name="email" required></label>\n' +
                 '    <label>Phone: <input type="tel" name="phone"></label>\n' +
                 '    <label>Message: <textarea name="message"></textarea></label>\n\n' +
+                '    <!-- File attachments (optional, max 5 files, 10MB each) -->\n' +
+                '    <label>Attachments: <input type="file" name="attachments" multiple></label>\n\n' +
                 '    <!-- Optional: Captcha (Turnstile or hCaptcha, if enabled) -->\n' +
                 '    <!-- Turnstile: <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div> -->\n' +
                 '    <!-- hCaptcha:   <div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div> -->\n\n' +
@@ -2334,14 +2341,16 @@
             var serverUrl = window.location.origin;
             var hasCaptcha = !!(cfg.captchaKey || cfg.turnstileKey);
             var provider = cfg.captchaProvider || 'turnstile';
-            var code = '&lt;form action="' + esc(serverUrl) + '/submit" method="POST"&gt;\n';
-            code += '    &lt;input type="hidden" name="website_id" value="' + esc(id) + '"&gt;\n\n';
+            var code = '&lt;form action="' + esc(serverUrl) + '/submit" method="POST" enctype="multipart/form-data"&gt;\n';
+            code += '    &lt;input type="hidden" name="form_id" value="' + esc(id) + '"&gt;\n\n';
             code += '    &lt;!-- Honeypot anti-spam (hidden, do not remove) --&gt;\n';
             code += '    &lt;input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off"&gt;\n\n';
             code += '    &lt;label&gt;Name: &lt;input type="text" name="name" required&gt;&lt;/label&gt;\n';
             code += '    &lt;label&gt;Email: &lt;input type="email" name="email" required&gt;&lt;/label&gt;\n';
             code += '    &lt;label&gt;Phone: &lt;input type="tel" name="phone"&gt;&lt;/label&gt;\n';
             code += '    &lt;label&gt;Message: &lt;textarea name="message"&gt;&lt;/textarea&gt;&lt;/label&gt;\n\n';
+            code += '    &lt;!-- File attachments (optional, max 5 files, 10MB each) --&gt;\n';
+            code += '    &lt;label&gt;Attachments: &lt;input type="file" name="attachments" multiple&gt;&lt;/label&gt;\n\n';
             if (hasCaptcha && provider === 'hcaptcha') {
                 code += '    &lt;div class="h-captcha" data-sitekey="YOUR_SITE_KEY"&gt;&lt;/div&gt;\n\n';
             } else if (hasCaptcha) {
@@ -2523,7 +2532,7 @@
             var content = document.getElementById('templateEditorContent').value;
             // Replace template variables with sample data for preview
             var preview = content
-                .replace(/\{\{website_id\}\}/g, 'my-form')
+                .replace(/\{\{form_id\}\}|\{\{website_id\}\}/g, 'my-form')
                 .replace(/\{\{fields\}\}/g, '<li><strong>Name:</strong> John Doe</li>\n<li><strong>Email:</strong> john@example.com</li>\n<li><strong>Message:</strong> Hello, this is a test message.</li>')
                 .replace(/\{\{name\}\}/g, 'John Doe')
                 .replace(/\{\{nombre\}\}/g, 'John Doe')

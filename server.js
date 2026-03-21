@@ -7,7 +7,27 @@ const axios = require('axios');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcrypt');
+const multer = require('multer');
+const FormData = require('form-data');
+const os = require('os');
 const config = require('./config.json');
+
+// Multer config: temp uploads with size limits
+const UPLOAD_DIR = path.join(os.tmpdir(), 'formpost-uploads');
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB per file
+const MAX_FILES = 5;
+const upload = multer({
+    dest: UPLOAD_DIR,
+    limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILES },
+    fileFilter: (req, file, cb) => {
+        // Block executable and dangerous file types
+        const blocked = /\.(exe|bat|cmd|sh|ps1|msi|dll|com|scr|pif|vbs|js|jar|cpl|inf|reg)$/i;
+        if (blocked.test(file.originalname)) {
+            return cb(new Error('File type not allowed'));
+        }
+        cb(null, true);
+    }
+});
 const pkg = require('./package.json');
 const BCRYPT_ROUNDS = 10;
 
@@ -41,6 +61,9 @@ async function writeConfigSafe(mutator) {
     });
     return configWriteLock;
 }
+
+// Ensure upload temp dir exists
+require('fs').mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -392,26 +415,34 @@ function fieldToLabel(fieldName) {
         .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
 }
 
-app.post('/submit', submitLimiter, async (req, res) => {
-    const { website_id, 'cf-turnstile-response': turnstileToken, 'h-captcha-response': hcaptchaToken, 'g-recaptcha-response': gRecaptchaToken, _hp_field: honeypot, ...formFields } = req.body;
+app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async (req, res) => {
+    const { form_id, website_id, 'cf-turnstile-response': turnstileToken, 'h-captcha-response': hcaptchaToken, 'g-recaptcha-response': gRecaptchaToken, _hp_field: honeypot, ...formFields } = req.body;
+    const formId = form_id || website_id; // backward compat
+    const uploadedFiles = req.files || [];
+
+    // Clean up temp files when response finishes (covers all exit paths)
+    const cleanupFiles = () => {
+        for (const f of uploadedFiles) fs.unlink(f.path).catch(() => {});
+    };
+    res.on('finish', cleanupFiles);
 
     // Honeypot check: if the hidden field has a value, silently reject (bot filled it)
     if (honeypot) {
-        log.warn('Honeypot triggered', { formId: website_id, ip: req.ip });
+        log.warn('Honeypot triggered', { formId, ip: req.ip });
         return res.status(200).json({ success: true, message: t.formSuccess }); // Fake success to fool bots
     }
 
     // Validate and route
-    if (!website_id || typeof website_id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(website_id)) {
+    if (!formId || typeof formId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(formId)) {
         return res.status(400).send(t.invalidFormId);
     }
-    const recipientConfig = config.recipients[website_id];
+    const recipientConfig = config.recipients[formId];
     if (!recipientConfig) {
         return res.status(400).send(t.invalidFormId);
     }
 
     // Per-form global rate limit
-    if (!checkFormRateLimit(website_id)) {
+    if (!checkFormRateLimit(formId)) {
         return res.status(429).send('Too many submissions for this form. Please try again later.');
     }
 
@@ -425,7 +456,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
             try { return new URL(d).origin === originHost; } catch { return d === originHost; }
         });
         if (!allowed) {
-            log.warn('Origin rejected', { formId: website_id, origin });
+            log.warn('Origin rejected', { formId, origin });
             return res.status(403).send(t.domainNotAllowed);
         }
     }
@@ -445,19 +476,19 @@ app.post('/submit', submitLimiter, async (req, res) => {
     // Verify captcha token (skip if DEBUG or captcha disabled for this form)
     // Backward compat: support both config.captcha and config.turnstile, and both captchaEnabled and turnstileEnabled
     const captchaSecrets = config.captcha || config.turnstile || {};
-    const captchaEnabled = (recipientConfig.captchaEnabled !== undefined ? recipientConfig.captchaEnabled : recipientConfig.turnstileEnabled) !== false && !!captchaSecrets[website_id];
+    const captchaEnabled = (recipientConfig.captchaEnabled !== undefined ? recipientConfig.captchaEnabled : recipientConfig.turnstileEnabled) !== false && !!captchaSecrets[formId];
     if (!DEBUG && captchaEnabled) {
         const provider = recipientConfig.captchaProvider || 'turnstile';
         const captchaToken = provider === 'hcaptcha' ? (hcaptchaToken || gRecaptchaToken) : turnstileToken;
 
         if (!captchaToken) {
-            log.warn('No captcha token provided', { formId: website_id, provider });
+            log.warn('No captcha token provided', { formId, provider });
             return res.status(400).send(t.completeCaptcha);
         }
 
-        const captchaConfig = captchaSecrets[website_id];
+        const captchaConfig = captchaSecrets[formId];
         if (!captchaConfig) {
-            log.error('No captcha config found', { formId: website_id, provider });
+            log.error('No captcha config found', { formId, provider });
             return res.status(400).send(t.invalidSubmission);
         }
 
@@ -478,17 +509,17 @@ app.post('/submit', submitLimiter, async (req, res) => {
 
             const { success, 'error-codes': errorCodes } = verificationResponse.data;
             if (!success) {
-                log.warn('Captcha verification failed', { formId: website_id, provider, errorCodes });
+                log.warn('Captcha verification failed', { formId, provider, errorCodes });
                 return res.status(400).send(t.captchaFailed);
             }
         } catch (error) {
-            log.error('Error verifying captcha token', { formId: website_id, provider, error: error.message });
+            log.error('Error verifying captcha token', { formId, provider, error: error.message });
             return res.status(500).send(t.captchaError);
         }
     } else if (DEBUG) {
-        log.info('DEBUG mode: Skipping captcha verification', { formId: website_id });
+        log.info('DEBUG mode: Skipping captcha verification', { formId });
     } else {
-        log.info('Captcha disabled, skipping verification', { formId: website_id });
+        log.info('Captcha disabled, skipping verification', { formId });
     }
 
     // Build email from template or generate dynamic email
@@ -496,7 +527,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
         let mailBody;
         const templatePath = path.resolve(__dirname, recipientConfig.templatePath);
         if (!templatePath.startsWith(__dirname)) {
-            log.error('Path traversal attempt detected', { formId: website_id, path: recipientConfig.templatePath });
+            log.error('Path traversal attempt detected', { formId, path: recipientConfig.templatePath });
             return res.status(500).send(t.templateError);
         }
 
@@ -516,11 +547,11 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 }
             }
             mailBody = templateContent
-                .replace(/{{website_id}}/g, escapeHtml(website_id) || 'Unknown')
+                .replace(/{{form_id}}|{{website_id}}/g, escapeHtml(formId) || 'Unknown')
                 .replace(/{{fields}}/g, fieldsHtml);
         } else if (templateContent) {
             // Legacy template: replace individual {{field}} placeholders
-            mailBody = templateContent.replace(/{{website_id}}/g, escapeHtml(website_id) || 'Unknown');
+            mailBody = templateContent.replace(/{{form_id}}|{{website_id}}/g, escapeHtml(formId) || 'Unknown');
             for (const [key, value] of fieldEntries) {
                 // Use string split+join to avoid regex injection from user-supplied keys
                 const placeholder = `{{${key}}}`;
@@ -534,7 +565,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     fieldsHtml += `<p><strong>${escapeHtml(fieldToLabel(key))}:</strong> ${escapeHtml(String(value))}</p>\n`;
                 }
             }
-            mailBody = `<h2>New submission from ${escapeHtml(website_id)}</h2>\n${fieldsHtml}`;
+            mailBody = `<h2>New submission from ${escapeHtml(formId)}</h2>\n${fieldsHtml}`;
         }
 
         // Detect name and email for mail metadata
@@ -545,7 +576,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
         const senderInfo = getTransporterForForm(recipientConfig);
         const skipEmail = !senderInfo || senderInfo.inactive;
         if (skipEmail && senderInfo && senderInfo.inactive) {
-            log.info('Sender disabled, skipping email', { formId: website_id, senderId: senderInfo.senderId });
+            log.info('Sender disabled, skipping email', { formId, senderId: senderInfo.senderId });
             const skipEntry = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 timestamp: new Date().toISOString(),
@@ -554,10 +585,10 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 subject: `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`,
                 status: 'skipped'
             };
-            saveOutboxEntry(website_id, skipEntry).catch(() => {});
-            broadcastSSE({ type: 'outbox', websiteId: website_id, ...skipEntry });
+            saveOutboxEntry(formId, skipEntry).catch(() => {});
+            broadcastSSE({ type: 'outbox', websiteId: formId, ...skipEntry });
         } else if (!senderInfo) {
-            log.info('No sender configured, skipping email', { formId: website_id });
+            log.info('No sender configured, skipping email', { formId });
         }
 
         const emailSubject = `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`;
@@ -571,12 +602,16 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 to: recipientConfig.to,
                 subject: emailSubject,
                 html: mailBody,
-                replyTo: senderEmail || undefined
+                replyTo: senderEmail || undefined,
+                attachments: uploadedFiles.map(f => ({
+                    filename: f.originalname,
+                    path: f.path
+                }))
             };
 
             try {
                 await senderInfo.transporter.sendMail(mailOptions);
-                log.info('Email sent', { formId: website_id, to: recipientConfig.to });
+                log.info('Email sent', { formId, to: recipientConfig.to });
                 emailOk = true;
 
                 const mailEntry = {
@@ -587,10 +622,10 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     subject: emailSubject,
                     status: 'ok'
                 };
-                saveOutboxEntry(website_id, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
-                broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailEntry });
+                saveOutboxEntry(formId, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
+                broadcastSSE({ type: 'outbox', websiteId: formId, ...mailEntry });
             } catch (error) {
-                log.error('Error sending email', { formId: website_id, error: error.message });
+                log.error('Error sending email', { formId, error: error.message });
 
                 const mailFailEntry = {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -601,8 +636,8 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     status: 'error',
                     error: error.message
                 };
-                saveOutboxEntry(website_id, mailFailEntry).catch(() => {});
-                broadcastSSE({ type: 'outbox', websiteId: website_id, ...mailFailEntry });
+                saveOutboxEntry(formId, mailFailEntry).catch(() => {});
+                broadcastSSE({ type: 'outbox', websiteId: formId, ...mailFailEntry });
 
                 return res.status(500).send(t.serverError);
             }
@@ -624,38 +659,38 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 for (const [key, value] of fieldEntries) {
                     submission[key] = String(value || '');
                 }
-                await saveSubmission(website_id, submission);
+                await saveSubmission(formId, submission);
 
                 // Broadcast to SSE inbox clients
                 broadcastSSE({
                     type: 'submission',
-                    websiteId: website_id,
+                    websiteId: formId,
                     id: submission.id,
                     timestamp: submission.timestamp,
                     name: formFields.name || formFields.nombre || formFields.full_name || '',
                     email: formFields.email || formFields.correo || formFields.e_mail || '',
                     preview: fieldEntries
-                        .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
+                        .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','form_id','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
                         .slice(0, 5)
                         .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }))
                 });
             } catch (storageError) {
-                log.error('Error saving submission', { formId: website_id, error: storageError.message });
+                log.error('Error saving submission', { formId, error: storageError.message });
             }
 
             // Update statistics
             try {
                 await writeConfigSafe(cfg => {
                     if (!cfg.statistics) cfg.statistics = {};
-                    if (!cfg.statistics[website_id]) {
-                        cfg.statistics[website_id] = { successfulSubmissions: 0, lastSubmission: null, mailsSent: 0, notificationsSent: 0 };
+                    if (!cfg.statistics[formId]) {
+                        cfg.statistics[formId] = { successfulSubmissions: 0, lastSubmission: null, mailsSent: 0, notificationsSent: 0 };
                     }
-                    cfg.statistics[website_id].successfulSubmissions++;
-                    if (emailOk) cfg.statistics[website_id].mailsSent = (cfg.statistics[website_id].mailsSent || 0) + 1;
-                    cfg.statistics[website_id].lastSubmission = new Date().toISOString();
+                    cfg.statistics[formId].successfulSubmissions++;
+                    if (emailOk) cfg.statistics[formId].mailsSent = (cfg.statistics[formId].mailsSent || 0) + 1;
+                    cfg.statistics[formId].lastSubmission = new Date().toISOString();
                 });
             } catch (statsError) {
-                log.error('Error updating statistics', { formId: website_id, error: statsError.message });
+                log.error('Error updating statistics', { formId, error: statsError.message });
             }
 
             // Send Discord webhook notification if configured
@@ -665,19 +700,33 @@ app.post('/submit', submitLimiter, async (req, res) => {
                     const sName = formFields.name || formFields.nombre || formFields.full_name || 'Unknown';
                     const sEmail = email || 'N/A';
                     const fieldsForDiscord = fieldEntries
-                        .filter(([k]) => !['website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response','_hp_field'].includes(k))
+                        .filter(([k]) => !['form_id','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response','_hp_field'].includes(k))
                         .slice(0, 10)
                         .map(([k, v]) => ({ name: fieldToLabel(k), value: String(v || '').substring(0, 200) || '-', inline: true }));
-                    await axios.post(recipientConfig.discordWebhook, {
+                    const discordPayload = {
                         embeds: [{
-                            title: `New submission: ${website_id}`,
+                            title: `New submission: ${formId}`,
                             color: 0xe8713a,
                             fields: fieldsForDiscord,
                             footer: { text: 'formPost' },
                             timestamp: discordTimestamp
                         }]
-                    }, { timeout: 5000 });
-                    log.info('Discord webhook sent', { formId: website_id });
+                    };
+                    if (uploadedFiles.length > 0) {
+                        const fd = new FormData();
+                        fd.append('payload_json', JSON.stringify(discordPayload));
+                        uploadedFiles.forEach((f, i) => {
+                            fd.append(`files[${i}]`, require('fs').createReadStream(f.path), f.originalname);
+                        });
+                        await axios.post(recipientConfig.discordWebhook, fd, {
+                            timeout: 15000,
+                            headers: fd.getHeaders(),
+                            maxContentLength: MAX_FILE_SIZE * MAX_FILES
+                        });
+                    } else {
+                        await axios.post(recipientConfig.discordWebhook, discordPayload, { timeout: 5000 });
+                    }
+                    log.info('Discord webhook sent', { formId });
 
                     // Log to outbox
                     const discordEntry = {
@@ -686,17 +735,17 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         channel: 'discord',
                         status: 'ok'
                     };
-                    saveOutboxEntry(website_id, discordEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
-                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...discordEntry });
+                    saveOutboxEntry(formId, discordEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
+                    broadcastSSE({ type: 'outbox', websiteId: formId, ...discordEntry });
 
                     // Update notification count
                     writeConfigSafe(cfg => {
-                        if (cfg.statistics && cfg.statistics[website_id]) {
-                            cfg.statistics[website_id].notificationsSent = (cfg.statistics[website_id].notificationsSent || 0) + 1;
+                        if (cfg.statistics && cfg.statistics[formId]) {
+                            cfg.statistics[formId].notificationsSent = (cfg.statistics[formId].notificationsSent || 0) + 1;
                         }
                     }).catch(() => {});
                 } catch (webhookErr) {
-                    log.error('Discord webhook failed', { formId: website_id, error: webhookErr.message });
+                    log.error('Discord webhook failed', { formId, error: webhookErr.message });
 
                     // Log failure to outbox
                     const discordFailEntry = {
@@ -706,8 +755,8 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         status: 'error',
                         error: webhookErr.message
                     };
-                    saveOutboxEntry(website_id, discordFailEntry).catch(() => {});
-                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...discordFailEntry });
+                    saveOutboxEntry(formId, discordFailEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: formId, ...discordFailEntry });
                 }
             }
 
@@ -717,17 +766,28 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 try {
                     const tName = formFields.name || formFields.nombre || formFields.full_name || 'Unknown';
                     const tFields = fieldEntries
-                        .filter(([k]) => !['website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response','_hp_field'].includes(k))
+                        .filter(([k]) => !['form_id','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response','_hp_field'].includes(k))
                         .slice(0, 10)
                         .map(([k, v]) => `<b>${escapeHtml(fieldToLabel(k))}:</b> ${escapeHtml(String(v || '-').substring(0, 200))}`)
                         .join('\n');
-                    const telegramText = `📩 <b>New submission: ${escapeHtml(website_id)}</b>\n\n${tFields}\n\n<i>formPost</i>`;
+                    const telegramText = `📩 <b>New submission: ${escapeHtml(formId)}</b>\n\n${tFields}\n\n<i>formPost</i>`;
                     await axios.post(
                         `https://api.telegram.org/bot${recipientConfig.telegramBotToken}/sendMessage`,
                         { chat_id: recipientConfig.telegramChatId, text: telegramText, parse_mode: 'HTML' },
                         { timeout: 5000 }
                     );
-                    log.info('Telegram notification sent', { formId: website_id });
+                    // Send each attachment as a document
+                    for (const f of uploadedFiles) {
+                        const fd = new FormData();
+                        fd.append('chat_id', recipientConfig.telegramChatId);
+                        fd.append('document', require('fs').createReadStream(f.path), f.originalname);
+                        await axios.post(
+                            `https://api.telegram.org/bot${recipientConfig.telegramBotToken}/sendDocument`,
+                            fd,
+                            { timeout: 15000, headers: fd.getHeaders(), maxContentLength: MAX_FILE_SIZE }
+                        );
+                    }
+                    log.info('Telegram notification sent', { formId, attachments: uploadedFiles.length });
 
                     const telegramEntry = {
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -735,16 +795,16 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         channel: 'telegram',
                         status: 'ok'
                     };
-                    saveOutboxEntry(website_id, telegramEntry).catch(() => {});
-                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...telegramEntry });
+                    saveOutboxEntry(formId, telegramEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: formId, ...telegramEntry });
 
                     writeConfigSafe(cfg => {
-                        if (cfg.statistics && cfg.statistics[website_id]) {
-                            cfg.statistics[website_id].notificationsSent = (cfg.statistics[website_id].notificationsSent || 0) + 1;
+                        if (cfg.statistics && cfg.statistics[formId]) {
+                            cfg.statistics[formId].notificationsSent = (cfg.statistics[formId].notificationsSent || 0) + 1;
                         }
                     }).catch(() => {});
                 } catch (telegramErr) {
-                    log.error('Telegram notification failed', { formId: website_id, error: telegramErr.message });
+                    log.error('Telegram notification failed', { formId, error: telegramErr.message });
 
                     const telegramFailEntry = {
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -753,8 +813,8 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         status: 'error',
                         error: telegramErr.message
                     };
-                    saveOutboxEntry(website_id, telegramFailEntry).catch(() => {});
-                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...telegramFailEntry });
+                    saveOutboxEntry(formId, telegramFailEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: formId, ...telegramFailEntry });
                 }
             }
 
@@ -762,7 +822,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
             if (recipientConfig.webhookUrl) {
                 try {
                     const webhookPayload = {
-                        formId: website_id,
+                        formId: formId,
                         timestamp: new Date().toISOString(),
                         fields: {}
                     };
@@ -773,9 +833,9 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         timeout: 5000,
                         headers: { 'Content-Type': 'application/json', 'User-Agent': 'formPost/' + pkg.version }
                     });
-                    log.info('Webhook sent', { formId: website_id, url: recipientConfig.webhookUrl });
+                    log.info('Webhook sent', { formId, url: recipientConfig.webhookUrl });
                 } catch (webhookErr) {
-                    log.error('Webhook failed', { formId: website_id, error: webhookErr.message });
+                    log.error('Webhook failed', { formId, error: webhookErr.message });
                 }
             }
 
@@ -791,7 +851,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                             if (value) arFields += `<li><strong>${escapeHtml(fieldToLabel(key))}:</strong> ${escapeHtml(String(value))}</li>\n`;
                         }
                         autoReplyBody = arTemplate
-                            .replace(/{{website_id}}/g, escapeHtml(website_id))
+                            .replace(/{{form_id}}|{{website_id}}/g, escapeHtml(formId))
                             .replace(/{{fields}}/g, arFields);
                     } catch (e) {
                         autoReplyBody = '<h2>Thank you for your submission</h2><p>We have received your message and will get back to you soon.</p>';
@@ -804,7 +864,7 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         html: autoReplyBody,
                         replyTo: recipientConfig.autoReplyReplyTo || undefined
                     });
-                    log.info('Auto-reply sent', { formId: website_id, to: senderEmail });
+                    log.info('Auto-reply sent', { formId, to: senderEmail });
 
                     const arEntry = {
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -815,16 +875,16 @@ app.post('/submit', submitLimiter, async (req, res) => {
                         status: 'ok',
                         autoReply: true
                     };
-                    saveOutboxEntry(website_id, arEntry).catch(() => {});
-                    broadcastSSE({ type: 'outbox', websiteId: website_id, ...arEntry });
+                    saveOutboxEntry(formId, arEntry).catch(() => {});
+                    broadcastSSE({ type: 'outbox', websiteId: formId, ...arEntry });
 
                     writeConfigSafe(cfg => {
-                        if (cfg.statistics && cfg.statistics[website_id]) {
-                            cfg.statistics[website_id].mailsSent = (cfg.statistics[website_id].mailsSent || 0) + 1;
+                        if (cfg.statistics && cfg.statistics[formId]) {
+                            cfg.statistics[formId].mailsSent = (cfg.statistics[formId].mailsSent || 0) + 1;
                         }
                     }).catch(() => {});
                 } catch (arErr) {
-                    log.error('Auto-reply failed', { formId: website_id, error: arErr.message });
+                    log.error('Auto-reply failed', { formId, error: arErr.message });
                 }
             }
 
@@ -835,9 +895,26 @@ app.post('/submit', submitLimiter, async (req, res) => {
                 res.status(200).json({ success: true, message: t.formSuccess });
             }
     } catch (templateError) {
-        log.error('Error reading email template', { formId: website_id, error: templateError.message });
+        log.error('Error reading email template', { formId, error: templateError.message });
         res.status(500).send(t.templateReadError);
     }
+});
+
+// Multer error handler for /submit
+app.use('/submit', (err, req, res, next) => {
+    // Clean up any partially uploaded files
+    if (req.files) {
+        for (const f of req.files) fs.unlink(f.path).catch(() => {});
+    }
+    if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).send('File too large (max 10 MB).');
+        if (err.code === 'LIMIT_FILE_COUNT') return res.status(400).send('Too many files (max 5).');
+        return res.status(400).send('File upload error.');
+    }
+    if (err && err.message === 'File type not allowed') {
+        return res.status(400).send('File type not allowed.');
+    }
+    next(err);
 });
 
 // Health Check Endpoint - minimal info, no internals exposed
@@ -1446,7 +1523,7 @@ adminRouter.get('/inbox/recent', async (req, res) => {
             const name = sub.name || sub.nombre || sub.full_name || '';
             const email = sub.email || sub.correo || sub.e_mail || '';
             const preview = fields
-                .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
+                .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','form_id','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
                 .slice(0, 2)
                 .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }));
             all.push({ websiteId: formId, id: sub.id, timestamp: sub.timestamp, name, email, preview });
