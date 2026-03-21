@@ -1280,10 +1280,10 @@ adminRouter.get('/statistics/chart', async (req, res) => {
             const d = new Date(entry.timestamp);
             if (d < since) continue;
             const key = d.toISOString().substring(0, 10);
-            if (entry.channel === 'email') {
+            if (entry.channel === 'email' && entry.status === 'ok') {
                 mailCounts[key] = (mailCounts[key] || 0) + 1;
-            } else if (entry.channel === 'discord') {
-                notifCounts[key] = (notifCounts[key] || 0) + 1;
+            } else if (entry.channel === 'discord' || entry.channel === 'telegram') {
+                if (entry.status === 'ok') notifCounts[key] = (notifCounts[key] || 0) + 1;
             }
         }
         mails[formId] = mailCounts;
