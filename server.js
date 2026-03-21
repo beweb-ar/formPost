@@ -230,14 +230,25 @@ const authLimiter = rateLimit({
 app.use(bodyParser.urlencoded({ extended: true, limit: '100kb' }));
 app.use(bodyParser.json({ limit: '100kb' }));
 
-// CORS Configuration
+// CORS Configuration - based on per-form allowedDomains
 app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (config.cors && config.cors.allowedOrigins && config.cors.allowedOrigins.includes(origin)) {
-        res.header('Access-Control-Allow-Origin', origin);
+    if (origin) {
+        for (const cfg of Object.values(config.recipients || {})) {
+            if (cfg.allowedDomains && cfg.allowedDomains.length > 0) {
+                const match = cfg.allowedDomains.some(d => {
+                    try { return new URL(d).origin === origin; } catch { return d === origin; }
+                });
+                if (match) {
+                    res.header('Access-Control-Allow-Origin', origin);
+                    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+                    res.header('Access-Control-Allow-Headers', 'Content-Type');
+                    break;
+                }
+            }
+        }
     }
-    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.status(204).end();
     next();
 });
 
@@ -1529,7 +1540,7 @@ adminRouter.get('/backup', async (req, res) => {
             recipients: config.recipients,
             senders: config.senders || {},
             captcha: config.captcha || {},
-            cors: config.cors || {},
+
             smtp: config.smtp || {},
             templates: {}
         };
@@ -1565,7 +1576,7 @@ adminRouter.post('/restore', async (req, res) => {
             if (backup.recipients) cfg.recipients = backup.recipients;
             if (backup.senders) cfg.senders = backup.senders;
             if (backup.captcha) cfg.captcha = backup.captcha;
-            if (backup.cors) cfg.cors = backup.cors;
+
             if (backup.smtp) cfg.smtp = backup.smtp;
         });
         // Restore templates

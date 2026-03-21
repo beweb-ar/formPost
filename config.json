@@ -29,11 +29,6 @@
             "secretKey": "YOUR_CAPTCHA_SECRET_KEY"
         }
     },
-    "cors": {
-        "allowedOrigins": [
-            "https://example.com"
-        ]
-    },
     "admin": {
         "username": "admin",
         "password": "changeme123"

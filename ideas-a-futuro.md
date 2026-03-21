@@ -1,1 +1,1 @@
-- captcha opcional Turnstile / hcaptcha : https://docs.hcaptcha.com/- 
+poder enviar formularios / mails con adjuntos (multipart)
