@@ -1349,13 +1349,16 @@
                 smtpSaved: 'SMTP settings saved', failedSmtp: 'Failed to save',
                 statsReset: 'Statistics reset', failedResetStats: 'Failed to reset statistics',
                 exportDownloaded: 'Export downloaded', exportFailed: 'Export failed',
-                subsDeleted: 'All submissions deleted', failedDeleteSubs: 'Failed to delete submissions',
+                subsDeleted: 'All submissions deleted', subDeleted: 'Submission deleted',
+                failedDeleteSubs: 'Failed to delete submissions',
+                outboxEntryDeleted: 'Outbox entry deleted', failedDeleteOutbox: 'Failed to delete outbox entry',
                 failedLoadData: 'Failed to load form data', formNotFound: 'Form not found',
                 connError: 'Connection error',
                 // Confirms
                 confirmDelete: 'Are you sure you want to delete "{id}"? This cannot be undone.',
                 confirmResetStats: 'Reset statistics for "{id}"? This cannot be undone.',
                 confirmDeleteSubs: 'Delete ALL submissions for "{id}"? This cannot be undone.',
+                confirmDeleteEntry: 'Delete this entry? This cannot be undone.',
                 // Inbox / Outbox
                 inbox: 'Inbox', inboxEmpty: 'No recent submissions. New ones will appear here in real time.',
                 inboxConnected: 'Connected', inboxDisconnected: 'Disconnected', inboxReconnecting: 'Reconnecting...',
@@ -1457,13 +1460,16 @@
                 smtpSaved: 'Configuraci\u00f3n SMTP guardada', failedSmtp: 'Error al guardar',
                 statsReset: 'Estad\u00edsticas reiniciadas', failedResetStats: 'Error al reiniciar estad\u00edsticas',
                 exportDownloaded: 'Exportaci\u00f3n descargada', exportFailed: 'Error en la exportaci\u00f3n',
-                subsDeleted: 'Todos los env\u00edos eliminados', failedDeleteSubs: 'Error al eliminar env\u00edos',
+                subsDeleted: 'Todos los envíos eliminados', subDeleted: 'Envío eliminado',
+                failedDeleteSubs: 'Error al eliminar envíos',
+                outboxEntryDeleted: 'Registro de salida eliminado', failedDeleteOutbox: 'Error al eliminar registro de salida',
                 failedLoadData: 'Error al cargar datos del formulario', formNotFound: 'Formulario no encontrado',
                 connError: 'Error de conexi\u00f3n',
                 // Confirms
                 confirmDelete: '\u00bfSeguro que desea eliminar "{id}"? Esta acci\u00f3n no se puede deshacer.',
                 confirmResetStats: '\u00bfReiniciar estad\u00edsticas de "{id}"? Esta acci\u00f3n no se puede deshacer.',
-                confirmDeleteSubs: '\u00bfEliminar TODOS los env\u00edos de "{id}"? Esta acci\u00f3n no se puede deshacer.',
+                confirmDeleteSubs: '¿Eliminar TODOS los envíos de "{id}"? Esta acción no se puede deshacer.',
+                confirmDeleteEntry: '¿Eliminar este registro? Esta acción no se puede deshacer.',
                 // Inbox / Outbox
                 inbox: 'Bandeja de Entrada', inboxEmpty: 'Sin env\u00edos recientes. Los nuevos aparecer\u00e1n aqu\u00ed en tiempo real.',
                 inboxConnected: 'Conectado', inboxDisconnected: 'Desconectado', inboxReconnecting: 'Reconectando...',
@@ -1880,7 +1886,7 @@
                     document.getElementById('outboxModalPagination').innerHTML = '';
                     return;
                 }
-                var html = '<table class="submissions-table"><thead><tr><th>' + L('date') + '</th><th>Channel</th><th>To / ' + L('statStatus') + '</th><th>' + L('subject') + '</th><th>' + L('statStatus') + '</th></tr></thead><tbody>';
+                var html = '<table class="submissions-table"><thead><tr><th>' + L('date') + '</th><th>Channel</th><th>To / ' + L('statStatus') + '</th><th>' + L('subject') + '</th><th>' + L('statStatus') + '</th><th style="width:40px;"></th></tr></thead><tbody>';
                 data.entries.forEach(function(entry) {
                     var time = new Date(entry.timestamp).toLocaleString();
                     var channelLabel = entry.channel === 'email' ? 'Mail' : entry.channel === 'telegram' ? 'Telegram' : 'Discord';
@@ -1895,6 +1901,7 @@
                         '<td><span style="color:' + statusColor + ';font-weight:600;">' + statusText + '</span>' +
                             (entry.error ? '<div style="font-size:0.75rem;color:var(--danger);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(entry.error) + '">' + esc(entry.error) + '</div>' : '') +
                         '</td>' +
+                        '<td style="text-align:center;"><button class="btn-sm btn-danger" style="padding:0.15rem 0.4rem;font-size:0.75rem;line-height:1;" onclick="deleteOutboxEntry(\'' + esc(entry.id) + '\')" title="' + L('delete') + '">&times;</button></td>' +
                     '</tr>';
                 });
                 html += '</tbody></table>';
@@ -3047,6 +3054,7 @@
             // Build table header
             var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr><th>' + L('date') + '</th>';
             cols.forEach(function(c) { table += '<th>' + esc(fieldLabel(c)) + '</th>'; });
+            table += '<th style="width:40px;"></th>';
             table += '</tr></thead><tbody>';
             data.submissions.forEach(function(s) {
                 table += '<tr onclick="showSubmissionDetail(' + JSON.stringify(JSON.stringify(s)).replace(/'/g, "\\'") + ')" style="cursor:pointer;">';
@@ -3056,6 +3064,7 @@
                     if (val.length > 60) val = val.substring(0, 60) + '...';
                     table += '<td>' + esc(val) + '</td>';
                 });
+                table += '<td style="text-align:center;"><button class="btn-sm btn-danger" style="padding:0.15rem 0.4rem;font-size:0.75rem;line-height:1;" onclick="event.stopPropagation();deleteSubmission(\'' + esc(s.id) + '\')" title="' + L('delete') + '">&times;</button></td>';
                 table += '</tr>';
             });
             table += '</tbody></table></div>';
@@ -3127,6 +3136,43 @@
                     loadWebsitesWithStats();
                 } else {
                     showToast(L('failedDeleteSubs'), 'error');
+                }
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
+        async function deleteSubmission(entryId) {
+            if (!confirm(L('confirmDeleteEntry'))) return;
+            try {
+                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(submissionsModalWebsiteId) + '/' + encodeURIComponent(entryId), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) {
+                    showToast(L('subDeleted'), 'success');
+                    loadModalSubmissions();
+                    loadWebsitesWithStats();
+                } else {
+                    showToast(L('failedDeleteSubs'), 'error');
+                }
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
+        async function deleteOutboxEntry(entryId) {
+            if (!confirm(L('confirmDeleteEntry'))) return;
+            try {
+                var res = await fetch('/admin/api/outbox/' + encodeURIComponent(outboxModalFormId) + '/' + encodeURIComponent(entryId), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) {
+                    showToast(L('outboxEntryDeleted'), 'success');
+                    loadOutboxModalPage();
+                } else {
+                    showToast(L('failedDeleteOutbox'), 'error');
                 }
             } catch(e) {
                 showToast(L('connError'), 'error');

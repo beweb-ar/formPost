@@ -100,7 +100,11 @@ const serverMessages = {
         statsReset: 'Statistics reset',
         failedResetStats: 'Failed to reset statistics',
         submissionsDeleted: 'All submissions deleted',
+        submissionDeleted: 'Submission deleted',
         failedDeleteSubs: 'Failed to delete submissions',
+        entryNotFound: 'Entry not found',
+        outboxEntryDeleted: 'Outbox entry deleted',
+        failedDeleteOutbox: 'Failed to delete outbox entry',
         passwordRequired: 'Current password and new password are required',
         passwordTooShort: 'New password must be at least 8 characters',
         passwordIncorrect: 'Current password is incorrect',
@@ -136,8 +140,12 @@ const serverMessages = {
         failedSaveConfig: 'Error al guardar configuraci\u00f3n',
         statsReset: 'Estad\u00edsticas reiniciadas',
         failedResetStats: 'Error al reiniciar estad\u00edsticas',
-        submissionsDeleted: 'Todos los env\u00edos eliminados',
-        failedDeleteSubs: 'Error al eliminar env\u00edos',
+        submissionsDeleted: 'Todos los envíos eliminados',
+        submissionDeleted: 'Envío eliminado',
+        failedDeleteSubs: 'Error al eliminar envíos',
+        entryNotFound: 'Registro no encontrado',
+        outboxEntryDeleted: 'Registro de salida eliminado',
+        failedDeleteOutbox: 'Error al eliminar registro de salida',
         passwordRequired: 'Se requiere contrase\u00f1a actual y nueva',
         passwordTooShort: 'La nueva contrase\u00f1a debe tener al menos 8 caracteres',
         passwordIncorrect: 'La contrase\u00f1a actual es incorrecta',
@@ -1381,6 +1389,24 @@ adminRouter.delete('/submissions/:websiteId', async (req, res) => {
     }
 });
 
+adminRouter.delete('/submissions/:websiteId/:entryId', async (req, res) => {
+    const { websiteId, entryId } = req.params;
+    if (!config.recipients[websiteId]) {
+        return res.status(404).json({ error: t.formNotFound });
+    }
+    const filePath = path.join(DATA_DIR, `submissions-${websiteId}.json`);
+    try {
+        let submissions = await loadSubmissions(websiteId);
+        const idx = submissions.findIndex(s => s.id === entryId);
+        if (idx === -1) return res.status(404).json({ error: t.entryNotFound });
+        submissions.splice(idx, 1);
+        await fs.writeFile(filePath, JSON.stringify(submissions, null, 2));
+        res.json({ message: t.submissionDeleted });
+    } catch (e) {
+        res.status(500).json({ error: t.failedDeleteSubs });
+    }
+});
+
 adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
     const { websiteId } = req.params;
     if (!config.recipients[websiteId]) {
@@ -1577,6 +1603,22 @@ adminRouter.get('/outbox/:websiteId', async (req, res) => {
         page,
         pages: Math.ceil(entries.length / limit)
     });
+});
+
+adminRouter.delete('/outbox/:websiteId/:entryId', async (req, res) => {
+    const { websiteId, entryId } = req.params;
+    if (!config.recipients[websiteId]) return res.status(404).json({ error: t.formNotFound });
+    const filePath = path.join(DATA_DIR, `outbox-${websiteId}.json`);
+    try {
+        let entries = await loadOutboxEntries(websiteId);
+        const idx = entries.findIndex(e => e.id === entryId);
+        if (idx === -1) return res.status(404).json({ error: t.entryNotFound });
+        entries.splice(idx, 1);
+        await fs.writeFile(filePath, JSON.stringify(entries, null, 2));
+        res.json({ message: t.outboxEntryDeleted });
+    } catch (e) {
+        res.status(500).json({ error: t.failedDeleteOutbox });
+    }
 });
 
 // SSE token management - temporary tokens instead of credentials in query string
