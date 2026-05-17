@@ -261,24 +261,13 @@ const authLimiter = rateLimit({
 app.use(bodyParser.urlencoded({ extended: true, limit: '100kb' }));
 app.use(bodyParser.json({ limit: '100kb' }));
 
-// CORS Configuration - based on per-form allowedDomains
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-        for (const cfg of Object.values(config.recipients || {})) {
-            if (cfg.allowedDomains && cfg.allowedDomains.length > 0) {
-                const match = cfg.allowedDomains.some(d => {
-                    try { return new URL(d).origin === origin; } catch { return d === origin; }
-                });
-                if (match) {
-                    res.header('Access-Control-Allow-Origin', origin);
-                    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-                    res.header('Access-Control-Allow-Headers', 'Content-Type');
-                    break;
-                }
-            }
-        }
-    }
+// CORS for /submit: open to all origins so client-side fetch() can read the response.
+// Per-form authorization is still enforced in the handler via recipientConfig.allowedDomains
+// (Origin/Referer check at submit time). This only unblocks the browser from reading the body.
+app.use('/submit', (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.status(204).end();
     next();
 });
