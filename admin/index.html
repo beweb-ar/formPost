@@ -993,7 +993,7 @@
     <!-- Create Website Modal -->
     <div class="modal-overlay" id="createModal" style="display:none;">
         <div class="modal">
-            <h3 data-i18n="addNewForm">Add New Form</h3>
+            <h3 id="createModalTitle" data-i18n="addNewForm">Add New Form</h3>
             <form id="createForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -1307,10 +1307,10 @@
                 captchaOn: 'Enabled', captchaOff: 'Disabled', captchaEnabledLabel: 'Enable Captcha Verification',
                 captchaProvider: 'Captcha Provider', captchaKey: 'Secret Key', captchaKeyOpt: 'Secret Key (optional)',
                 submissions: 'Submissions', lastSubmission: 'Last Submission',
-                never: 'Never', addFormCard: 'Add Form', edit: 'Edit', delete: 'Delete',
+                never: 'Never', addFormCard: 'Add Form', edit: 'Edit', delete: 'Delete', clone: 'Clone',
                 failedLoadForms: 'Failed to load forms',
                 // Modals
-                editForm: 'Edit Form', addNewForm: 'Add New Form',
+                editForm: 'Edit Form', addNewForm: 'Add New Form', cloneForm: 'Clone Form',
                 toEmail: 'To Email', subjectPrefix: 'Subject Prefix',
                 redirectUrl: 'Redirect URL', redirectUrlOpt: 'Redirect URL (optional)',
                 templatePath: 'Template Path',
@@ -1418,10 +1418,10 @@
                 captchaOn: 'Activo', captchaOff: 'Desactivado', captchaEnabledLabel: 'Activar Verificaci\u00f3n Captcha',
                 captchaProvider: 'Proveedor de Captcha', captchaKey: 'Clave Secreta', captchaKeyOpt: 'Clave Secreta (opcional)',
                 submissions: 'Env\u00edos', lastSubmission: '\u00daltimo Env\u00edo',
-                never: 'Nunca', addFormCard: 'Agregar Formulario', edit: 'Editar', delete: 'Eliminar',
+                never: 'Nunca', addFormCard: 'Agregar Formulario', edit: 'Editar', delete: 'Eliminar', clone: 'Clonar',
                 failedLoadForms: 'Error al cargar formularios',
                 // Modals
-                editForm: 'Editar Formulario', addNewForm: 'Agregar Nuevo Formulario',
+                editForm: 'Editar Formulario', addNewForm: 'Agregar Nuevo Formulario', cloneForm: 'Clonar Formulario',
                 toEmail: 'Email Destino', subjectPrefix: 'Prefijo de Asunto',
                 redirectUrl: 'URL de Redirecci\u00f3n', redirectUrlOpt: 'URL de Redirecci\u00f3n (opcional)',
                 templatePath: 'Ruta de Plantilla',
@@ -2144,6 +2144,7 @@
                     '<div class="website-card-actions">' +
                         '<button class="btn-sm" onclick="openSubmissionsModal(\'' + esc(id) + '\')">' + L('submissions') + '</button>' +
                         '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">' + L('edit') + '</button>' +
+                        '<button class="btn-icon" onclick="cloneWebsite(\'' + esc(id) + '\')" title="' + L('clone') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--accent-primary)" d="M384 336l-192 0c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l140.1 0L400 115.9 400 320c0 8.8-7.2 16-16 16zM192 384l192 0c35.3 0 64-28.7 64-64l0-204.1c0-12.7-5.1-24.9-14.1-33.9L366.1 14.1c-9-9-21.2-14.1-33.9-14.1L192 0c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64zM64 128c-35.3 0-64 28.7-64 64L0 448c0 35.3 28.7 64 64 64l192 0c35.3 0 64-28.7 64-64l0-32-48 0 0 32c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l32 0 0-48-32 0z"/></svg></button>' +
                         '<button class="btn-icon btn-icon-danger" onclick="deleteWebsite(\'' + esc(id) + '\')" title="' + L('delete') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--danger)" d="M166.2-16c-13.3 0-25.3 8.3-30 20.8L120 48 24 48C10.7 48 0 58.7 0 72S10.7 96 24 96l400 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-96 0-16.2-43.2C307.1-7.7 295.2-16 281.8-16L166.2-16zM32 144l0 304c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-304-48 0 0 304c0 8.8-7.2 16-16 16L96 464c-8.8 0-16-7.2-16-16l0-304-48 0zm160 72c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176zm112 0c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176z"/></svg></button>' +
                     '</div>' +
                     '</div>';
@@ -2248,10 +2249,18 @@
         }
 
         // ========== Create Website Modal ==========
+        // Holds extra fields (senderAlias, auto-reply, etc.) carried over when cloning,
+        // since the create modal has no UI for them. Reset on a normal create.
+        var cloneSourceConfig = null;
+
         async function openCreateModal() {
+            cloneSourceConfig = null;
+            document.getElementById('createModalTitle').textContent = L('addNewForm');
             document.getElementById('createForm').reset();
             createDomains = [];
+            createRecipients = [];
             renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain');
+            renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient');
             await Promise.all([
                 populateTemplateDropdown('createTemplatePath', ''),
                 populateSenderDropdown('createSenderId', '')
@@ -2261,6 +2270,58 @@
 
         function closeCreateModal() {
             document.getElementById('createModal').style.display = 'none';
+        }
+
+        // ========== Clone Website ==========
+        // Opens the create modal pre-filled with an existing form's config so the
+        // user can tweak any value (starting with the ID) before saving the copy.
+        async function cloneWebsite(id) {
+            try {
+                var res = await fetch('/admin/api/websites', { headers: { Authorization: auth } });
+                var data = await res.json();
+                var cfg = data[id];
+                if (!cfg) return showToast(L('formNotFound'), 'error');
+
+                // Reset the modal first, then layer the source values on top.
+                document.getElementById('createForm').reset();
+                document.getElementById('createModalTitle').textContent = L('cloneForm');
+                // Carry over fields the create modal has no input for, so the clone is faithful.
+                cloneSourceConfig = {
+                    senderAlias: cfg.senderAlias,
+                    autoReplyEnabled: cfg.autoReplyEnabled,
+                    autoReplySubject: cfg.autoReplySubject,
+                    autoReplyReplyTo: cfg.autoReplyReplyTo,
+                    autoReplyTemplate: cfg.autoReplyTemplate
+                };
+
+                // Suggest a unique-ish id; the user must still confirm/change it.
+                var newId = id + '-copy';
+                document.querySelector('#createForm [name="id"]').value = newId;
+                document.querySelector('#createForm [name="subjectPrefix"]').value = cfg.subjectPrefix || '';
+                document.querySelector('#createForm [name="redirectUrl"]').value = cfg.redirectUrl || '';
+
+                createRecipients = (cfg.to || '').split(',').map(function(e) { return e.trim(); }).filter(Boolean);
+                renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient');
+                createDomains = (cfg.allowedDomains || []).slice();
+                renderDomainList('createDomainsContainer', createDomains, 'removeCreateDomain');
+
+                document.querySelector('#createForm [name="captchaKey"]').value = cfg.captchaKey || cfg.turnstileKey || '';
+                document.getElementById('createCaptchaEnabled').checked = (cfg.captchaEnabled !== undefined ? cfg.captchaEnabled : cfg.turnstileEnabled) !== false;
+                document.getElementById('createCaptchaProvider').value = cfg.captchaProvider || 'turnstile';
+                document.getElementById('createDiscordWebhook').value = cfg.discordWebhook || '';
+                document.getElementById('createTelegramBotToken').value = cfg.telegramBotToken || '';
+                document.getElementById('createTelegramChatId').value = cfg.telegramChatId || '';
+                document.getElementById('createWebhookUrl').value = cfg.webhookUrl || '';
+
+                await Promise.all([
+                    populateTemplateDropdown('createTemplatePath', cfg.templatePath || ''),
+                    populateSenderDropdown('createSenderId', cfg.senderId || '')
+                ]);
+
+                document.getElementById('createModal').style.display = 'flex';
+            } catch(e) {
+                showToast(L('failedLoadData'), 'error');
+            }
         }
 
         document.getElementById('createForm').addEventListener('submit', async function(e) {
@@ -2293,6 +2354,14 @@
             if (createTgChat) payload.config.telegramChatId = createTgChat;
             var createWh = document.getElementById('createWebhookUrl').value.trim();
             if (createWh) payload.config.webhookUrl = createWh;
+            // When cloning, carry over fields that have no input in this modal.
+            if (cloneSourceConfig) {
+                if (cloneSourceConfig.senderAlias) payload.config.senderAlias = cloneSourceConfig.senderAlias;
+                if (cloneSourceConfig.autoReplyEnabled) payload.config.autoReplyEnabled = cloneSourceConfig.autoReplyEnabled;
+                if (cloneSourceConfig.autoReplySubject) payload.config.autoReplySubject = cloneSourceConfig.autoReplySubject;
+                if (cloneSourceConfig.autoReplyReplyTo) payload.config.autoReplyReplyTo = cloneSourceConfig.autoReplyReplyTo;
+                if (cloneSourceConfig.autoReplyTemplate) payload.config.autoReplyTemplate = cloneSourceConfig.autoReplyTemplate;
+            }
             try {
                 var res = await fetch('/admin/api/websites', {
                     method: 'POST',
