@@ -185,6 +185,28 @@ if (process.env.SMTP_HOST || process.env.SMTP_PORT || process.env.SMTP_FROM || p
     if (process.env.SMTP_PASS) config.smtp.pass = process.env.SMTP_PASS;
 }
 
+// Override Agent API key with environment variable if provided
+if (process.env.API_KEY) {
+    if (!config.api) config.api = {};
+    config.api.key = process.env.API_KEY;
+}
+
+// Auto-generate Agent API key on first run
+async function ensureApiKey() {
+    if (config.api && config.api.key) return;
+    const key = 'fp_' + require('crypto').randomBytes(24).toString('hex');
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.api) cfg.api = {};
+            if (!cfg.api.key) cfg.api.key = key;
+            if (cfg.api.enabled === undefined) cfg.api.enabled = true;
+        });
+        log.info('Agent API key generated — view it in the admin UI (Senders > Agent API) or config.json');
+    } catch (e) {
+        log.error('Failed to generate Agent API key', { error: e.message });
+    }
+}
+
 // Auto-hash admin password if stored in plaintext (migration)
 async function ensurePasswordHashed() {
     if (config.admin && config.admin.password && !config.admin.password.startsWith('$2b$')) {
@@ -199,7 +221,8 @@ async function ensurePasswordHashed() {
         }
     }
 }
-ensurePasswordHashed();
+// Run startup config migrations sequentially — both rewrite config.json and would race otherwise
+ensurePasswordHashed().then(ensureApiKey);
 
 // Security headers
 app.use(helmet({
@@ -284,11 +307,75 @@ if (config.smtp && !config.senders) {
 }
 if (!config.senders) config.senders = {};
 
-// Configure Nodemailer transporters (one per sender)
+// Parse '"Display Name" <email@dom>' or plain 'email@dom' into SendGrid address object
+function parseAddress(addr) {
+    const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(String(addr || ''));
+    if (m) {
+        const out = { email: m[2].trim() };
+        if (m[1].trim()) out.name = m[1].trim();
+        return out;
+    }
+    return { email: String(addr || '').trim() };
+}
+
+// SendGrid transporter: same sendMail()/verify() interface as nodemailer,
+// implemented over the SendGrid v3 HTTP API (no SMTP ports needed)
+function buildSendGridTransporter(senderCfg) {
+    const client = axios.create({
+        baseURL: 'https://api.sendgrid.com/v3',
+        headers: { Authorization: `Bearer ${senderCfg.apiKey || ''}`, 'Content-Type': 'application/json' },
+        timeout: 15000
+    });
+    return {
+        isSendGrid: true,
+        async verify() {
+            // Any valid API key can read its own scopes
+            try {
+                await client.get('/scopes');
+            } catch (e) {
+                const status = e.response && e.response.status;
+                throw new Error(status === 401 ? 'SendGrid: invalid API key' : 'SendGrid: ' + e.message);
+            }
+            return true;
+        },
+        async sendMail(mailOptions) {
+            const toList = String(mailOptions.to || '')
+                .split(',').map(s => s.trim()).filter(Boolean).map(parseAddress);
+            const payload = {
+                personalizations: [{ to: toList }],
+                from: parseAddress(mailOptions.from),
+                subject: mailOptions.subject,
+                content: [{ type: 'text/html', value: mailOptions.html || '' }]
+            };
+            if (mailOptions.replyTo) payload.reply_to = parseAddress(mailOptions.replyTo);
+            const atts = [];
+            for (const a of (mailOptions.attachments || [])) {
+                const buf = await fs.readFile(a.path);
+                atts.push({ content: buf.toString('base64'), filename: a.filename, disposition: 'attachment' });
+            }
+            if (atts.length) payload.attachments = atts;
+            try {
+                await client.post('/mail/send', payload);
+            } catch (e) {
+                const sgErrors = e.response && e.response.data && e.response.data.errors;
+                const detail = sgErrors ? sgErrors.map(er => er.message).join('; ') : e.message;
+                throw new Error('SendGrid: ' + detail);
+            }
+        }
+    };
+}
+
+// Configure transporters (one per sender). type: 'smtp' (default) | 'sendgrid'
 const transporters = {};
 function buildTransporter(smtpConfig) {
+    if (smtpConfig.type === 'sendgrid') {
+        return buildSendGridTransporter(smtpConfig);
+    }
     const tc = { ...smtpConfig };
     delete tc.name; // alias field, not for nodemailer
+    delete tc.type;
+    delete tc.apiKey;
+    delete tc.domain;
     if (tc.user && tc.pass) {
         tc.auth = { type: 'LOGIN', user: tc.user, pass: tc.pass };
     }
@@ -1110,13 +1197,16 @@ adminRouter.get('/senders', (req, res) => {
     for (const [id, cfg] of Object.entries(config.senders || {})) {
         sanitized[id] = {
             name: cfg.name || id,
+            type: cfg.type || 'smtp',
             host: cfg.host,
             port: cfg.port,
             secure: cfg.secure,
             active: cfg.active !== false,
             from: cfg.from,
             user: cfg.user || '',
-            pass: cfg.pass ? '••••' : ''
+            pass: cfg.pass ? '••••' : '',
+            apiKey: cfg.apiKey ? '••••' : '',
+            domain: cfg.domain || ''
         };
     }
     res.json(sanitized);
@@ -1180,11 +1270,12 @@ adminRouter.post('/senders/:id/test', async (req, res) => {
     try {
         const testTransporter = buildTransporter(senderCfg);
         await testTransporter.verify();
+        const senderType = senderCfg.type === 'sendgrid' ? 'SendGrid' : 'SMTP';
         await testTransporter.sendMail({
             from: senderCfg.from,
             to: testTo,
             subject: 'formPost - Test Connection',
-            html: '<h2>formPost SMTP Test</h2><p>This is a test email from formPost to verify that the SMTP sender <strong>' + escapeHtml(senderCfg.name || id) + '</strong> is working correctly.</p><p>If you received this email, the configuration is correct.</p>'
+            html: '<h2>formPost ' + senderType + ' Test</h2><p>This is a test email from formPost to verify that the ' + senderType + ' sender <strong>' + escapeHtml(senderCfg.name || id) + '</strong> is working correctly.</p><p>If you received this email, the configuration is correct.</p>'
         });
         res.json({ message: 'Test email sent to ' + testTo });
     } catch (e) {
@@ -1721,7 +1812,558 @@ adminRouter.post('/restore', async (req, res) => {
     }
 });
 
+// Agent API key management (admin)
+adminRouter.get('/apikey', (req, res) => {
+    res.json({
+        key: (config.api && config.api.key) || '',
+        enabled: !!(config.api && config.api.key) && config.api.enabled !== false
+    });
+});
+
+adminRouter.post('/apikey/regenerate', async (req, res) => {
+    const key = 'fp_' + require('crypto').randomBytes(24).toString('hex');
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.api) cfg.api = {};
+            cfg.api.key = key;
+        });
+        res.json({ key });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.put('/apikey', async (req, res) => {
+    const enabled = !!(req.body && req.body.enabled);
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.api) cfg.api = {};
+            cfg.api.enabled = enabled;
+        });
+        res.json({ enabled });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
 app.use('/admin/api', adminRouter);
+
+// ===================== Agent API (/api/v1) =====================
+// Programmatic REST API designed for AI agents and automation tools.
+// Auth: X-API-Key header (or Authorization: Bearer <key>).
+// GET /api/v1 returns a machine-readable description of the whole API.
+
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 240,
+    message: { error: 'Too many API requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+function apiAuth(req, res, next) {
+    if (!config.api || !config.api.key || config.api.enabled === false) {
+        return res.status(503).json({ error: 'Agent API is disabled. Enable it from the admin UI (Senders > Agent API).' });
+    }
+    let provided = req.headers['x-api-key'] || '';
+    const authHeader = req.headers['authorization'] || '';
+    if (!provided && authHeader.startsWith('Bearer ')) provided = authHeader.slice(7).trim();
+    if (!provided) {
+        return res.status(401).json({ error: 'Missing API key. Send it in the X-API-Key header (or Authorization: Bearer <key>).' });
+    }
+    const crypto = require('crypto');
+    const a = crypto.createHash('sha256').update(String(provided)).digest();
+    const b = crypto.createHash('sha256').update(String(config.api.key)).digest();
+    if (!crypto.timingSafeEqual(a, b)) {
+        return res.status(401).json({ error: 'Invalid API key.' });
+    }
+    next();
+}
+
+function apiBaseUrl(req) {
+    return `${req.protocol}://${req.get('host')}`;
+}
+
+// Whitelisted form config fields accepted from the Agent API
+const FORM_CONFIG_FIELDS = [
+    'to', 'subjectPrefix', 'senderId', 'senderAlias', 'templatePath',
+    'autoReplyEnabled', 'autoReplyTemplate', 'autoReplySubject', 'autoReplyReplyTo',
+    'discordWebhook', 'telegramBotToken', 'telegramChatId', 'webhookUrl',
+    'captchaEnabled', 'captchaProvider', 'allowedDomains', 'redirectUrl'
+];
+
+function validateFormConfig(body, isCreate) {
+    const cfg = {};
+    const errors = [];
+    const warnings = [];
+    for (const f of FORM_CONFIG_FIELDS) {
+        if (body[f] !== undefined) cfg[f] = body[f];
+    }
+    if (isCreate && cfg.to === undefined) {
+        errors.push('"to" is required: destination email address(es), comma-separated.');
+    }
+    if (cfg.to !== undefined) {
+        const emails = String(cfg.to).split(',').map(s => s.trim()).filter(Boolean);
+        if (!emails.length || !emails.every(isValidEmail)) {
+            errors.push('"to" must be one or more valid email addresses, comma-separated.');
+        }
+    }
+    if (cfg.templatePath !== undefined) {
+        const resolved = path.resolve(__dirname, String(cfg.templatePath));
+        if (!resolved.startsWith(__dirname)) {
+            errors.push('"templatePath" must be a relative path inside formPost (e.g. "templates/contact-form.html").');
+        }
+    }
+    if (cfg.allowedDomains !== undefined && !Array.isArray(cfg.allowedDomains)) {
+        errors.push('"allowedDomains" must be an array of origins, e.g. ["https://example.com"].');
+    }
+    if (cfg.captchaProvider !== undefined && !['turnstile', 'hcaptcha'].includes(cfg.captchaProvider)) {
+        errors.push('"captchaProvider" must be "turnstile" or "hcaptcha".');
+    }
+    if (cfg.senderId !== undefined && !(config.senders || {})[cfg.senderId]) {
+        warnings.push(`senderId "${cfg.senderId}" does not exist yet; email will fall back to the first configured sender. Create it via POST /api/v1/senders.`);
+    }
+    return { cfg, errors, warnings };
+}
+
+const SENDER_CONFIG_FIELDS = ['name', 'type', 'host', 'port', 'secure', 'from', 'user', 'pass', 'apiKey', 'domain', 'active'];
+
+function validateSenderConfig(body, existing) {
+    const cfg = {};
+    const errors = [];
+    for (const f of SENDER_CONFIG_FIELDS) {
+        if (body[f] !== undefined) cfg[f] = body[f];
+    }
+    const merged = { ...(existing || {}), ...cfg };
+    const type = merged.type || 'smtp';
+    if (!['smtp', 'sendgrid'].includes(type)) {
+        errors.push('"type" must be "smtp" or "sendgrid".');
+        return { cfg, errors };
+    }
+    if (!merged.from || !isValidEmail(merged.from)) {
+        errors.push('"from" must be a valid email address.');
+    }
+    if (type === 'sendgrid') {
+        if (!merged.apiKey) errors.push('"apiKey" is required for SendGrid senders.');
+        if (merged.domain && merged.from) {
+            const fromLower = String(merged.from).toLowerCase();
+            const domLower = String(merged.domain).toLowerCase();
+            if (!fromLower.endsWith('@' + domLower) && !fromLower.endsWith('.' + domLower)) {
+                errors.push(`"from" must belong to the SendGrid sending domain "${merged.domain}".`);
+            }
+        }
+    } else {
+        if (!merged.host) errors.push('"host" is required for SMTP senders.');
+        if (!merged.port) errors.push('"port" is required for SMTP senders.');
+    }
+    return { cfg, errors };
+}
+
+function sanitizeSenderForApi(id, cfg) {
+    return {
+        id,
+        name: cfg.name || id,
+        type: cfg.type || 'smtp',
+        host: cfg.host || '',
+        port: cfg.port || '',
+        secure: !!cfg.secure,
+        from: cfg.from || '',
+        user: cfg.user || '',
+        domain: cfg.domain || '',
+        active: cfg.active !== false,
+        hasPassword: !!cfg.pass,
+        hasApiKey: !!cfg.apiKey
+    };
+}
+
+function exampleFormHtml(req, formId) {
+    return [
+        `<form action="${apiBaseUrl(req)}/submit" method="POST">`,
+        `    <input type="hidden" name="form_id" value="${formId}">`,
+        `    <input type="text" name="name" placeholder="Name" required>`,
+        `    <input type="email" name="email" placeholder="Email" required>`,
+        `    <textarea name="message" placeholder="Message"></textarea>`,
+        `    <!-- Honeypot anti-bot field: keep hidden and empty -->`,
+        `    <input type="text" name="_hp_field" style="display:none" tabindex="-1" autocomplete="off">`,
+        `    <button type="submit">Send</button>`,
+        `</form>`
+    ].join('\n');
+}
+
+function buildApiSpec(req) {
+    const base = apiBaseUrl(req);
+    return {
+        name: 'formPost Agent API',
+        version: pkg.version,
+        description: 'REST API for AI agents to configure formPost: create forms, configure email senders (SMTP/SendGrid), manage templates and read submissions. End users submit forms via POST ' + base + '/submit (no auth).',
+        authentication: {
+            type: 'apiKey',
+            header: 'X-API-Key',
+            alternative: 'Authorization: Bearer <key>',
+            howToGetKey: 'Ask the formPost administrator. The key is shown in the admin UI under Senders > Agent API.'
+        },
+        quickstart: [
+            '1. GET /api/v1/senders to check an email sender exists (or create one with POST /api/v1/senders).',
+            '2. POST /api/v1/forms with at least {"id": "my-form", "to": "owner@example.com"} to create a form.',
+            '3. The response includes exampleHtml — paste it into the website. Submissions POST to /submit with a form_id field.',
+            '4. GET /api/v1/forms/my-form/submissions to read received submissions, GET .../outbox to verify emails were delivered.'
+        ],
+        endpoints: [
+            { method: 'GET', path: '/api/v1', auth: false, description: 'This API specification.' },
+            { method: 'GET', path: '/api/v1/status', auth: true, description: 'Server status: version, forms, senders.' },
+            { method: 'GET', path: '/api/v1/forms', auth: true, description: 'List all forms with their full configuration.' },
+            { method: 'POST', path: '/api/v1/forms', auth: true, description: 'Create a form. Body: { id, ...formConfig }. Returns the form, submitUrl and a ready-to-paste exampleHtml.', requiredFields: ['id', 'to'] },
+            { method: 'GET', path: '/api/v1/forms/:id', auth: true, description: 'Get one form configuration.' },
+            { method: 'PUT', path: '/api/v1/forms/:id', auth: true, description: 'Update a form. Body: partial formConfig (merged over existing).' },
+            { method: 'DELETE', path: '/api/v1/forms/:id', auth: true, description: 'Delete a form.' },
+            { method: 'GET', path: '/api/v1/forms/:id/submissions?page=1&limit=50', auth: true, description: 'Read received submissions (newest first).' },
+            { method: 'GET', path: '/api/v1/forms/:id/outbox?page=1&limit=20', auth: true, description: 'Delivery log: emails and notifications sent for this form, with ok/error status.' },
+            { method: 'GET', path: '/api/v1/senders', auth: true, description: 'List email senders (secrets masked).' },
+            { method: 'POST', path: '/api/v1/senders', auth: true, description: 'Create a sender. Body: { id, ...senderConfig }.', requiredFields: ['id', 'from'] },
+            { method: 'PUT', path: '/api/v1/senders/:id', auth: true, description: 'Update a sender. Omit "pass"/"apiKey" to keep the stored secret.' },
+            { method: 'DELETE', path: '/api/v1/senders/:id', auth: true, description: 'Delete a sender.' },
+            { method: 'POST', path: '/api/v1/senders/:id/test', auth: true, description: 'Verify connection and send a test email. Body: { to } (optional, defaults to the sender "from").' },
+            { method: 'GET', path: '/api/v1/templates', auth: true, description: 'List email templates.' },
+            { method: 'GET', path: '/api/v1/templates/:name', auth: true, description: 'Get template HTML content.' },
+            { method: 'PUT', path: '/api/v1/templates/:name', auth: true, description: 'Create or update a template. Body: { content }. Use {{fields}} placeholder for the auto-generated submission fields list and {{form_id}} for the form id. Name must end in .html.' }
+        ],
+        formConfig: {
+            id: 'string, required on create. Letters, numbers, hyphens, underscores. This is the form_id used in form submissions.',
+            to: 'string, required on create. Destination email(s), comma-separated.',
+            subjectPrefix: 'string. Email subject prefix. Default: "[<id>]".',
+            senderId: 'string. Which sender to use (see /api/v1/senders). Default: "default" or first available.',
+            senderAlias: 'string. Fixed From display name; defaults to the submitter name.',
+            templatePath: 'string. Email template path, e.g. "templates/contact-form.html" (default).',
+            autoReplyEnabled: 'boolean. Send a confirmation email to the submitter (uses the "email" field). Default false.',
+            autoReplyTemplate: 'string. Template path for the auto-reply. Default "templates/auto-reply.html".',
+            autoReplySubject: 'string. Subject of the auto-reply.',
+            autoReplyReplyTo: 'string. Reply-To for the auto-reply.',
+            discordWebhook: 'string. Discord webhook URL for notifications.',
+            telegramBotToken: 'string. Telegram bot token for notifications.',
+            telegramChatId: 'string. Telegram chat id for notifications.',
+            webhookUrl: 'string. Generic webhook: receives POST JSON { formId, timestamp, fields } per submission.',
+            captchaEnabled: 'boolean. Verify Cloudflare Turnstile / hCaptcha tokens. Default false.',
+            captchaProvider: '"turnstile" | "hcaptcha". Default "turnstile".',
+            captchaSecretKey: 'string, write-only. Captcha secret key for verification.',
+            allowedDomains: 'string[]. Origins allowed to submit, e.g. ["https://example.com"]. Empty = any origin.',
+            redirectUrl: 'string. Redirect after a classic HTML POST. Omit it for fetch()/AJAX clients, which receive JSON { success: true }.'
+        },
+        senderConfig: {
+            id: 'string, required on create.',
+            type: '"smtp" (default) | "sendgrid".',
+            name: 'string. Display name.',
+            from: 'string, required. Sender email address. For SendGrid it must belong to a verified sending domain.',
+            active: 'boolean. Default true.',
+            host: 'string. SMTP only: server host.',
+            port: 'number. SMTP only: 587 (STARTTLS) or 465 (TLS).',
+            secure: 'boolean. SMTP only: true for port 465.',
+            user: 'string. SMTP only: auth username.',
+            pass: 'string. SMTP only: auth password (write-only, never returned).',
+            apiKey: 'string. SendGrid only: API key with Mail Send permission (write-only, never returned).',
+            domain: 'string. SendGrid only: verified sending domain, e.g. "example.com". Used to validate "from".'
+        },
+        submitEndpoint: {
+            method: 'POST',
+            url: base + '/submit',
+            auth: false,
+            contentTypes: ['application/x-www-form-urlencoded', 'multipart/form-data'],
+            requiredFields: { form_id: 'the form id' },
+            notes: [
+                'Any other fields are free-form (max 30 fields, 5000 chars each) and are emailed/stored dynamically.',
+                'Fields named "name"/"nombre" and "email"/"correo" are used for the submitter identity and auto-reply.',
+                'Include a hidden, empty "_hp_field" input as honeypot bot protection.',
+                'File uploads: up to 5 files, 10 MB each, in an "attachments" field (multipart).',
+                'Rate limits: 5 submissions/minute per IP, 100/minute per form.'
+            ]
+        }
+    };
+}
+
+const apiRouter = express.Router();
+apiRouter.use(apiLimiter);
+
+// Public, machine-readable API spec (no auth — contains no secrets)
+apiRouter.get('/', (req, res) => {
+    res.json(buildApiSpec(req));
+});
+
+apiRouter.use(apiAuth);
+
+apiRouter.get('/status', (req, res) => {
+    res.json({
+        status: 'ok',
+        version: pkg.version,
+        forms: Object.keys(config.recipients),
+        senders: Object.keys(config.senders || {}),
+        submitUrl: apiBaseUrl(req) + '/submit'
+    });
+});
+
+// ---- Forms ----
+apiRouter.get('/forms', (req, res) => {
+    const forms = {};
+    for (const [id, cfg] of Object.entries(config.recipients)) {
+        forms[id] = { ...cfg };
+    }
+    res.json({ forms, submitUrl: apiBaseUrl(req) + '/submit' });
+});
+
+apiRouter.get('/forms/:id', (req, res) => {
+    const cfg = config.recipients[req.params.id];
+    if (!cfg) return res.status(404).json({ error: t.formNotFound });
+    res.json({ id: req.params.id, ...cfg });
+});
+
+apiRouter.post('/forms', async (req, res) => {
+    const body = req.body || {};
+    const id = body.id;
+    if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id) || id.length > 64) {
+        return res.status(400).json({ error: 'Invalid "id": use only letters, numbers, hyphens and underscores (max 64 chars).' });
+    }
+    if (config.recipients[id]) {
+        return res.status(409).json({ error: `Form "${id}" already exists. Use PUT /api/v1/forms/${id} to update it.` });
+    }
+    const { cfg, errors, warnings } = validateFormConfig(body, true);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
+    // Sensible defaults for agent-created forms
+    if (cfg.subjectPrefix === undefined) cfg.subjectPrefix = `[${id}]`;
+    if (cfg.templatePath === undefined) cfg.templatePath = 'templates/contact-form.html';
+    if (cfg.captchaEnabled === undefined) cfg.captchaEnabled = false;
+    if (cfg.allowedDomains === undefined) cfg.allowedDomains = [];
+    try {
+        await writeConfigSafe(c => {
+            c.recipients[id] = cfg;
+            if (body.captchaSecretKey) {
+                if (!c.captcha) c.captcha = {};
+                c.captcha[id] = { secretKey: body.captchaSecretKey };
+            }
+        });
+        log.info('Form created via Agent API', { formId: id });
+        res.status(201).json({
+            message: `Form "${id}" created.`,
+            form: { id, ...cfg },
+            submitUrl: apiBaseUrl(req) + '/submit',
+            usage: 'POST form fields (urlencoded or multipart) to submitUrl, including a "form_id" field with this form id.',
+            exampleHtml: exampleFormHtml(req, id),
+            warnings
+        });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+apiRouter.put('/forms/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    const body = req.body || {};
+    const { cfg, errors, warnings } = validateFormConfig(body, false);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
+    try {
+        await writeConfigSafe(c => {
+            c.recipients[id] = { ...c.recipients[id], ...cfg };
+            if (body.captchaSecretKey) {
+                if (!c.captcha) c.captcha = {};
+                c.captcha[id] = { secretKey: body.captchaSecretKey };
+            }
+        });
+        log.info('Form updated via Agent API', { formId: id });
+        res.json({ message: t.formUpdated, form: { id, ...config.recipients[id] }, warnings });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+apiRouter.delete('/forms/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    try {
+        await writeConfigSafe(c => {
+            delete c.recipients[id];
+            if (c.captcha && c.captcha[id]) delete c.captcha[id];
+            if (c.turnstile && c.turnstile[id]) delete c.turnstile[id];
+        });
+        log.info('Form deleted via Agent API', { formId: id });
+        res.json({ message: t.formRemoved });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+apiRouter.get('/forms/:id/submissions', async (req, res) => {
+    const { id } = req.params;
+    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+    const submissions = await loadSubmissions(id);
+    const start = (page - 1) * limit;
+    res.json({
+        submissions: submissions.slice(start, start + limit),
+        total: submissions.length,
+        page,
+        limit,
+        totalPages: Math.ceil(submissions.length / limit)
+    });
+});
+
+apiRouter.get('/forms/:id/outbox', async (req, res) => {
+    const { id } = req.params;
+    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const entries = await loadOutboxEntries(id);
+    const start = (page - 1) * limit;
+    res.json({
+        entries: entries.slice(start, start + limit),
+        total: entries.length,
+        page,
+        limit,
+        totalPages: Math.ceil(entries.length / limit)
+    });
+});
+
+// ---- Senders ----
+apiRouter.get('/senders', (req, res) => {
+    const senders = Object.entries(config.senders || {}).map(([id, cfg]) => sanitizeSenderForApi(id, cfg));
+    res.json({ senders });
+});
+
+apiRouter.post('/senders', async (req, res) => {
+    const body = req.body || {};
+    const id = body.id;
+    if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id) || id.length > 64) {
+        return res.status(400).json({ error: 'Invalid "id": use only letters, numbers, hyphens and underscores (max 64 chars).' });
+    }
+    if (config.senders && config.senders[id]) {
+        return res.status(409).json({ error: `Sender "${id}" already exists. Use PUT /api/v1/senders/${id} to update it.` });
+    }
+    const { cfg, errors } = validateSenderConfig(body, null);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
+    if (cfg.type === undefined) cfg.type = 'smtp';
+    try {
+        await writeConfigSafe(c => {
+            if (!c.senders) c.senders = {};
+            c.senders[id] = cfg;
+        });
+        rebuildAllTransporters();
+        log.info('Sender created via Agent API', { senderId: id, type: cfg.type });
+        res.status(201).json({
+            message: `Sender "${id}" created.`,
+            sender: sanitizeSenderForApi(id, cfg),
+            hint: `Verify it works with POST /api/v1/senders/${id}/test`
+        });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+apiRouter.put('/senders/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    const { cfg, errors } = validateSenderConfig(req.body || {}, config.senders[id]);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
+    try {
+        await writeConfigSafe(c => {
+            c.senders[id] = { ...c.senders[id], ...cfg };
+        });
+        rebuildAllTransporters();
+        log.info('Sender updated via Agent API', { senderId: id });
+        res.json({ message: 'Sender updated', sender: sanitizeSenderForApi(id, config.senders[id]) });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+apiRouter.delete('/senders/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    try {
+        await writeConfigSafe(c => {
+            delete c.senders[id];
+        });
+        delete transporters[id];
+        log.info('Sender deleted via Agent API', { senderId: id });
+        res.json({ message: 'Sender removed' });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+apiRouter.post('/senders/:id/test', async (req, res) => {
+    const { id } = req.params;
+    const senderCfg = config.senders && config.senders[id];
+    if (!senderCfg) return res.status(404).json({ error: 'Sender not found' });
+    const testTo = (req.body && req.body.to) || senderCfg.from;
+    if (!testTo || !isValidEmail(testTo)) {
+        return res.status(400).json({ error: 'Invalid email address' });
+    }
+    try {
+        const testTransporter = buildTransporter(senderCfg);
+        await testTransporter.verify();
+        const senderType = senderCfg.type === 'sendgrid' ? 'SendGrid' : 'SMTP';
+        await testTransporter.sendMail({
+            from: senderCfg.from,
+            to: testTo,
+            subject: 'formPost - Test Connection',
+            html: '<h2>formPost ' + senderType + ' Test</h2><p>Test email sent via the Agent API to verify that the sender <strong>' + escapeHtml(senderCfg.name || id) + '</strong> is working correctly.</p>'
+        });
+        res.json({ message: 'Test email sent to ' + testTo });
+    } catch (e) {
+        log.error('Sender test failed (Agent API)', { senderId: id, error: e.message });
+        res.status(500).json({ error: 'Connection failed: ' + e.message });
+    }
+});
+
+// ---- Templates ----
+apiRouter.get('/templates', async (req, res) => {
+    const templates = [];
+    try {
+        const files = await fs.readdir(TEMPLATES_DIR);
+        for (const f of files) {
+            if (f.endsWith('.html')) templates.push({ name: f, path: `templates/${f}` });
+        }
+    } catch (e) {}
+    res.json({
+        templates,
+        placeholders: {
+            '{{fields}}': 'Replaced with an auto-generated <li> list of all submitted fields.',
+            '{{form_id}}': 'Replaced with the form id.'
+        }
+    });
+});
+
+apiRouter.get('/templates/:name', async (req, res) => {
+    const name = req.params.name;
+    if (name.includes('/') || name.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid template name' });
+    }
+    try {
+        const content = await fs.readFile(path.join(TEMPLATES_DIR, name), 'utf8');
+        res.json({ name, path: `templates/${name}`, content });
+    } catch (e) {
+        res.status(404).json({ error: 'Template not found' });
+    }
+});
+
+apiRouter.put('/templates/:name', async (req, res) => {
+    const name = req.params.name;
+    if (!name.endsWith('.html') || name.includes('/') || name.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid template name: must end in .html and contain no path separators.' });
+    }
+    const { content } = req.body || {};
+    if (typeof content !== 'string') {
+        return res.status(400).json({ error: 'Body must be JSON: { "content": "<html>..." }' });
+    }
+    await ensureTemplatesDir();
+    try {
+        await fs.writeFile(path.join(TEMPLATES_DIR, name), content, 'utf8');
+        log.info('Template saved via Agent API', { template: name });
+        res.json({ message: 'Template saved', path: `templates/${name}` });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to save template' });
+    }
+});
+
+app.use('/api/v1', apiRouter);
 
 // Start the server
 app.listen(PORT, () => {

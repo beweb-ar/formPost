@@ -31,6 +31,7 @@
 - [Email Templates](#email-templates)
 - [HTML Form Example](#html-form-example)
 - [API Reference](#api-reference)
+- [Agent API (for AI Agents)](#agent-api-for-ai-agents)
 - [Docker Deployment](#docker-deployment)
 - [Security](#security)
 - [File Structure](#file-structure)
@@ -41,7 +42,9 @@
 
 ### Core
 - **Multi-form support** - Handle unlimited forms, each with its own configuration
-- **Multi-sender SMTP** - Configure multiple SMTP relays with active/disabled toggle per sender
+- **Multi-sender email** - Configure multiple senders (SMTP relays or SendGrid API) with active/disabled toggle per sender
+- **SendGrid support** - Send via the SendGrid v3 HTTP API with just an API key and a verified sending domain (no SMTP ports needed)
+- **Agent API** - Self-documented REST API (`/api/v1`) so AI agents can create forms, senders and templates programmatically
 - **Multiple recipients** - Send to multiple email addresses per form (comma-separated, chip UI)
 - **HTML email notifications** - Custom email templates per form with dynamic field injection
 - **File attachments** - Accept file uploads (max 5 files, 10 MB each) and forward them via email, Discord, and Telegram
@@ -135,6 +138,7 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
     "senders": {
         "default": {
             "name": "Default",
+            "type": "smtp",
             "host": "smtp.example.com",
             "port": 587,
             "secure": false,
@@ -142,7 +146,19 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
             "from": "noreply@example.com",
             "user": "smtp_user",
             "pass": "smtp_pass"
+        },
+        "sendgrid": {
+            "name": "SendGrid",
+            "type": "sendgrid",
+            "apiKey": "SG.xxxxxxxx",
+            "domain": "example.com",
+            "from": "noreply@example.com",
+            "active": true
         }
+    },
+    "api": {
+        "key": "fp_xxxxxxxx (auto-generated on first run)",
+        "enabled": true
     },
     "captcha": {
         "my-form": {
@@ -184,13 +200,18 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | Field | Type | Description |
 |---|---|---|
 | `name` | string | Display name / alias |
-| `host` | string | SMTP server hostname |
-| `port` | number | SMTP port (587, 465, etc.) |
-| `secure` | boolean | Use TLS/SSL |
+| `type` | string | `"smtp"` (default) or `"sendgrid"` |
 | `active` | boolean | When `false`, emails are skipped (config preserved) |
 | `from` | string | From email address |
-| `user` | string | SMTP username |
-| `pass` | string | SMTP password |
+| `host` | string | SMTP only: server hostname |
+| `port` | number | SMTP only: port (587, 465, etc.) |
+| `secure` | boolean | SMTP only: use TLS/SSL |
+| `user` | string | SMTP only: username |
+| `pass` | string | SMTP only: password |
+| `apiKey` | string | SendGrid only: API key with **Mail Send** permission |
+| `domain` | string | SendGrid only: verified sending domain (the `from` address must belong to it) |
+
+> **SendGrid:** create an API key at SendGrid > Settings > API Keys with Mail Send permission, and verify your sending domain under Settings > Sender Authentication. SendGrid senders use the v3 HTTP API, so they work even where outbound SMTP ports are blocked.
 
 ## Environment Variables
 
@@ -201,6 +222,7 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `LANG` | `es` | UI and server language (`en` or `es`) |
 | `ADMIN_USERNAME` | - | Override admin username |
 | `ADMIN_PASSWORD` | - | Override admin password |
+| `API_KEY` | - | Override the Agent API key (`/api/v1`) |
 
 ## Internationalization (i18n)
 
@@ -248,8 +270,9 @@ environment:
 
 ### Senders
 
-- Add, edit, delete SMTP senders with active/disabled toggle
+- Add, edit, delete senders (SMTP or SendGrid) with active/disabled toggle
 - Test connection from the UI
+- Agent API key management: view, copy, regenerate, enable/disable
 - Backup / Restore buttons (exports forms, senders, templates as JSON)
 
 ## Email Templates
@@ -328,6 +351,103 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 | `POST` | `/admin/api/restore` | Restore from backup |
 | `POST` | `/admin/api/inbox/token` | Issue SSE token |
 | `GET` | `/admin/api/inbox/stream` | SSE stream (inbox + outbox events) |
+| `GET` | `/admin/api/apikey` | View Agent API key and enabled state |
+| `POST` | `/admin/api/apikey/regenerate` | Regenerate the Agent API key |
+| `PUT` | `/admin/api/apikey` | Enable/disable the Agent API (`{ "enabled": true }`) |
+
+## Agent API (for AI Agents)
+
+formPost is often the backend for websites built by AI agents. The **Agent API** lets the agent itself connect to your formPost instance and configure everything it needs — forms, email senders (SMTP or SendGrid), templates — and read back submissions and delivery logs, without touching the admin UI.
+
+**Everything an agent needs to know:**
+
+1. **Base URL:** `https://your-server.com/api/v1`
+2. **Self-documentation:** `GET /api/v1` (no auth) returns a machine-readable JSON spec of every endpoint, every field and the submit contract. An agent can bootstrap itself from that single URL.
+3. **Authentication:** send the API key in the `X-API-Key` header (or `Authorization: Bearer <key>`). The key is auto-generated on first run; the admin can view/copy/regenerate it in the admin UI under **Senders > Agent API**, or set it via the `API_KEY` environment variable.
+
+> Prompt suggestion for your AI agent:
+> *"You can create the backend for this contact form on my formPost instance. Fetch `https://your-server.com/api/v1` to learn the API; authenticate with header `X-API-Key: fp_xxx`. Create a form, then use the `exampleHtml` from the response in the website."*
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1` | API spec (public, no auth, no secrets) |
+| `GET` | `/api/v1/status` | Version, configured forms and senders |
+| `GET` | `/api/v1/forms` | List all forms with full config |
+| `POST` | `/api/v1/forms` | Create a form. Body: `{ "id", ...formConfig }` |
+| `GET` | `/api/v1/forms/:id` | Get one form |
+| `PUT` | `/api/v1/forms/:id` | Update a form (partial body, merged) |
+| `DELETE` | `/api/v1/forms/:id` | Delete a form |
+| `GET` | `/api/v1/forms/:id/submissions` | Read submissions (`?page=1&limit=50`) |
+| `GET` | `/api/v1/forms/:id/outbox` | Delivery log (emails/notifications with ok/error status) |
+| `GET` | `/api/v1/senders` | List senders (secrets masked) |
+| `POST` | `/api/v1/senders` | Create a sender (SMTP or SendGrid). Body: `{ "id", ...senderConfig }` |
+| `PUT` | `/api/v1/senders/:id` | Update a sender (omit `pass`/`apiKey` to keep stored secrets) |
+| `DELETE` | `/api/v1/senders/:id` | Delete a sender |
+| `POST` | `/api/v1/senders/:id/test` | Verify connection + send test email. Body: `{ "to" }` (optional) |
+| `GET` | `/api/v1/templates` | List email templates |
+| `GET` | `/api/v1/templates/:name` | Get template content |
+| `PUT` | `/api/v1/templates/:name` | Create/update a template. Body: `{ "content": "<html>..." }` |
+
+The form and sender field schemas are the same as in [Configuration](#configuration) (see `formConfig` and `senderConfig` in the `GET /api/v1` response). Extra create-form niceties:
+
+- `to` is the only required field besides `id`; sensible defaults are applied (`subjectPrefix`, `templatePath`, captcha off, all origins allowed).
+- `captchaSecretKey` (write-only) can be included to configure captcha verification in one call.
+- The create response includes `submitUrl` and a ready-to-paste `exampleHtml` form snippet.
+- Validation errors come back as descriptive messages an agent can act on, plus `warnings` for non-fatal issues (e.g. a `senderId` that doesn't exist yet).
+
+### Example: full agent flow
+
+```bash
+BASE="https://your-server.com"
+KEY="fp_xxxxxxxxxxxxxxxx"
+
+# 0. Discover the API (no auth)
+curl "$BASE/api/v1"
+
+# 1. Create a SendGrid sender (or skip if GET /api/v1/senders shows one)
+curl -X POST "$BASE/api/v1/senders" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{
+    "id": "sendgrid-main",
+    "type": "sendgrid",
+    "name": "SendGrid",
+    "apiKey": "SG.xxxxxxxx",
+    "domain": "example.com",
+    "from": "noreply@example.com"
+  }'
+
+# 2. Test it
+curl -X POST "$BASE/api/v1/senders/sendgrid-main/test" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{ "to": "me@example.com" }'
+
+# 3. Create the form
+curl -X POST "$BASE/api/v1/forms" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{
+    "id": "landing-contact",
+    "to": "owner@example.com",
+    "subjectPrefix": "[Landing] ",
+    "senderId": "sendgrid-main",
+    "allowedDomains": ["https://example.com"],
+    "autoReplyEnabled": true,
+    "autoReplySubject": "Thanks! We got your message"
+  }'
+# -> response includes "exampleHtml": a working <form> ready to paste into the website
+
+# 4. Later: read the submissions and verify deliveries
+curl -H "X-API-Key: $KEY" "$BASE/api/v1/forms/landing-contact/submissions?limit=10"
+curl -H "X-API-Key: $KEY" "$BASE/api/v1/forms/landing-contact/outbox"
+```
+
+### Rate limits & safety
+
+- Agent API: 240 requests/minute.
+- The key grants admin-level configuration access — treat it like a password. Regenerate it anytime from the admin UI.
+- The API can be disabled entirely with the **Enabled** toggle in **Senders > Agent API** (requests then get `503`).
+- Secrets (`pass`, `apiKey`) are write-only: never returned by `GET` endpoints.
 
 ## Docker Deployment
 

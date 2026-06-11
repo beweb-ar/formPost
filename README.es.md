@@ -31,6 +31,7 @@
 - [Plantillas de Email](#plantillas-de-email)
 - [Ejemplo de Formulario HTML](#ejemplo-de-formulario-html)
 - [Referencia de API](#referencia-de-api)
+- [API para Agentes de IA](#api-para-agentes-de-ia)
 - [Despliegue con Docker](#despliegue-con-docker)
 - [Seguridad](#seguridad)
 - [Estructura de Archivos](#estructura-de-archivos)
@@ -40,7 +41,9 @@
 
 ### Core
 - **Soporte multi-formulario** - Formularios ilimitados, cada uno con su propia configuración
-- **Multi-sender SMTP** - Múltiples relays SMTP con toggle activo/desactivado por sender
+- **Multi-sender de email** - Múltiples senders (relays SMTP o SendGrid API) con toggle activo/desactivado por sender
+- **Soporte SendGrid** - Envío vía la API HTTP v3 de SendGrid con solo una API key y un dominio de envío verificado (no requiere puertos SMTP)
+- **API para Agentes** - API REST auto-documentada (`/api/v1`) para que agentes de IA creen formularios, senders y plantillas programáticamente
 - **Múltiples destinatarios** - Enviar a varias direcciones email por formulario (separados por coma, UI de chips)
 - **Notificaciones por email** - Plantillas HTML personalizadas con inyección dinámica de campos
 - **Archivos adjuntos** - Recibe archivos (máx 5, 10 MB cada uno) y los reenvía por email, Discord y Telegram
@@ -132,6 +135,7 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
     "senders": {
         "default": {
             "name": "Default",
+            "type": "smtp",
             "host": "smtp.ejemplo.com",
             "port": 587,
             "secure": false,
@@ -139,7 +143,19 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
             "from": "noreply@ejemplo.com",
             "user": "usuario_smtp",
             "pass": "contraseña_smtp"
+        },
+        "sendgrid": {
+            "name": "SendGrid",
+            "type": "sendgrid",
+            "apiKey": "SG.xxxxxxxx",
+            "domain": "ejemplo.com",
+            "from": "noreply@ejemplo.com",
+            "active": true
         }
+    },
+    "api": {
+        "key": "fp_xxxxxxxx (auto-generada en el primer arranque)",
+        "enabled": true
     },
     "captcha": {
         "mi-form": { "secretKey": "0x4AAAAA..." }
@@ -179,13 +195,18 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `name` | string | Nombre / alias |
-| `host` | string | Servidor SMTP |
-| `port` | number | Puerto SMTP |
-| `secure` | boolean | Usar TLS/SSL |
+| `type` | string | `"smtp"` (default) o `"sendgrid"` |
 | `active` | boolean | Si es `false`, no se envían emails (config se mantiene) |
 | `from` | string | Dirección from |
-| `user` | string | Usuario SMTP |
-| `pass` | string | Contraseña SMTP |
+| `host` | string | Solo SMTP: servidor |
+| `port` | number | Solo SMTP: puerto (587, 465, etc.) |
+| `secure` | boolean | Solo SMTP: usar TLS/SSL |
+| `user` | string | Solo SMTP: usuario |
+| `pass` | string | Solo SMTP: contraseña |
+| `apiKey` | string | Solo SendGrid: API key con permiso **Mail Send** |
+| `domain` | string | Solo SendGrid: dominio de envío verificado (el `from` debe pertenecer a él) |
+
+> **SendGrid:** creá una API key en SendGrid > Settings > API Keys con permiso Mail Send, y verificá tu dominio de envío en Settings > Sender Authentication. Los senders SendGrid usan la API HTTP v3, por lo que funcionan incluso donde los puertos SMTP salientes están bloqueados.
 
 ## Variables de Entorno
 
@@ -196,6 +217,7 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | `LANG` | `es` | Idioma (`en` o `es`) |
 | `ADMIN_USERNAME` | - | Sobreescribe usuario admin |
 | `ADMIN_PASSWORD` | - | Sobreescribe contraseña admin |
+| `API_KEY` | - | Sobreescribe la clave de la API para agentes (`/api/v1`) |
 
 ## Panel de Administración
 
@@ -224,8 +246,9 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 - Fecha, canal (Mail/Discord/Telegram), destino, asunto, estado (OK/Error/Omitido)
 
 ### Senders
-- CRUD con toggle activo/desactivado
+- CRUD de senders (SMTP o SendGrid) con toggle activo/desactivado
 - Test de conexión
+- Gestión de la clave de la API para agentes: ver, copiar, regenerar, habilitar/deshabilitar
 - Backup / Restore (exporta formularios, senders, plantillas)
 
 ## Plantillas de Email
@@ -262,6 +285,100 @@ Incluye plantilla de auto-respuesta: `templates/auto-reply.html`
 ```
 
 > El campo `website_id` sigue siendo aceptado por compatibilidad, pero se recomienda usar `form_id`.
+
+## API para Agentes de IA
+
+formPost suele ser el backend de sitios construidos por agentes de IA. La **API para Agentes** permite que el propio agente se conecte a tu instancia de formPost y configure todo lo que necesita — formularios, senders de email (SMTP o SendGrid), plantillas — y lea los envíos recibidos y el log de entregas, sin tocar el panel admin.
+
+**Todo lo que el agente necesita saber:**
+
+1. **URL base:** `https://tu-servidor.com/api/v1`
+2. **Auto-documentación:** `GET /api/v1` (sin auth) devuelve una especificación JSON legible por máquina de cada endpoint, cada campo y el contrato de `/submit`. Un agente puede arrancar desde esa única URL.
+3. **Autenticación:** enviar la clave en el header `X-API-Key` (o `Authorization: Bearer <clave>`). La clave se auto-genera en el primer arranque; el admin puede verla/copiarla/regenerarla en el panel bajo **Senders > API para Agentes**, o definirla con la variable de entorno `API_KEY`.
+
+> Sugerencia de prompt para tu agente de IA:
+> *"Podés crear el backend de este formulario de contacto en mi instancia de formPost. Hacé un GET a `https://tu-servidor.com/api/v1` para aprender la API; autenticate con el header `X-API-Key: fp_xxx`. Creá un formulario y usá el `exampleHtml` de la respuesta en el sitio web."*
+
+### Endpoints
+
+| Método | Endpoint | Descripción |
+|---|---|---|
+| `GET` | `/api/v1` | Especificación de la API (pública, sin auth, sin secretos) |
+| `GET` | `/api/v1/status` | Versión, formularios y senders configurados |
+| `GET` | `/api/v1/forms` | Lista todos los formularios con su configuración completa |
+| `POST` | `/api/v1/forms` | Crea un formulario. Body: `{ "id", ...formConfig }` |
+| `GET` | `/api/v1/forms/:id` | Obtiene un formulario |
+| `PUT` | `/api/v1/forms/:id` | Actualiza un formulario (body parcial, se mergea) |
+| `DELETE` | `/api/v1/forms/:id` | Elimina un formulario |
+| `GET` | `/api/v1/forms/:id/submissions` | Lee los envíos recibidos (`?page=1&limit=50`) |
+| `GET` | `/api/v1/forms/:id/outbox` | Log de entregas (emails/notificaciones con estado ok/error) |
+| `GET` | `/api/v1/senders` | Lista senders (secretos enmascarados) |
+| `POST` | `/api/v1/senders` | Crea un sender (SMTP o SendGrid). Body: `{ "id", ...senderConfig }` |
+| `PUT` | `/api/v1/senders/:id` | Actualiza un sender (omití `pass`/`apiKey` para conservar los secretos) |
+| `DELETE` | `/api/v1/senders/:id` | Elimina un sender |
+| `POST` | `/api/v1/senders/:id/test` | Verifica conexión + envía email de prueba. Body: `{ "to" }` (opcional) |
+| `GET` | `/api/v1/templates` | Lista plantillas de email |
+| `GET` | `/api/v1/templates/:name` | Obtiene el contenido de una plantilla |
+| `PUT` | `/api/v1/templates/:name` | Crea/actualiza una plantilla. Body: `{ "content": "<html>..." }` |
+
+Los esquemas de formulario y sender son los mismos de [Configuración](#configuración) (ver `formConfig` y `senderConfig` en la respuesta de `GET /api/v1`). Facilidades al crear formularios:
+
+- `to` es el único campo requerido además de `id`; se aplican defaults razonables (`subjectPrefix`, `templatePath`, captcha desactivado, todos los orígenes permitidos).
+- Se puede incluir `captchaSecretKey` (solo escritura) para configurar la verificación captcha en una sola llamada.
+- La respuesta de creación incluye `submitUrl` y un `exampleHtml` listo para pegar en el sitio.
+- Los errores de validación vuelven como mensajes descriptivos accionables por el agente, más `warnings` para problemas no fatales (ej. un `senderId` que todavía no existe).
+
+### Ejemplo: flujo completo de un agente
+
+```bash
+BASE="https://tu-servidor.com"
+KEY="fp_xxxxxxxxxxxxxxxx"
+
+# 0. Descubrir la API (sin auth)
+curl "$BASE/api/v1"
+
+# 1. Crear un sender SendGrid (u omitir si GET /api/v1/senders ya muestra uno)
+curl -X POST "$BASE/api/v1/senders" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{
+    "id": "sendgrid-main",
+    "type": "sendgrid",
+    "name": "SendGrid",
+    "apiKey": "SG.xxxxxxxx",
+    "domain": "ejemplo.com",
+    "from": "noreply@ejemplo.com"
+  }'
+
+# 2. Probarlo
+curl -X POST "$BASE/api/v1/senders/sendgrid-main/test" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{ "to": "yo@ejemplo.com" }'
+
+# 3. Crear el formulario
+curl -X POST "$BASE/api/v1/forms" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{
+    "id": "contacto-landing",
+    "to": "dueno@ejemplo.com",
+    "subjectPrefix": "[Landing] ",
+    "senderId": "sendgrid-main",
+    "allowedDomains": ["https://ejemplo.com"],
+    "autoReplyEnabled": true,
+    "autoReplySubject": "¡Gracias! Recibimos tu mensaje"
+  }'
+# -> la respuesta incluye "exampleHtml": un <form> funcional listo para pegar
+
+# 4. Después: leer los envíos y verificar las entregas
+curl -H "X-API-Key: $KEY" "$BASE/api/v1/forms/contacto-landing/submissions?limit=10"
+curl -H "X-API-Key: $KEY" "$BASE/api/v1/forms/contacto-landing/outbox"
+```
+
+### Límites y seguridad
+
+- API para agentes: 240 requests/minuto.
+- La clave otorga acceso de configuración a nivel admin — tratala como una contraseña. Regenerala cuando quieras desde el panel.
+- La API se puede deshabilitar por completo con el toggle **Habilitada** en **Senders > API para Agentes** (las requests reciben `503`).
+- Los secretos (`pass`, `apiKey`) son de solo escritura: nunca se devuelven en los `GET`.
 
 ## Seguridad
 

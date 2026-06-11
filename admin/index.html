@@ -1160,6 +1160,21 @@
             <div id="sendersListContent">
                 <div class="empty-state"><span class="spinner"></span> Loading...</div>
             </div>
+            <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                <div class="submissions-modal-header">
+                    <h3 data-i18n="agentApi">Agent API</h3>
+                    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;">
+                        <input type="checkbox" id="apiEnabledToggle" onchange="toggleApiEnabled(this)" />
+                        <span data-i18n="apiEnabled">Enabled</span>
+                    </label>
+                </div>
+                <p style="font-size:0.82rem;opacity:0.75;margin:0.25rem 0 0.75rem;" data-i18n="agentApiHint">REST API for AI agents to create forms and senders programmatically. Self-documented at GET /api/v1 — give the agent that URL and this key.</p>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <input type="text" id="apiKeyDisplay" readonly style="flex:1;font-family:monospace;font-size:0.8rem;" />
+                    <button type="button" class="btn-sm btn-outline" onclick="copyApiKey()" data-i18n="copyBtn">Copy</button>
+                    <button type="button" class="btn-sm btn-outline" onclick="regenerateApiKey()" data-i18n="regenerateBtn">Regenerate</button>
+                </div>
+            </div>
             <div class="modal-actions" style="justify-content:space-between;">
                 <div style="display:flex;gap:0.5rem;">
                     <button type="button" class="btn-sm btn-outline" onclick="downloadBackup()" data-i18n="backupBtn">Backup</button>
@@ -1177,18 +1192,17 @@
             <h3 id="senderEditorTitle">Edit Sender</h3>
             <form id="senderEditorForm">
                 <input type="hidden" id="senderEditorId" />
-                <div class="form-group">
-                    <label data-i18n="senderName">Name / Alias</label>
-                    <input type="text" id="senderEditorName" required placeholder="Main relay" />
-                </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Host</label>
-                        <input type="text" id="senderEditorHost" required placeholder="smtp.example.com" />
+                        <label data-i18n="senderName">Name / Alias</label>
+                        <input type="text" id="senderEditorName" required placeholder="Main relay" />
                     </div>
                     <div class="form-group">
-                        <label data-i18n="port">Port</label>
-                        <input type="number" id="senderEditorPort" required placeholder="587" />
+                        <label data-i18n="senderType">Type</label>
+                        <select id="senderEditorType" onchange="updateSenderTypeFields()">
+                            <option value="smtp">SMTP</option>
+                            <option value="sendgrid">SendGrid</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-group">
@@ -1199,18 +1213,40 @@
                     <input type="checkbox" id="senderEditorActive" checked />
                     <label for="senderEditorActive" data-i18n="senderActive">Active</label>
                 </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="senderEditorSecure" />
-                    <label for="senderEditorSecure" data-i18n="secureConn">Secure Connection (TLS/SSL)</label>
+                <div id="senderSmtpFields">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Host</label>
+                            <input type="text" id="senderEditorHost" placeholder="smtp.example.com" />
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="port">Port</label>
+                            <input type="number" id="senderEditorPort" placeholder="587" />
+                        </div>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="senderEditorSecure" />
+                        <label for="senderEditorSecure" data-i18n="secureConn">Secure Connection (TLS/SSL)</label>
+                    </div>
+                    <div class="form-row" style="margin-top:0.75rem;">
+                        <div class="form-group">
+                            <label data-i18n="usernameOpt">Username (optional)</label>
+                            <input type="text" id="senderEditorUser" />
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="passwordOpt">Password (optional)</label>
+                            <input type="password" id="senderEditorPass" />
+                        </div>
+                    </div>
                 </div>
-                <div class="form-row" style="margin-top:0.75rem;">
+                <div id="senderSendgridFields" style="display:none;">
                     <div class="form-group">
-                        <label data-i18n="usernameOpt">Username (optional)</label>
-                        <input type="text" id="senderEditorUser" />
+                        <label data-i18n="sendgridApiKey">SendGrid API Key</label>
+                        <input type="password" id="senderEditorApiKey" placeholder="SG.xxxxxxxx" />
                     </div>
                     <div class="form-group">
-                        <label data-i18n="passwordOpt">Password (optional)</label>
-                        <input type="password" id="senderEditorPass" />
+                        <label data-i18n="sendgridDomain">Sending Domain (verified in SendGrid)</label>
+                        <input type="text" id="senderEditorDomain" placeholder="example.com" />
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -1395,8 +1431,17 @@
                 noTemplates: 'No templates found.', templateSaved: 'Template saved successfully',
                 templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
                 // Senders
-                senders: 'Senders (SMTP Relays)', newSender: '+ New Sender',
+                senders: 'Senders (Email Relays)', newSender: '+ New Sender',
                 senderName: 'Name / Alias', sender: 'Sender', senderAlias: 'Sender Alias (From name)', senderActive: 'Active',
+                senderType: 'Type', sendgridApiKey: 'SendGrid API Key', sendgridDomain: 'Sending Domain (verified in SendGrid)',
+                sendgridApiKeyRequired: 'SendGrid API Key is required', smtpHostPortRequired: 'Host and port are required for SMTP senders',
+                // Agent API
+                agentApi: 'Agent API', apiEnabled: 'Enabled', copyBtn: 'Copy', regenerateBtn: 'Regenerate',
+                agentApiHint: 'REST API for AI agents to create forms and senders programmatically. Self-documented at GET /api/v1 — give the agent that URL and this key.',
+                apiKeyCopied: 'API key copied to clipboard',
+                apiKeyRegenConfirm: 'Regenerate the API key? The current key will stop working immediately.',
+                apiKeyRegenerated: 'API key regenerated',
+                apiEnabledMsg: 'Agent API enabled', apiDisabledMsg: 'Agent API disabled',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
@@ -1506,8 +1551,17 @@
                 noTemplates: 'No se encontraron plantillas.', templateSaved: 'Plantilla guardada correctamente',
                 templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
                 // Senders
-                senders: 'Senders (SMTP Relays)', newSender: '+ Nuevo Sender',
+                senders: 'Senders (Relays de Email)', newSender: '+ Nuevo Sender',
                 senderName: 'Nombre / Alias', sender: 'Sender', senderAlias: 'Alias del Sender (nombre del remitente)', senderActive: 'Activo',
+                senderType: 'Tipo', sendgridApiKey: 'API Key de SendGrid', sendgridDomain: 'Dominio de Envío (verificado en SendGrid)',
+                sendgridApiKeyRequired: 'La API Key de SendGrid es requerida', smtpHostPortRequired: 'Host y puerto son requeridos para senders SMTP',
+                // Agent API
+                agentApi: 'API para Agentes', apiEnabled: 'Habilitada', copyBtn: 'Copiar', regenerateBtn: 'Regenerar',
+                agentApiHint: 'API REST para que agentes de IA creen formularios y senders programáticamente. Auto-documentada en GET /api/v1 — dale al agente esa URL y esta clave.',
+                apiKeyCopied: 'API key copiada al portapapeles',
+                apiKeyRegenConfirm: '¿Regenerar la API key? La clave actual dejará de funcionar inmediatamente.',
+                apiKeyRegenerated: 'API key regenerada',
+                apiEnabledMsg: 'API para agentes habilitada', apiDisabledMsg: 'API para agentes deshabilitada',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -2823,7 +2877,8 @@
                 ids.forEach(function(id) {
                     var opt = document.createElement('option');
                     opt.value = id;
-                    opt.textContent = (sendersCache[id].name || id) + ' (' + (sendersCache[id].host || '') + ')';
+                    var detail = sendersCache[id].type === 'sendgrid' ? 'SendGrid' : (sendersCache[id].host || '');
+                    opt.textContent = (sendersCache[id].name || id) + ' (' + detail + ')';
                     select.appendChild(opt);
                 });
             }
@@ -2833,6 +2888,7 @@
         function openSettingsModal() {
             document.getElementById('settingsModal').style.display = 'flex';
             loadSendersList();
+            loadApiKey();
         }
 
         function closeSettingsModal() {
@@ -2848,14 +2904,17 @@
                 container.innerHTML = '<div class="empty-state">No senders configured.</div>';
                 return;
             }
-            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>Host</th><th>' + L('fromEmail') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
+            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>' + L('senderType') + '</th><th>' + L('fromEmail') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
             ids.forEach(function(id) {
                 var s = sendersCache[id];
                 var isActive = s.active !== false;
+                var typeLabel = s.type === 'sendgrid'
+                    ? 'SendGrid' + (s.domain ? ' (' + esc(s.domain) + ')' : '')
+                    : esc(s.host || '') + ':' + esc(String(s.port || ''));
                 html += '<tr' + (isActive ? '' : ' style="opacity:0.5;"') + '>' +
                     '<td><code>' + esc(id) + '</code></td>' +
                     '<td>' + esc(s.name || id) + '</td>' +
-                    '<td>' + esc(s.host || '') + ':' + esc(String(s.port || '')) + '</td>' +
+                    '<td>' + typeLabel + '</td>' +
                     '<td>' + esc(s.from || '') + '</td>' +
                     '<td><span style="color:' + (isActive ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;font-size:0.8rem;">' + (isActive ? L('captchaOn') : L('captchaOff')) + '</span></td>' +
                     '<td style="text-align:right;white-space:nowrap;">' +
@@ -2870,6 +2929,12 @@
 
         var senderEditorIsNew = false;
 
+        function updateSenderTypeFields() {
+            var isSendgrid = document.getElementById('senderEditorType').value === 'sendgrid';
+            document.getElementById('senderSmtpFields').style.display = isSendgrid ? 'none' : '';
+            document.getElementById('senderSendgridFields').style.display = isSendgrid ? '' : 'none';
+        }
+
         function openSenderEditor(id) {
             senderEditorIsNew = !id;
             document.getElementById('senderEditorId').value = id || '';
@@ -2877,6 +2942,7 @@
             if (id && sendersCache[id]) {
                 var s = sendersCache[id];
                 document.getElementById('senderEditorName').value = s.name || '';
+                document.getElementById('senderEditorType').value = s.type === 'sendgrid' ? 'sendgrid' : 'smtp';
                 document.getElementById('senderEditorHost').value = s.host || '';
                 document.getElementById('senderEditorPort').value = s.port || '';
                 document.getElementById('senderEditorFrom').value = s.from || '';
@@ -2886,12 +2952,18 @@
                 document.getElementById('senderEditorUser').placeholder = s.user ? '(configured)' : '';
                 document.getElementById('senderEditorPass').value = '';
                 document.getElementById('senderEditorPass').placeholder = s.pass ? '••••••••' : '';
+                document.getElementById('senderEditorApiKey').value = '';
+                document.getElementById('senderEditorApiKey').placeholder = s.apiKey ? '•••• (configured)' : 'SG.xxxxxxxx';
+                document.getElementById('senderEditorDomain').value = s.domain || '';
             } else {
                 document.getElementById('senderEditorForm').reset();
+                document.getElementById('senderEditorType').value = 'smtp';
                 document.getElementById('senderEditorActive').checked = true;
                 document.getElementById('senderEditorUser').placeholder = '';
                 document.getElementById('senderEditorPass').placeholder = '';
+                document.getElementById('senderEditorApiKey').placeholder = 'SG.xxxxxxxx';
             }
+            updateSenderTypeFields();
             document.getElementById('senderTestBtn').style.display = id ? '' : 'none';
             document.getElementById('senderEditorModal').style.display = 'flex';
         }
@@ -2905,18 +2977,36 @@
             var btn = document.getElementById('senderEditorSaveBtn');
             setLoading(btn, true);
             var existingId = document.getElementById('senderEditorId').value;
+            var senderType = document.getElementById('senderEditorType').value;
             var payload = {
                 name: document.getElementById('senderEditorName').value,
-                host: document.getElementById('senderEditorHost').value,
-                port: Number(document.getElementById('senderEditorPort').value),
-                secure: document.getElementById('senderEditorSecure').checked,
+                type: senderType,
                 active: document.getElementById('senderEditorActive').checked,
                 from: document.getElementById('senderEditorFrom').value
             };
-            var user = document.getElementById('senderEditorUser').value;
-            var pass = document.getElementById('senderEditorPass').value;
-            if (user) payload.user = user;
-            if (pass) payload.pass = pass;
+            if (senderType === 'sendgrid') {
+                payload.domain = document.getElementById('senderEditorDomain').value.trim();
+                var apiKey = document.getElementById('senderEditorApiKey').value.trim();
+                if (apiKey) payload.apiKey = apiKey;
+                if (senderEditorIsNew && !apiKey) {
+                    showToast(L('sendgridApiKeyRequired'), 'error');
+                    setLoading(btn, false);
+                    return;
+                }
+            } else {
+                payload.host = document.getElementById('senderEditorHost').value;
+                payload.port = Number(document.getElementById('senderEditorPort').value);
+                payload.secure = document.getElementById('senderEditorSecure').checked;
+                if (!payload.host || !payload.port) {
+                    showToast(L('smtpHostPortRequired'), 'error');
+                    setLoading(btn, false);
+                    return;
+                }
+                var user = document.getElementById('senderEditorUser').value;
+                var pass = document.getElementById('senderEditorPass').value;
+                if (user) payload.user = user;
+                if (pass) payload.pass = pass;
+            }
             try {
                 var res;
                 if (senderEditorIsNew) {
@@ -2991,6 +3081,71 @@
             }
             btn.disabled = false;
             btn.textContent = origText;
+        }
+
+        // ========== Agent API Key ==========
+        async function loadApiKey() {
+            try {
+                var res = await fetch('/admin/api/apikey', { headers: { Authorization: auth } });
+                var data = await res.json();
+                document.getElementById('apiKeyDisplay').value = data.key || '';
+                document.getElementById('apiEnabledToggle').checked = !!data.enabled;
+            } catch(e) {}
+        }
+
+        function copyApiKey() {
+            var input = document.getElementById('apiKeyDisplay');
+            if (!input.value) return;
+            input.select();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(input.value).then(function() {
+                    showToast(L('apiKeyCopied'), 'success');
+                }).catch(function() {
+                    document.execCommand('copy');
+                    showToast(L('apiKeyCopied'), 'success');
+                });
+            } else {
+                document.execCommand('copy');
+                showToast(L('apiKeyCopied'), 'success');
+            }
+        }
+
+        async function regenerateApiKey() {
+            if (!confirm(L('apiKeyRegenConfirm'))) return;
+            try {
+                var res = await fetch('/admin/api/apikey/regenerate', {
+                    method: 'POST',
+                    headers: { Authorization: auth }
+                });
+                var data = await res.json();
+                if (res.ok) {
+                    document.getElementById('apiKeyDisplay').value = data.key;
+                    showToast(L('apiKeyRegenerated'), 'success');
+                } else {
+                    showToast(data.error || L('connError'), 'error');
+                }
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
+        async function toggleApiEnabled(cb) {
+            try {
+                var res = await fetch('/admin/api/apikey', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ enabled: cb.checked })
+                });
+                if (res.ok) {
+                    showToast(cb.checked ? L('apiEnabledMsg') : L('apiDisabledMsg'), 'success');
+                } else {
+                    cb.checked = !cb.checked;
+                    showToast(L('connError'), 'error');
+                }
+            } catch(e) {
+                cb.checked = !cb.checked;
+                showToast(L('connError'), 'error');
+            }
         }
 
         // ========== Backup / Restore ==========
