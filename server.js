@@ -42,6 +42,75 @@ const log = {
     error(msg, meta) { log._emit('error', msg, meta); }
 };
 
+// ===== Secret encryption at rest (AES-256-GCM) =====
+// Key source: ENCRYPTION_KEY env var (64 hex chars) or auto-generated data/.secret.key.
+// Encrypted values are stored as 'enc:v1:' + base64(iv|authTag|ciphertext).
+const nodeCrypto = require('crypto');
+const ENC_PREFIX = 'enc:v1:';
+const KEY_FILE = path.join(__dirname, 'data', '.secret.key');
+const ENCRYPTION_KEY = (() => {
+    const envKey = (process.env.ENCRYPTION_KEY || '').trim();
+    if (/^[0-9a-fA-F]{64}$/.test(envKey)) return Buffer.from(envKey, 'hex');
+    if (envKey) log.warn('ENCRYPTION_KEY env var is set but is not 64 hex chars — ignoring it');
+    const fsSync = require('fs');
+    try {
+        const hex = fsSync.readFileSync(KEY_FILE, 'utf8').trim();
+        if (/^[0-9a-fA-F]{64}$/.test(hex)) return Buffer.from(hex, 'hex');
+    } catch (e) {}
+    const key = nodeCrypto.randomBytes(32);
+    fsSync.mkdirSync(path.dirname(KEY_FILE), { recursive: true });
+    fsSync.writeFileSync(KEY_FILE, key.toString('hex'), { mode: 0o600 });
+    log.warn('Encryption key generated at data/.secret.key — BACK THIS FILE UP. Without it, stored sender passwords and API keys cannot be decrypted.');
+    return key;
+})();
+
+function isEncrypted(v) {
+    return typeof v === 'string' && v.startsWith(ENC_PREFIX);
+}
+
+function encryptSecret(plain) {
+    if (!plain || typeof plain !== 'string' || isEncrypted(plain)) return plain;
+    const iv = nodeCrypto.randomBytes(12);
+    const cipher = nodeCrypto.createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
+    const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+    return ENC_PREFIX + Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
+}
+
+const decryptFailuresLogged = new Set();
+function decryptSecret(value) {
+    if (!isEncrypted(value)) return value; // legacy plaintext passthrough
+    try {
+        const raw = Buffer.from(value.slice(ENC_PREFIX.length), 'base64');
+        const decipher = nodeCrypto.createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, raw.subarray(0, 12));
+        decipher.setAuthTag(raw.subarray(12, 28));
+        return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
+    } catch (e) {
+        if (!decryptFailuresLogged.has(value)) {
+            decryptFailuresLogged.add(value);
+            log.error('Failed to decrypt stored secret — wrong or missing encryption key (ENCRYPTION_KEY / data/.secret.key)');
+        }
+        return null;
+    }
+}
+
+// Encrypt all known secret fields in a config object (idempotent)
+function encryptConfigSecretsInPlace(cfg) {
+    for (const s of Object.values(cfg.senders || {})) {
+        if (s.pass) s.pass = encryptSecret(s.pass);
+        if (s.apiKey) s.apiKey = encryptSecret(s.apiKey);
+    }
+    if (cfg.smtp && cfg.smtp.pass) cfg.smtp.pass = encryptSecret(cfg.smtp.pass);
+    for (const r of Object.values(cfg.recipients || {})) {
+        if (r.telegramBotToken) r.telegramBotToken = encryptSecret(r.telegramBotToken);
+    }
+    for (const c of Object.values(cfg.captcha || {})) {
+        if (c.secretKey) c.secretKey = encryptSecret(c.secretKey);
+    }
+    for (const c of Object.values(cfg.turnstile || {})) {
+        if (c.secretKey) c.secretKey = encryptSecret(c.secretKey);
+    }
+}
+
 // Simple async mutex for config.json writes with auto-backup
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const CONFIG_BACKUP_PATH = path.join(__dirname, 'config.backup.json');
@@ -53,6 +122,8 @@ async function writeConfigSafe(mutator) {
         await fs.writeFile(CONFIG_BACKUP_PATH, raw);
         const currentConfig = JSON.parse(raw);
         mutator(currentConfig);
+        // All write paths funnel through here, so secrets are always encrypted at rest
+        encryptConfigSecretsInPlace(currentConfig);
         await fs.writeFile(CONFIG_PATH, JSON.stringify(currentConfig, null, 4));
         Object.assign(config, currentConfig);
     }).catch(e => {
@@ -157,21 +228,30 @@ const serverMessages = {
 };
 const t = serverMessages[LANG] || serverMessages.es;
 
-// SSE client tracking for real-time inbox + outbox
+// SSE client tracking for real-time inbox + outbox.
+// Each client is { res, scope }: scope null = superadmin (sees all), otherwise accountId.
 const sseClients = new Set();
 
 function broadcastSSE(payload) {
     const data = JSON.stringify(payload);
+    const form = payload.websiteId ? (config.recipients || {})[payload.websiteId] : null;
+    const acct = form ? (form.accountId || 'default') : null;
     for (const client of sseClients) {
-        client.write(`data: ${data}\n\n`);
+        if (client.scope == null || client.scope === acct) {
+            client.res.write(`data: ${data}\n\n`);
+        }
     }
 }
 
-// Override config with environment variables if provided
-if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
+// Admin credentials from environment: upserted as a superadmin user during migration
+const ENV_ADMIN = (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD)
+    ? { username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD }
+    : null;
+// Pre-migration compatibility: legacy single-admin configs still read config.admin
+if (ENV_ADMIN && !config.users) {
     if (!config.admin) config.admin = {};
-    config.admin.username = process.env.ADMIN_USERNAME;
-    config.admin.password = process.env.ADMIN_PASSWORD;
+    config.admin.username = ENV_ADMIN.username;
+    config.admin.password = ENV_ADMIN.password;
 }
 
 // Override SMTP config with environment variables if provided (applies to legacy smtp and default sender)
@@ -221,8 +301,61 @@ async function ensurePasswordHashed() {
         }
     }
 }
-// Run startup config migrations sequentially — both rewrite config.json and would race otherwise
-ensurePasswordHashed().then(ensureApiKey);
+
+// Multi-tenant migration: accounts map, users map, per-form accountId.
+// Senders without accountId stay GLOBAL (usable by every account, managed by superadmin).
+async function migrateMultiTenant() {
+    const needsAccounts = !config.accounts || Object.keys(config.accounts).length === 0;
+    const needsUsers = !config.users || Object.keys(config.users).length === 0;
+    const needsStamp = Object.values(config.recipients || {}).some(r => !r.accountId);
+    const needsAccountKeys = Object.values(config.accounts || {}).some(a => !a.api || !a.api.key);
+    let envUserHash = null;
+    if (ENV_ADMIN) {
+        const existing = (config.users || {})[ENV_ADMIN.username];
+        const matches = existing && await bcrypt.compare(ENV_ADMIN.password, existing.passwordHash).catch(() => false);
+        if (!existing || !matches) envUserHash = await bcrypt.hash(ENV_ADMIN.password, BCRYPT_ROUNDS);
+    }
+    if (!needsAccounts && !needsUsers && !needsStamp && !needsAccountKeys && !envUserHash) return;
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.accounts || Object.keys(cfg.accounts).length === 0) {
+                cfg.accounts = { default: { name: 'Default' } };
+            }
+            for (const acct of Object.values(cfg.accounts)) {
+                if (!acct.api || !acct.api.key) {
+                    acct.api = { key: 'fp_' + nodeCrypto.randomBytes(24).toString('hex'), enabled: true };
+                }
+            }
+            for (const r of Object.values(cfg.recipients || {})) {
+                if (!r.accountId) r.accountId = 'default';
+            }
+            if (!cfg.users) cfg.users = {};
+            if (Object.keys(cfg.users).length === 0 && cfg.admin && cfg.admin.username) {
+                cfg.users[cfg.admin.username] = { passwordHash: cfg.admin.password, role: 'superadmin', accountId: null };
+                delete cfg.admin;
+            }
+            if (ENV_ADMIN && envUserHash) {
+                cfg.users[ENV_ADMIN.username] = {
+                    ...(cfg.users[ENV_ADMIN.username] || {}),
+                    passwordHash: envUserHash,
+                    role: 'superadmin',
+                    accountId: null
+                };
+            }
+        });
+        log.info('Multi-tenant migration applied (accounts/users/accountId stamps)');
+    } catch (e) {
+        log.error('Multi-tenant migration failed', { error: e.message });
+    }
+}
+
+// Run startup config migrations sequentially — they rewrite config.json and would race otherwise.
+// The final no-op write encrypts any plaintext secrets via the writeConfigSafe hook.
+ensurePasswordHashed()
+    .then(ensureApiKey)
+    .then(migrateMultiTenant)
+    .then(() => writeConfigSafe(() => {}))
+    .catch(e => log.error('Startup migrations failed', { error: e.message }));
 
 // Security headers
 app.use(helmet({
@@ -323,7 +456,7 @@ function parseAddress(addr) {
 function buildSendGridTransporter(senderCfg) {
     const client = axios.create({
         baseURL: 'https://api.sendgrid.com/v3',
-        headers: { Authorization: `Bearer ${senderCfg.apiKey || ''}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${decryptSecret(senderCfg.apiKey) || ''}`, 'Content-Type': 'application/json' },
         timeout: 15000
     });
     return {
@@ -376,8 +509,10 @@ function buildTransporter(smtpConfig) {
     delete tc.type;
     delete tc.apiKey;
     delete tc.domain;
+    delete tc.accountId;
     if (tc.user && tc.pass) {
-        tc.auth = { type: 'LOGIN', user: tc.user, pass: tc.pass };
+        const plainPass = decryptSecret(tc.pass);
+        if (plainPass) tc.auth = { type: 'LOGIN', user: tc.user, pass: plainPass };
     }
     delete tc.user;
     delete tc.pass;
@@ -391,19 +526,36 @@ function rebuildAllTransporters() {
 }
 rebuildAllTransporters();
 
-// Get transporter for a form (by senderId, fallback to 'default' or first)
+// A sender without accountId is GLOBAL: usable by every account, managed by superadmin
+function senderUsableByAccount(senderCfg, accountId) {
+    return !senderCfg.accountId || senderCfg.accountId === accountId;
+}
+
+// Get transporter for a form (by senderId, fallback scoped to the form's account + global senders)
 function getTransporterForForm(recipientCfg) {
+    const acct = recipientCfg.accountId || 'default';
     const senderId = recipientCfg.senderId || 'default';
     if (transporters[senderId]) {
         const senderCfg = config.senders[senderId];
-        if (senderCfg && senderCfg.active === false) return { inactive: true, senderId };
-        return { transporter: transporters[senderId], senderCfg };
+        if (senderCfg && senderUsableByAccount(senderCfg, acct)) {
+            if (senderCfg.active === false) return { inactive: true, senderId };
+            return { transporter: transporters[senderId], senderCfg };
+        }
     }
-    // Fallback to first available
-    const firstId = Object.keys(transporters)[0];
+    // Fallback: first sender of the form's account, then first global sender
+    const candidates = Object.keys(transporters).filter(id => {
+        const s = config.senders[id];
+        return s && senderUsableByAccount(s, acct);
+    });
+    candidates.sort((a, b) => {
+        const aOwn = (config.senders[a].accountId === acct) ? 0 : 1;
+        const bOwn = (config.senders[b].accountId === acct) ? 0 : 1;
+        return aOwn - bOwn;
+    });
+    const firstId = candidates[0];
     if (firstId) {
         const senderCfg = config.senders[firstId];
-        if (senderCfg && senderCfg.active === false) return { inactive: true, senderId: firstId };
+        if (senderCfg.active === false) return { inactive: true, senderId: firstId };
         return { transporter: transporters[firstId], senderCfg };
     }
     return null;
@@ -448,11 +600,79 @@ async function saveSubmission(websiteId, submission) {
         // file doesn't exist yet
     }
     submissions.unshift(submission); // newest first
-    // Keep max 1000 submissions per website
+    // Keep max 1000 submissions per website; delete attachments of pruned entries
     if (submissions.length > 1000) {
+        const pruned = submissions.slice(1000);
         submissions = submissions.slice(0, 1000);
+        for (const p of pruned) {
+            if (p.attachments && p.attachments.length) {
+                deleteSubmissionAttachments(websiteId, p.id).catch(() => {});
+            }
+        }
     }
     await fs.writeFile(filePath, JSON.stringify(submissions, null, 2));
+}
+
+// ===== Persistent attachments storage =====
+const ATTACHMENTS_DIR = path.join(DATA_DIR, 'attachments');
+
+function sanitizeFilename(name) {
+    let base = path.basename(String(name || 'file'));
+    base = base.replace(/[\x00-\x1f<>:"/\\|?*]/g, '_').replace(/^\.+/, '');
+    if (!base) base = 'file';
+    if (base.length > 150) {
+        const ext = path.extname(base).slice(0, 20);
+        base = base.slice(0, 150 - ext.length) + ext;
+    }
+    return base;
+}
+
+// Copy uploaded temp files into data/attachments/{formId}/{submissionId}/ and return metadata
+async function persistAttachments(formId, submissionId, uploadedFiles) {
+    const dir = path.join(ATTACHMENTS_DIR, formId, submissionId);
+    await fs.mkdir(dir, { recursive: true });
+    const saved = [];
+    const used = new Set();
+    for (const f of uploadedFiles) {
+        let name = sanitizeFilename(f.originalname);
+        if (used.has(name)) {
+            const ext = path.extname(name);
+            const stem = name.slice(0, name.length - ext.length);
+            let n = 2;
+            while (used.has(`${stem}-${n}${ext}`)) n++;
+            name = `${stem}-${n}${ext}`;
+        }
+        used.add(name);
+        await fs.copyFile(f.path, path.join(dir, name));
+        saved.push({ filename: name, size: f.size, mimetype: f.mimetype });
+    }
+    return saved;
+}
+
+async function deleteSubmissionAttachments(formId, entryId) {
+    await fs.rm(path.join(ATTACHMENTS_DIR, formId, entryId), { recursive: true, force: true });
+}
+
+async function deleteFormAttachments(formId) {
+    await fs.rm(path.join(ATTACHMENTS_DIR, formId), { recursive: true, force: true });
+}
+
+// Startup sweep: remove attachment dirs whose submission no longer exists
+async function sweepOrphanAttachments() {
+    let formDirs = [];
+    try { formDirs = await fs.readdir(ATTACHMENTS_DIR); } catch (e) { return; }
+    for (const formId of formDirs) {
+        try {
+            const submissions = await loadSubmissions(formId);
+            const ids = new Set(submissions.map(s => s.id));
+            const entryDirs = await fs.readdir(path.join(ATTACHMENTS_DIR, formId));
+            for (const entryId of entryDirs) {
+                if (!ids.has(entryId)) {
+                    await fs.rm(path.join(ATTACHMENTS_DIR, formId, entryId), { recursive: true, force: true });
+                }
+            }
+        } catch (e) {}
+    }
 }
 
 // Load submissions from file storage
@@ -588,7 +808,7 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
             const verificationResponse = await axios.post(
                 verifyUrl,
                 new URLSearchParams({
-                    secret: captchaConfig.secretKey,
+                    secret: decryptSecret(captchaConfig.secretKey) || '',
                     response: captchaToken,
                     remoteip: req.ip
                 }),
@@ -750,6 +970,14 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                 for (const [key, value] of fieldEntries) {
                     submission[key] = String(value || '');
                 }
+                // Persist attachments to disk and store metadata ('attachments' is a reserved key)
+                if (uploadedFiles.length > 0) {
+                    try {
+                        submission.attachments = await persistAttachments(formId, submission.id, uploadedFiles);
+                    } catch (attErr) {
+                        log.error('Error persisting attachments', { formId, error: attErr.message });
+                    }
+                }
                 await saveSubmission(formId, submission);
 
                 // Broadcast to SSE inbox clients
@@ -759,6 +987,7 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     id: submission.id,
                     timestamp: submission.timestamp,
                     submitMethod,
+                    attachments: (submission.attachments || []).length,
                     name: formFields.name || formFields.nombre || formFields.full_name || '',
                     email: formFields.email || formFields.correo || formFields.e_mail || '',
                     preview: fieldEntries
@@ -859,7 +1088,9 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
             // Send Telegram notification if configured
             if (recipientConfig.telegramBotToken && recipientConfig.telegramChatId) {
                 const telegramTimestamp = new Date().toISOString();
+                const tgToken = decryptSecret(recipientConfig.telegramBotToken);
                 try {
+                    if (!tgToken) throw new Error('Stored Telegram bot token cannot be decrypted (encryption key mismatch)');
                     const tName = formFields.name || formFields.nombre || formFields.full_name || 'Unknown';
                     const tFields = fieldEntries
                         .filter(([k]) => !['form_id','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response','_hp_field'].includes(k))
@@ -868,7 +1099,7 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         .join('\n');
                     const telegramText = `📩 <b>New submission: ${escapeHtml(formId)}</b>\n\n${tFields}\n\n<i>formPost</i>`;
                     await axios.post(
-                        `https://api.telegram.org/bot${recipientConfig.telegramBotToken}/sendMessage`,
+                        `https://api.telegram.org/bot${tgToken}/sendMessage`,
                         { chat_id: recipientConfig.telegramChatId, text: telegramText, parse_mode: 'HTML' },
                         { timeout: 5000 }
                     );
@@ -878,7 +1109,7 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         fd.append('chat_id', recipientConfig.telegramChatId);
                         fd.append('document', require('fs').createReadStream(f.path), f.originalname);
                         await axios.post(
-                            `https://api.telegram.org/bot${recipientConfig.telegramBotToken}/sendDocument`,
+                            `https://api.telegram.org/bot${tgToken}/sendDocument`,
                             fd,
                             { timeout: 15000, headers: fd.getHeaders(), maxContentLength: MAX_FILE_SIZE }
                         );
@@ -1038,12 +1269,117 @@ async function adminAuth(req, res, next) {
         log.info('Admin auth attempt', { user });
     }
 
-    if (config.admin && user === config.admin.username) {
+    const userRec = (config.users || {})[user];
+    if (userRec && userRec.passwordHash) {
+        const match = await bcrypt.compare(pass, userRec.passwordHash);
+        if (match) {
+            req.user = {
+                username: user,
+                role: userRec.role || 'user',
+                accountId: userRec.role === 'superadmin' ? null : (userRec.accountId || null)
+            };
+            return next();
+        }
+    } else if (config.admin && user === config.admin.username) {
+        // Pre-migration fallback (legacy single-admin config)
         const match = await bcrypt.compare(pass, config.admin.password);
-        if (match) return next();
+        if (match) {
+            req.user = { username: user, role: 'superadmin', accountId: null };
+            return next();
+        }
     }
     // Apply auth rate limit only on failed attempts
     authLimiter(req, res, () => res.status(403).send(t.forbidden));
+}
+
+// ===== Account scoping helpers =====
+// Scope semantics: null = superadmin (sees everything); otherwise an accountId string.
+// NO_SCOPE matches nothing (non-superadmin user without an account — corrupt data guard).
+const NO_SCOPE = '\x00none';
+
+function getAccountScope(req) {
+    if (!req.user) return NO_SCOPE;
+    if (req.user.role === 'superadmin') return null;
+    return req.user.accountId || NO_SCOPE;
+}
+
+function requireRole(...roles) {
+    return (req, res, next) => {
+        if (!req.user || !roles.includes(req.user.role)) {
+            return res.status(403).json({ error: t.forbidden });
+        }
+        next();
+    };
+}
+
+function formInScope(scope, formCfg) {
+    return scope === null || scope === (formCfg.accountId || 'default');
+}
+
+// Senders without accountId are global: visible/usable by every scope, managed by superadmin
+function senderInScope(scope, senderCfg) {
+    return scope === null || !senderCfg.accountId || senderCfg.accountId === scope;
+}
+
+function canAccessForm(req, formId) {
+    const r = (config.recipients || {})[formId];
+    return !!r && formInScope(getAccountScope(req), r);
+}
+
+function canAccessSender(req, senderId) {
+    const s = (config.senders || {})[senderId];
+    return !!s && senderInScope(getAccountScope(req), s);
+}
+
+// Writing (edit/delete) a sender: scoped admins may only touch their own account's senders
+function canManageSender(req, senderId) {
+    const s = (config.senders || {})[senderId];
+    if (!s) return false;
+    const scope = getAccountScope(req);
+    return scope === null || s.accountId === scope;
+}
+
+function formsForScope(scope) {
+    const out = {};
+    for (const [id, cfg] of Object.entries(config.recipients || {})) {
+        if (formInScope(scope, cfg)) out[id] = cfg;
+    }
+    return out;
+}
+
+function sendersForScope(scope) {
+    const out = {};
+    for (const [id, cfg] of Object.entries(config.senders || {})) {
+        if (senderInScope(scope, cfg)) out[id] = cfg;
+    }
+    return out;
+}
+
+// Mask secrets on form configs before returning them through any API
+function sanitizeRecipientForApi(id, cfg) {
+    const out = { ...cfg };
+    if (out.telegramBotToken) out.telegramBotToken = '••••';
+    if (out.captchaKey) out.captchaKey = '••••';
+    out.hasCaptchaKey = !!(((config.captcha || {})[id]) || ((config.turnstile || {})[id]));
+    return out;
+}
+
+// Strip masked/encrypted echoes from incoming form patches so stored secrets are preserved
+function stripSecretEchoes(patch) {
+    for (const field of ['telegramBotToken', 'captchaKey']) {
+        if (patch[field] === '••••' || isEncrypted(patch[field])) delete patch[field];
+    }
+    return patch;
+}
+
+// templatePath allowed for a scoped (non-superadmin) caller:
+// shared root templates, legacy root files, or templates of their own account folder
+function templatePathAllowed(tp, scope) {
+    if (!scope || scope === null) return true;
+    const norm = String(tp).replace(/\\/g, '/');
+    if (norm.startsWith(`templates/${scope}/`)) return !norm.slice(`templates/${scope}/`.length).includes('/');
+    if (norm.startsWith('templates/')) return !norm.slice('templates/'.length).includes('/');
+    return !norm.includes('/');
 }
 
 // Serve admin UI (no Basic Auth - the frontend handles its own login)
@@ -1075,14 +1411,20 @@ adminRouter.use(adminAuth);
 // Get server status
 adminRouter.get('/status', async (req, res) => {
     try {
-        // Calculate total submissions across all websites
+        const scope = getAccountScope(req);
+        const scopedForms = formsForScope(scope);
+        // Calculate total submissions across visible websites
         const stats = config.statistics || {};
         let totalSubmissions = 0, totalMails = 0, totalNotifications = 0;
-        for (const ws of Object.values(stats)) {
+        for (const formId of Object.keys(scopedForms)) {
+            const ws = stats[formId] || {};
             totalSubmissions += (ws.successfulSubmissions || 0);
             totalMails += (ws.mailsSent || 0);
             totalNotifications += (ws.notificationsSent || 0);
         }
+        const accountName = req.user.accountId && config.accounts && config.accounts[req.user.accountId]
+            ? (config.accounts[req.user.accountId].name || req.user.accountId)
+            : null;
         res.json({
             status: 'ok',
             version: pkg.version,
@@ -1093,14 +1435,20 @@ adminRouter.get('/status', async (req, res) => {
             totalSubmissions,
             totalMails,
             totalNotifications,
+            user: {
+                username: req.user.username,
+                role: req.user.role,
+                accountId: req.user.accountId,
+                accountName
+            },
             memory: {
                 used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
                 total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024 * 100) / 100
             },
             config: {
-                websites: Object.keys(config.recipients),
-                senders: Object.keys(config.senders || {}),
-                captcha: Object.keys(config.captcha || config.turnstile || {})
+                websites: Object.keys(scopedForms),
+                senders: Object.keys(sendersForScope(scope)),
+                captcha: Object.keys(config.captcha || config.turnstile || {}).filter(id => scopedForms[id])
             }
         });
     } catch (e) {
@@ -1108,13 +1456,17 @@ adminRouter.get('/status', async (req, res) => {
     }
 });
 
-// Get list of configured websites
+// Get list of configured websites (scoped, secrets masked)
 adminRouter.get('/websites', (req, res) => {
-    res.json(config.recipients);
+    const out = {};
+    for (const [id, cfg] of Object.entries(formsForScope(getAccountScope(req)))) {
+        out[id] = sanitizeRecipientForApi(id, cfg);
+    }
+    res.json(out);
 });
 
 // Add a new website configuration
-adminRouter.post('/websites', async (req, res) => {
+adminRouter.post('/websites', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id, config: siteConfig } = req.body;
     if (!id || !siteConfig) {
         return res.status(400).json({ error: t.missingIdOrConfig });
@@ -1125,6 +1477,22 @@ adminRouter.post('/websites', async (req, res) => {
     if (config.recipients[id]) {
         return res.status(409).json({ error: t.formExists });
     }
+    const scope = getAccountScope(req);
+    const accountId = scope || siteConfig.accountId || 'default';
+    if (!(config.accounts || {})[accountId]) {
+        return res.status(400).json({ error: 'Unknown account: ' + accountId });
+    }
+    stripSecretEchoes(siteConfig);
+    siteConfig.accountId = accountId;
+    if (siteConfig.senderId) {
+        const senderRef = (config.senders || {})[siteConfig.senderId];
+        if (senderRef && !senderUsableByAccount(senderRef, accountId)) {
+            return res.status(400).json({ error: 'senderId belongs to another account' });
+        }
+    }
+    if (siteConfig.templatePath && !templatePathAllowed(siteConfig.templatePath, scope)) {
+        return res.status(400).json({ error: 'templatePath outside your account templates' });
+    }
     try {
         await writeConfigSafe(cfg => {
             cfg.recipients[id] = siteConfig;
@@ -1132,6 +1500,7 @@ adminRouter.post('/websites', async (req, res) => {
                 if (!cfg.captcha) cfg.captcha = {};
                 cfg.captcha[id] = { secretKey: siteConfig.captchaKey };
             }
+            delete cfg.recipients[id].captchaKey;
         });
         res.status(201).json({ message: t.formAdded });
     } catch (e) {
@@ -1140,11 +1509,28 @@ adminRouter.post('/websites', async (req, res) => {
 });
 
 // Update existing website configuration
-adminRouter.put('/websites/:id', async (req, res) => {
+adminRouter.put('/websites/:id', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id } = req.params;
     const siteConfig = req.body;
-    if (!config.recipients[id]) {
+    if (!canAccessForm(req, id)) {
         return res.status(404).json({ error: t.formNotFound });
+    }
+    const scope = getAccountScope(req);
+    stripSecretEchoes(siteConfig);
+    // Only superadmin may move a form between accounts
+    if (scope !== null) delete siteConfig.accountId;
+    if (siteConfig.accountId && !(config.accounts || {})[siteConfig.accountId]) {
+        return res.status(400).json({ error: 'Unknown account: ' + siteConfig.accountId });
+    }
+    const targetAccount = siteConfig.accountId || config.recipients[id].accountId || 'default';
+    if (siteConfig.senderId) {
+        const senderRef = (config.senders || {})[siteConfig.senderId];
+        if (senderRef && !senderUsableByAccount(senderRef, targetAccount)) {
+            return res.status(400).json({ error: 'senderId belongs to another account' });
+        }
+    }
+    if (siteConfig.templatePath && !templatePathAllowed(siteConfig.templatePath, scope)) {
+        return res.status(400).json({ error: 'templatePath outside your account templates' });
     }
     try {
         await writeConfigSafe(cfg => {
@@ -1153,6 +1539,7 @@ adminRouter.put('/websites/:id', async (req, res) => {
                 if (!cfg.captcha) cfg.captcha = {};
                 cfg.captcha[id] = { secretKey: siteConfig.captchaKey };
             }
+            delete cfg.recipients[id].captchaKey;
             if (siteConfig.captchaEnabled === false) {
                 cfg.recipients[id].captchaEnabled = false;
             } else if (siteConfig.captchaEnabled === true) {
@@ -1169,9 +1556,9 @@ adminRouter.put('/websites/:id', async (req, res) => {
 });
 
 // Delete a website configuration
-adminRouter.delete('/websites/:id', async (req, res) => {
+adminRouter.delete('/websites/:id', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id } = req.params;
-    if (!config.recipients[id]) {
+    if (!canAccessForm(req, id)) {
         return res.status(404).json({ error: t.formNotFound });
     }
     try {
@@ -1185,16 +1572,18 @@ adminRouter.delete('/websites/:id', async (req, res) => {
                 delete cfg.turnstile[id];
             }
         });
+        deleteFormAttachments(id).catch(() => {});
         res.json({ message: t.formRemoved });
     } catch (e) {
         res.status(500).json({ error: t.failedSaveConfig });
     }
 });
 
-// Senders (SMTP relays) CRUD routes
+// Senders (SMTP relays) CRUD routes. Senders without accountId are global (superadmin-managed).
 adminRouter.get('/senders', (req, res) => {
+    const scope = getAccountScope(req);
     const sanitized = {};
-    for (const [id, cfg] of Object.entries(config.senders || {})) {
+    for (const [id, cfg] of Object.entries(sendersForScope(scope))) {
         sanitized[id] = {
             name: cfg.name || id,
             type: cfg.type || 'smtp',
@@ -1206,17 +1595,39 @@ adminRouter.get('/senders', (req, res) => {
             user: cfg.user || '',
             pass: cfg.pass ? '••••' : '',
             apiKey: cfg.apiKey ? '••••' : '',
-            domain: cfg.domain || ''
+            domain: cfg.domain || '',
+            accountId: cfg.accountId || null,
+            global: !cfg.accountId
         };
     }
     res.json(sanitized);
 });
 
-adminRouter.post('/senders', async (req, res) => {
+// Strip masked echoes so stored sender secrets are preserved on partial updates
+function stripSenderSecretEchoes(patch) {
+    for (const field of ['pass', 'apiKey']) {
+        if (patch[field] === '••••' || patch[field] === '' || isEncrypted(patch[field])) delete patch[field];
+    }
+    return patch;
+}
+
+adminRouter.post('/senders', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id, config: senderConfig } = req.body;
     if (!id || !senderConfig) return res.status(400).json({ error: t.missingIdOrConfig });
     if (!/^[a-zA-Z0-9_-]+$/.test(id) || id.length > 64) return res.status(400).json({ error: 'Invalid sender ID' });
     if (config.senders[id]) return res.status(409).json({ error: 'Sender ID already exists' });
+    const scope = getAccountScope(req);
+    stripSenderSecretEchoes(senderConfig);
+    if (scope !== null) {
+        // Account admins always create senders in their own account
+        senderConfig.accountId = scope;
+    } else if (senderConfig.accountId) {
+        if (!(config.accounts || {})[senderConfig.accountId]) {
+            return res.status(400).json({ error: 'Unknown account: ' + senderConfig.accountId });
+        }
+    } else {
+        delete senderConfig.accountId; // global sender
+    }
     try {
         await writeConfigSafe(cfg => {
             if (!cfg.senders) cfg.senders = {};
@@ -1229,13 +1640,24 @@ adminRouter.post('/senders', async (req, res) => {
     }
 });
 
-adminRouter.put('/senders/:id', async (req, res) => {
+adminRouter.put('/senders/:id', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id } = req.params;
     if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    if (!canManageSender(req, id)) return res.status(403).json({ error: t.forbidden });
     const update = req.body;
+    stripSenderSecretEchoes(update);
+    const scope = getAccountScope(req);
+    if (scope !== null) {
+        delete update.accountId; // only superadmin can move/globalize a sender
+    } else if (update.accountId !== undefined && update.accountId !== null && update.accountId !== '') {
+        if (!(config.accounts || {})[update.accountId]) {
+            return res.status(400).json({ error: 'Unknown account: ' + update.accountId });
+        }
+    }
     try {
         await writeConfigSafe(cfg => {
             cfg.senders[id] = { ...cfg.senders[id], ...update };
+            if (update.accountId === null || update.accountId === '') delete cfg.senders[id].accountId;
         });
         rebuildAllTransporters();
         res.json({ message: t.smtpUpdated });
@@ -1244,9 +1666,10 @@ adminRouter.put('/senders/:id', async (req, res) => {
     }
 });
 
-adminRouter.delete('/senders/:id', async (req, res) => {
+adminRouter.delete('/senders/:id', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id } = req.params;
     if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    if (!canManageSender(req, id)) return res.status(403).json({ error: t.forbidden });
     try {
         await writeConfigSafe(cfg => {
             delete cfg.senders[id];
@@ -1259,10 +1682,10 @@ adminRouter.delete('/senders/:id', async (req, res) => {
 });
 
 // Test sender connection
-adminRouter.post('/senders/:id/test', async (req, res) => {
+adminRouter.post('/senders/:id/test', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id } = req.params;
     const senderCfg = config.senders && config.senders[id];
-    if (!senderCfg) return res.status(404).json({ error: 'Sender not found' });
+    if (!senderCfg || !canAccessSender(req, id)) return res.status(404).json({ error: 'Sender not found' });
     const testTo = (req.body && req.body.to) || senderCfg.from;
     if (!testTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testTo)) {
         return res.status(400).json({ error: 'Invalid email address' });
@@ -1284,9 +1707,13 @@ adminRouter.post('/senders/:id/test', async (req, res) => {
     }
 });
 
-// Telegram: fetch available chats from getUpdates
-adminRouter.post('/telegram/chats', async (req, res) => {
-    const { botToken } = req.body;
+// Telegram: fetch available chats from getUpdates.
+// Accepts a raw botToken, or formId to use the stored (encrypted) token of that form.
+adminRouter.post('/telegram/chats', requireRole('superadmin', 'admin'), async (req, res) => {
+    let { botToken, formId } = req.body;
+    if ((!botToken || botToken === '••••' || isEncrypted(botToken)) && formId && canAccessForm(req, formId)) {
+        botToken = decryptSecret(config.recipients[formId].telegramBotToken);
+    }
     if (!botToken) return res.status(400).json({ error: 'Bot token required' });
     try {
         const response = await axios.get(`https://api.telegram.org/bot${botToken}/getUpdates`, { timeout: 5000 });
@@ -1312,13 +1739,13 @@ adminRouter.post('/telegram/chats', async (req, res) => {
 });
 
 // Legacy SMTP endpoint (backward compat — redirects to default sender)
-adminRouter.get('/smtp', (req, res) => {
+adminRouter.get('/smtp', requireRole('superadmin'), (req, res) => {
     const def = config.senders && config.senders.default;
     if (!def) return res.json({});
     res.json({ host: def.host, port: def.port, secure: def.secure, from: def.from, user: def.user ? '****' : '', pass: def.pass ? '****' : '' });
 });
 
-adminRouter.put('/smtp', async (req, res) => {
+adminRouter.put('/smtp', requireRole('superadmin'), async (req, res) => {
     const newSmtp = req.body;
     if (!newSmtp || typeof newSmtp !== 'object') return res.status(400).json({ error: t.invalidSmtp });
     try {
@@ -1346,7 +1773,7 @@ adminRouter.get('/statistics/chart', async (req, res) => {
     const submissions = {};
     const mails = {};
     const notifications = {};
-    for (const formId of Object.keys(config.recipients)) {
+    for (const formId of Object.keys(formsForScope(getAccountScope(req)))) {
         // Submissions per day
         const subs = await loadSubmissions(formId);
         const subCounts = {};
@@ -1384,7 +1811,7 @@ adminRouter.get('/statistics/chart', async (req, res) => {
 adminRouter.get('/statistics', (req, res) => {
     const stats = config.statistics || {};
     const enhancedStats = {};
-    for (const [websiteId, websiteConfig] of Object.entries(config.recipients)) {
+    for (const [websiteId, websiteConfig] of Object.entries(formsForScope(getAccountScope(req)))) {
         const websiteStats = stats[websiteId] || { successfulSubmissions: 0, lastSubmission: null };
         enhancedStats[websiteId] = {
             ...websiteStats,
@@ -1397,7 +1824,7 @@ adminRouter.get('/statistics', (req, res) => {
 
 adminRouter.get('/statistics/:id', (req, res) => {
     const { id } = req.params;
-    if (!config.recipients[id]) {
+    if (!canAccessForm(req, id)) {
         return res.status(404).json({ error: t.formNotFound });
     }
     const stats = config.statistics || {};
@@ -1410,9 +1837,9 @@ adminRouter.get('/statistics/:id', (req, res) => {
     });
 });
 
-adminRouter.put('/statistics/:id/reset', async (req, res) => {
+adminRouter.put('/statistics/:id/reset', requireRole('superadmin', 'admin'), async (req, res) => {
     const { id } = req.params;
-    if (!config.recipients[id]) {
+    if (!canAccessForm(req, id)) {
         return res.status(404).json({ error: t.formNotFound });
     }
     try {
@@ -1430,7 +1857,7 @@ adminRouter.put('/statistics/:id/reset', async (req, res) => {
 // Submissions routes
 adminRouter.get('/submissions/:websiteId', async (req, res) => {
     const { websiteId } = req.params;
-    if (!config.recipients[websiteId]) {
+    if (!canAccessForm(req, websiteId)) {
         return res.status(404).json({ error: t.formNotFound });
     }
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -1455,23 +1882,24 @@ adminRouter.get('/submissions/:websiteId', async (req, res) => {
     });
 });
 
-adminRouter.delete('/submissions/:websiteId', async (req, res) => {
+adminRouter.delete('/submissions/:websiteId', requireRole('superadmin', 'admin'), async (req, res) => {
     const { websiteId } = req.params;
-    if (!config.recipients[websiteId]) {
+    if (!canAccessForm(req, websiteId)) {
         return res.status(404).json({ error: t.formNotFound });
     }
     const filePath = path.join(DATA_DIR, `submissions-${websiteId}.json`);
     try {
         await fs.writeFile(filePath, JSON.stringify([], null, 2));
+        deleteFormAttachments(websiteId).catch(() => {});
         res.json({ message: t.submissionsDeleted });
     } catch (e) {
         res.status(500).json({ error: t.failedDeleteSubs });
     }
 });
 
-adminRouter.delete('/submissions/:websiteId/:entryId', async (req, res) => {
+adminRouter.delete('/submissions/:websiteId/:entryId', requireRole('superadmin', 'admin'), async (req, res) => {
     const { websiteId, entryId } = req.params;
-    if (!config.recipients[websiteId]) {
+    if (!canAccessForm(req, websiteId)) {
         return res.status(404).json({ error: t.formNotFound });
     }
     const filePath = path.join(DATA_DIR, `submissions-${websiteId}.json`);
@@ -1481,6 +1909,7 @@ adminRouter.delete('/submissions/:websiteId/:entryId', async (req, res) => {
         if (idx === -1) return res.status(404).json({ error: t.entryNotFound });
         submissions.splice(idx, 1);
         await fs.writeFile(filePath, JSON.stringify(submissions, null, 2));
+        deleteSubmissionAttachments(websiteId, entryId).catch(() => {});
         res.json({ message: t.submissionDeleted });
     } catch (e) {
         res.status(500).json({ error: t.failedDeleteSubs });
@@ -1489,7 +1918,7 @@ adminRouter.delete('/submissions/:websiteId/:entryId', async (req, res) => {
 
 adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
     const { websiteId } = req.params;
-    if (!config.recipients[websiteId]) {
+    if (!canAccessForm(req, websiteId)) {
         return res.status(404).json({ error: t.formNotFound });
     }
     const format = req.query.format || 'json';
@@ -1504,7 +1933,8 @@ adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
         // Put id and timestamp first, ip last, rest alphabetical in between
         const meta = ['id', 'timestamp'];
         const trailing = ['ip'];
-        const dynamicFields = Array.from(headerSet).filter(k => !meta.includes(k) && !trailing.includes(k)).sort();
+        const excluded = ['attachments'];
+        const dynamicFields = Array.from(headerSet).filter(k => !meta.includes(k) && !trailing.includes(k) && !excluded.includes(k)).sort();
         const headers = [...meta, ...dynamicFields, ...trailing].filter(h => headerSet.has(h));
         const csvRows = [headers.join(',')];
         for (const s of submissions) {
@@ -1524,6 +1954,33 @@ adminRouter.get('/submissions/:websiteId/export', async (req, res) => {
     res.json(submissions);
 });
 
+// Resolve and validate an attachment request. Only filenames listed in the
+// submission's attachments metadata are servable (primary traversal defense).
+async function resolveAttachment(formId, entryId, filename) {
+    if (!/^[a-z0-9]+$/i.test(entryId)) return null;
+    const submissions = await loadSubmissions(formId);
+    const entry = submissions.find(s => s.id === entryId);
+    if (!entry || !Array.isArray(entry.attachments)) return null;
+    const att = entry.attachments.find(a => a.filename === filename);
+    if (!att) return null;
+    const p = path.resolve(ATTACHMENTS_DIR, formId, entryId, att.filename);
+    if (!p.startsWith(path.resolve(ATTACHMENTS_DIR) + path.sep)) return null;
+    return { path: p, filename: att.filename };
+}
+
+// Download a stored attachment
+adminRouter.get('/submissions/:websiteId/attachments/:entryId/:filename', async (req, res) => {
+    const { websiteId, entryId, filename } = req.params;
+    if (!canAccessForm(req, websiteId)) {
+        return res.status(404).json({ error: t.formNotFound });
+    }
+    const att = await resolveAttachment(websiteId, entryId, filename);
+    if (!att) return res.status(404).json({ error: t.entryNotFound });
+    res.download(att.path, att.filename, err => {
+        if (err && !res.headersSent) res.status(404).json({ error: t.entryNotFound });
+    });
+});
+
 // Template management routes
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 async function ensureTemplatesDir() {
@@ -1531,76 +1988,137 @@ async function ensureTemplatesDir() {
 }
 ensureTemplatesDir();
 
-// List all available templates (from templates/ dir + root email-template*.html files)
-adminRouter.get('/templates', async (req, res) => {
-    const templates = [];
-    // Scan templates/ directory
-    try {
-        const files = await fs.readdir(TEMPLATES_DIR);
-        for (const f of files) {
-            if (f.endsWith('.html')) {
-                templates.push({ name: f, path: `templates/${f}` });
-            }
-        }
-    } catch (e) {}
-    // Scan root for legacy email-template*.html files
-    try {
-        const rootFiles = await fs.readdir(__dirname);
-        for (const f of rootFiles) {
-            if (f.startsWith('email-template') && f.endsWith('.html')) {
-                templates.push({ name: f, path: f });
-            }
-        }
-    } catch (e) {}
-    res.json(templates);
-});
+// Template layout: templates/ root = shared/default set (visible to every account,
+// writable by superadmin only); templates/{accountId}/ = per-account templates.
+// Account-folder writes by admin/user roles; editing a shared one creates an account copy.
 
-// Get template content
-adminRouter.get('/templates/:name', async (req, res) => {
-    const name = req.params.name;
-    // Try templates/ dir first, then root
-    const candidates = [
-        path.join(TEMPLATES_DIR, name),
-        path.join(__dirname, name)
-    ];
-    for (const filePath of candidates) {
-        const resolved = path.resolve(filePath);
+async function listTemplatesForScope(scope) {
+    const templates = [];
+    try {
+        const entries = await fs.readdir(TEMPLATES_DIR, { withFileTypes: true });
+        for (const f of entries) {
+            if (f.isFile() && f.name.endsWith('.html')) {
+                templates.push({ name: f.name, path: `templates/${f.name}`, shared: true });
+            }
+        }
+        const dirs = entries.filter(d => d.isDirectory());
+        for (const d of dirs) {
+            if (scope !== null && d.name !== scope) continue;
+            try {
+                const sub = await fs.readdir(path.join(TEMPLATES_DIR, d.name));
+                for (const f of sub) {
+                    if (f.endsWith('.html')) {
+                        templates.push({ name: f, path: `templates/${d.name}/${f}`, accountId: d.name });
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (e) {}
+    // Legacy root email-template*.html files (shared)
+    if (scope === null) {
+        try {
+            const rootFiles = await fs.readdir(__dirname);
+            for (const f of rootFiles) {
+                if (f.startsWith('email-template') && f.endsWith('.html')) {
+                    templates.push({ name: f, path: f, shared: true });
+                }
+            }
+        } catch (e) {}
+    }
+    return templates;
+}
+
+function validTemplateName(name) {
+    return name.endsWith('.html') && !name.includes('/') && !name.includes('\\') && !name.includes('..');
+}
+
+// Resolve a template name for reading: account folder first, then shared root, then legacy root
+async function resolveTemplateRead(name, scope, accountIdParam) {
+    const candidates = [];
+    if (scope) {
+        candidates.push({ file: path.join(TEMPLATES_DIR, scope, name), rel: `templates/${scope}/${name}`, accountId: scope });
+    } else if (accountIdParam && /^[a-zA-Z0-9_-]+$/.test(accountIdParam)) {
+        candidates.push({ file: path.join(TEMPLATES_DIR, accountIdParam, name), rel: `templates/${accountIdParam}/${name}`, accountId: accountIdParam });
+    }
+    candidates.push({ file: path.join(TEMPLATES_DIR, name), rel: `templates/${name}`, shared: true });
+    candidates.push({ file: path.join(__dirname, name), rel: name, shared: true });
+    for (const c of candidates) {
+        const resolved = path.resolve(c.file);
         if (!resolved.startsWith(__dirname)) continue;
         try {
             const content = await fs.readFile(resolved, 'utf8');
-            return res.json({ name, path: resolved.startsWith(TEMPLATES_DIR) ? `templates/${name}` : name, content });
+            return { ...c, content };
         } catch (e) {}
     }
-    res.status(404).json({ error: 'Template not found' });
+    return null;
+}
+
+// List available templates (shared + scoped account folder)
+adminRouter.get('/templates', async (req, res) => {
+    res.json(await listTemplatesForScope(getAccountScope(req)));
 });
 
-// Create or update a template (always saves to templates/ dir)
+// Get template content. Superadmin may pass ?accountId= to read an account's template.
+adminRouter.get('/templates/:name', async (req, res) => {
+    const name = req.params.name;
+    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid template name' });
+    }
+    const found = await resolveTemplateRead(name, getAccountScope(req), req.query.accountId);
+    if (!found) return res.status(404).json({ error: 'Template not found' });
+    res.json({ name, path: found.rel, content: found.content, shared: !!found.shared, accountId: found.accountId || null });
+});
+
+// Create or update a template. Scoped users (admin AND user roles) write to their
+// account folder; superadmin writes to the shared root (or ?accountId= folder).
 adminRouter.put('/templates/:name', async (req, res) => {
     const name = req.params.name;
-    if (!name.endsWith('.html') || name.includes('/') || name.includes('\\')) {
+    if (!validTemplateName(name)) {
         return res.status(400).json({ error: 'Invalid template name' });
     }
     const { content } = req.body;
     if (typeof content !== 'string') {
         return res.status(400).json({ error: 'Content is required' });
     }
-    await ensureTemplatesDir();
-    const filePath = path.join(TEMPLATES_DIR, name);
+    const scope = getAccountScope(req);
+    let dir = TEMPLATES_DIR;
+    let rel = `templates/${name}`;
+    let accountCopy = false;
+    if (scope !== null) {
+        if (scope === NO_SCOPE) return res.status(403).json({ error: t.forbidden });
+        dir = path.join(TEMPLATES_DIR, scope);
+        rel = `templates/${scope}/${name}`;
+        // Was this name a shared template? Then the save creates an account override
+        try { await fs.access(path.join(TEMPLATES_DIR, name)); accountCopy = true; } catch (e) {}
+    } else if (req.query.accountId && /^[a-zA-Z0-9_-]+$/.test(req.query.accountId)) {
+        dir = path.join(TEMPLATES_DIR, req.query.accountId);
+        rel = `templates/${req.query.accountId}/${name}`;
+    }
     try {
-        await fs.writeFile(filePath, content, 'utf8');
-        res.json({ message: 'Template saved', path: `templates/${name}` });
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, name), content, 'utf8');
+        res.json({ message: 'Template saved', path: rel, accountCopy });
     } catch (e) {
         res.status(500).json({ error: 'Failed to save template' });
     }
 });
 
-// Delete a template (only from templates/ dir)
-adminRouter.delete('/templates/:name', async (req, res) => {
+// Delete a template. Scoped admins delete from their account folder; superadmin
+// deletes shared (root) or ?accountId= folder templates.
+adminRouter.delete('/templates/:name', requireRole('superadmin', 'admin'), async (req, res) => {
     const name = req.params.name;
-    if (name.includes('/') || name.includes('\\')) {
+    if (!validTemplateName(name)) {
         return res.status(400).json({ error: 'Invalid template name' });
     }
-    const filePath = path.join(TEMPLATES_DIR, name);
+    const scope = getAccountScope(req);
+    let filePath;
+    if (scope !== null) {
+        filePath = path.join(TEMPLATES_DIR, scope, name);
+    } else if (req.query.accountId && /^[a-zA-Z0-9_-]+$/.test(req.query.accountId)) {
+        filePath = path.join(TEMPLATES_DIR, req.query.accountId, name);
+    } else {
+        filePath = path.join(TEMPLATES_DIR, name);
+    }
     try {
         await fs.unlink(filePath);
         res.json({ message: 'Template deleted' });
@@ -1609,7 +2127,7 @@ adminRouter.delete('/templates/:name', async (req, res) => {
     }
 });
 
-// Reset admin password
+// Change own password (any role)
 adminRouter.put('/admin/reset-password', async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
@@ -1618,14 +2136,20 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
     if (newPassword.length < 8) {
         return res.status(400).json({ error: t.passwordTooShort });
     }
-    const passwordMatch = await bcrypt.compare(currentPassword, config.admin.password);
+    const userRec = (config.users || {})[req.user.username];
+    if (!userRec) {
+        return res.status(403).json({ error: t.forbidden });
+    }
+    const passwordMatch = await bcrypt.compare(currentPassword, userRec.passwordHash);
     if (!passwordMatch) {
         return res.status(403).json({ error: t.passwordIncorrect });
     }
     try {
         const hashedNew = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
         await writeConfigSafe(cfg => {
-            cfg.admin.password = hashedNew;
+            if (cfg.users && cfg.users[req.user.username]) {
+                cfg.users[req.user.username].passwordHash = hashedNew;
+            }
         });
         res.json({ message: t.passwordUpdated });
     } catch (e) {
@@ -1638,7 +2162,7 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
 adminRouter.get('/inbox/recent', async (req, res) => {
     const limit = Math.min(10, Math.max(1, parseInt(req.query.limit) || 4));
     const all = [];
-    for (const formId of Object.keys(config.recipients)) {
+    for (const formId of Object.keys(formsForScope(getAccountScope(req)))) {
         const subs = await loadSubmissions(formId);
         for (const sub of subs.slice(0, limit)) {
             const fields = Object.entries(sub).filter(([k]) => !['id','timestamp','ip','submitMethod'].includes(k));
@@ -1659,7 +2183,7 @@ adminRouter.get('/inbox/recent', async (req, res) => {
 adminRouter.get('/outbox/recent', async (req, res) => {
     const limit = Math.min(10, Math.max(1, parseInt(req.query.limit) || 4));
     const all = [];
-    for (const formId of Object.keys(config.recipients)) {
+    for (const formId of Object.keys(formsForScope(getAccountScope(req)))) {
         const entries = await loadOutboxEntries(formId);
         for (const entry of entries.slice(0, limit)) {
             all.push({ websiteId: formId, ...entry });
@@ -1672,7 +2196,7 @@ adminRouter.get('/outbox/recent', async (req, res) => {
 // Outbox entries for a specific form (paginated)
 adminRouter.get('/outbox/:websiteId', async (req, res) => {
     const { websiteId } = req.params;
-    if (!config.recipients[websiteId]) return res.status(404).json({ error: 'Form not found' });
+    if (!canAccessForm(req, websiteId)) return res.status(404).json({ error: 'Form not found' });
     const entries = await loadOutboxEntries(websiteId);
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
@@ -1685,9 +2209,9 @@ adminRouter.get('/outbox/:websiteId', async (req, res) => {
     });
 });
 
-adminRouter.delete('/outbox/:websiteId/:entryId', async (req, res) => {
+adminRouter.delete('/outbox/:websiteId/:entryId', requireRole('superadmin', 'admin'), async (req, res) => {
     const { websiteId, entryId } = req.params;
-    if (!config.recipients[websiteId]) return res.status(404).json({ error: t.formNotFound });
+    if (!canAccessForm(req, websiteId)) return res.status(404).json({ error: t.formNotFound });
     const filePath = path.join(DATA_DIR, `outbox-${websiteId}.json`);
     try {
         let entries = await loadOutboxEntries(websiteId);
@@ -1706,10 +2230,10 @@ const sseTokens = new Map(); // token -> { expires }
 const SSE_TOKEN_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_SSE_CLIENTS = 20;
 
-// Issue a short-lived SSE token (requires admin auth)
+// Issue a short-lived SSE token (requires admin auth); carries the user's account scope
 adminRouter.post('/inbox/token', (req, res) => {
     const token = require('crypto').randomBytes(32).toString('hex');
-    sseTokens.set(token, { expires: Date.now() + SSE_TOKEN_TTL });
+    sseTokens.set(token, { expires: Date.now() + SSE_TOKEN_TTL, scope: getAccountScope(req) });
     // Cleanup expired tokens
     for (const [t, v] of sseTokens) {
         if (v.expires < Date.now()) sseTokens.delete(t);
@@ -1740,32 +2264,46 @@ app.get('/admin/api/inbox/stream', adminLimiter, (req, res) => {
         'X-Accel-Buffering': 'no'
     });
     res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
-    sseClients.add(res);
+    const client = { res, scope: tokenData.scope !== undefined ? tokenData.scope : null };
+    sseClients.add(client);
 
     const keepalive = setInterval(() => res.write(': keepalive\n\n'), 30000);
-    req.on('close', () => { clearInterval(keepalive); sseClients.delete(res); });
+    req.on('close', () => { clearInterval(keepalive); sseClients.delete(client); });
 });
 
-// Backup: export full config + templates
-adminRouter.get('/backup', async (req, res) => {
+// Backup: export full config + templates (superadmin only).
+// Secrets are exported encrypted: restore requires the same ENCRYPTION_KEY / data/.secret.key.
+adminRouter.get('/backup', requireRole('superadmin'), async (req, res) => {
     try {
         const backup = {
             version: pkg.version,
             timestamp: new Date().toISOString(),
+            encryption: { enabled: true, note: 'Secrets are encrypted; restore requires the same ENCRYPTION_KEY or data/.secret.key.' },
             recipients: config.recipients,
             senders: config.senders || {},
             captcha: config.captcha || {},
-
+            accounts: config.accounts || {},
+            users: config.users || {},
+            api: config.api || {},
+            statistics: config.statistics || {},
             smtp: config.smtp || {},
             templates: {}
         };
-        // Include template files
-        const templatesDir = path.join(__dirname, 'templates');
+        // Include template files: shared root + per-account subfolders (key = relative path)
         try {
-            const files = await fs.readdir(templatesDir);
-            for (const file of files) {
-                if (file.endsWith('.html')) {
-                    backup.templates[file] = await fs.readFile(path.join(templatesDir, file), 'utf8');
+            const entries = await fs.readdir(TEMPLATES_DIR, { withFileTypes: true });
+            for (const f of entries) {
+                if (f.isFile() && f.name.endsWith('.html')) {
+                    backup.templates[f.name] = await fs.readFile(path.join(TEMPLATES_DIR, f.name), 'utf8');
+                } else if (f.isDirectory()) {
+                    try {
+                        const sub = await fs.readdir(path.join(TEMPLATES_DIR, f.name));
+                        for (const sf of sub) {
+                            if (sf.endsWith('.html')) {
+                                backup.templates[`${f.name}/${sf}`] = await fs.readFile(path.join(TEMPLATES_DIR, f.name, sf), 'utf8');
+                            }
+                        }
+                    } catch (e) {}
                 }
             }
         } catch (e) {}
@@ -1780,8 +2318,8 @@ adminRouter.get('/backup', async (req, res) => {
     }
 });
 
-// Restore: import config + templates
-adminRouter.post('/restore', async (req, res) => {
+// Restore: import config + templates (superadmin only)
+adminRouter.post('/restore', requireRole('superadmin'), async (req, res) => {
     const backup = req.body;
     if (!backup || !backup.recipients) {
         return res.status(400).json({ error: 'Invalid backup file' });
@@ -1791,41 +2329,76 @@ adminRouter.post('/restore', async (req, res) => {
             if (backup.recipients) cfg.recipients = backup.recipients;
             if (backup.senders) cfg.senders = backup.senders;
             if (backup.captcha) cfg.captcha = backup.captcha;
-
+            if (backup.accounts) cfg.accounts = backup.accounts;
+            if (backup.users && Object.keys(backup.users).length) cfg.users = backup.users;
+            if (backup.api && backup.api.key) cfg.api = backup.api;
+            if (backup.statistics) cfg.statistics = backup.statistics;
             if (backup.smtp) cfg.smtp = backup.smtp;
+            // Heal pre-multitenant backups: stamp accountId on forms (senders stay global)
+            if (!cfg.accounts || Object.keys(cfg.accounts).length === 0) {
+                cfg.accounts = { default: { name: 'Default', api: { key: 'fp_' + nodeCrypto.randomBytes(24).toString('hex'), enabled: true } } };
+            }
+            for (const r of Object.values(cfg.recipients || {})) {
+                if (!r.accountId) r.accountId = 'default';
+            }
         });
-        // Restore templates
+        // Restore templates (supports "account/file.html" subfolder keys)
         if (backup.templates) {
-            const templatesDir = path.join(__dirname, 'templates');
-            await fs.mkdir(templatesDir, { recursive: true }).catch(() => {});
+            await fs.mkdir(TEMPLATES_DIR, { recursive: true }).catch(() => {});
             for (const [filename, content] of Object.entries(backup.templates)) {
-                const filePath = filename === 'email-template.html'
-                    ? path.join(__dirname, filename)
-                    : path.join(templatesDir, filename);
+                const norm = String(filename).replace(/\\/g, '/');
+                if (norm.includes('..') || norm.split('/').length > 2 || !norm.endsWith('.html')) continue;
+                const filePath = norm === 'email-template.html'
+                    ? path.join(__dirname, norm)
+                    : path.join(TEMPLATES_DIR, ...norm.split('/'));
+                await fs.mkdir(path.dirname(filePath), { recursive: true }).catch(() => {});
                 await fs.writeFile(filePath, content);
             }
         }
         rebuildAllTransporters();
-        res.json({ message: 'Backup restored successfully' });
+        // Probe: can the restored secrets be decrypted with this server's key?
+        const warnings = [];
+        const probe = Object.values(config.senders || {}).find(s => isEncrypted(s.pass) || isEncrypted(s.apiKey));
+        if (probe) {
+            const v = isEncrypted(probe.pass) ? probe.pass : probe.apiKey;
+            if (decryptSecret(v) === null) {
+                warnings.push('Encrypted secrets in this backup cannot be decrypted with the current encryption key. Re-enter sender passwords and tokens.');
+            }
+        }
+        res.json({ message: 'Backup restored successfully', warnings });
     } catch (e) {
         res.status(500).json({ error: 'Restore failed: ' + e.message });
     }
 });
 
-// Agent API key management (admin)
-adminRouter.get('/apikey', (req, res) => {
-    res.json({
-        key: (config.api && config.api.key) || '',
-        enabled: !!(config.api && config.api.key) && config.api.enabled !== false
-    });
+// Agent API key management — scope-aware:
+// superadmin operates on the master key (config.api, unrestricted access),
+// account admins operate on their own account's key.
+adminRouter.get('/apikey', requireRole('superadmin', 'admin'), (req, res) => {
+    const scope = getAccountScope(req);
+    if (scope === null) {
+        return res.json({
+            key: (config.api && config.api.key) || '',
+            enabled: !!(config.api && config.api.key) && config.api.enabled !== false,
+            scope: 'master'
+        });
+    }
+    const api = ((config.accounts || {})[scope] || {}).api || {};
+    res.json({ key: api.key || '', enabled: !!api.key && api.enabled !== false, scope });
 });
 
-adminRouter.post('/apikey/regenerate', async (req, res) => {
+adminRouter.post('/apikey/regenerate', requireRole('superadmin', 'admin'), async (req, res) => {
+    const scope = getAccountScope(req);
     const key = 'fp_' + require('crypto').randomBytes(24).toString('hex');
     try {
         await writeConfigSafe(cfg => {
-            if (!cfg.api) cfg.api = {};
-            cfg.api.key = key;
+            if (scope === null) {
+                if (!cfg.api) cfg.api = {};
+                cfg.api.key = key;
+            } else if (cfg.accounts && cfg.accounts[scope]) {
+                if (!cfg.accounts[scope].api) cfg.accounts[scope].api = { enabled: true };
+                cfg.accounts[scope].api.key = key;
+            }
         });
         res.json({ key });
     } catch (e) {
@@ -1833,14 +2406,235 @@ adminRouter.post('/apikey/regenerate', async (req, res) => {
     }
 });
 
-adminRouter.put('/apikey', async (req, res) => {
+adminRouter.put('/apikey', requireRole('superadmin', 'admin'), async (req, res) => {
+    const scope = getAccountScope(req);
     const enabled = !!(req.body && req.body.enabled);
     try {
         await writeConfigSafe(cfg => {
-            if (!cfg.api) cfg.api = {};
-            cfg.api.enabled = enabled;
+            if (scope === null) {
+                if (!cfg.api) cfg.api = {};
+                cfg.api.enabled = enabled;
+            } else if (cfg.accounts && cfg.accounts[scope]) {
+                if (!cfg.accounts[scope].api) cfg.accounts[scope].api = {};
+                cfg.accounts[scope].api.enabled = enabled;
+            }
         });
         res.json({ enabled });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+// ===== Accounts management (superadmin only) =====
+const RESERVED_ACCOUNT_IDS = ['master', 'null', 'none'];
+
+adminRouter.get('/accounts', requireRole('superadmin'), (req, res) => {
+    const out = {};
+    for (const [id, acct] of Object.entries(config.accounts || {})) {
+        const formCount = Object.values(config.recipients || {}).filter(r => (r.accountId || 'default') === id).length;
+        const senderCount = Object.values(config.senders || {}).filter(s => s.accountId === id).length;
+        const userCount = Object.values(config.users || {}).filter(u => u.accountId === id).length;
+        out[id] = {
+            name: acct.name || id,
+            api: { key: (acct.api && acct.api.key) || '', enabled: !!(acct.api && acct.api.key) && acct.api.enabled !== false },
+            formCount,
+            senderCount,
+            userCount
+        };
+    }
+    res.json(out);
+});
+
+adminRouter.post('/accounts', requireRole('superadmin'), async (req, res) => {
+    const { id, name } = req.body || {};
+    if (!id || !/^[a-zA-Z0-9_-]+$/.test(id) || id.length > 64 || RESERVED_ACCOUNT_IDS.includes(id.toLowerCase())) {
+        return res.status(400).json({ error: 'Invalid account ID' });
+    }
+    if ((config.accounts || {})[id]) {
+        return res.status(409).json({ error: 'Account already exists' });
+    }
+    const key = 'fp_' + nodeCrypto.randomBytes(24).toString('hex');
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.accounts) cfg.accounts = {};
+            cfg.accounts[id] = { name: String(name || id).substring(0, 120), api: { key, enabled: true } };
+        });
+        res.status(201).json({ message: 'Account created', id, apiKey: key });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.put('/accounts/:id', requireRole('superadmin'), async (req, res) => {
+    const { id } = req.params;
+    if (!(config.accounts || {})[id]) return res.status(404).json({ error: 'Account not found' });
+    const { name } = req.body || {};
+    try {
+        await writeConfigSafe(cfg => {
+            if (cfg.accounts && cfg.accounts[id] && name) {
+                cfg.accounts[id].name = String(name).substring(0, 120);
+            }
+        });
+        res.json({ message: 'Account updated' });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.delete('/accounts/:id', requireRole('superadmin'), async (req, res) => {
+    const { id } = req.params;
+    if (!(config.accounts || {})[id]) return res.status(404).json({ error: 'Account not found' });
+    const hasForms = Object.values(config.recipients || {}).some(r => (r.accountId || 'default') === id);
+    const hasSenders = Object.values(config.senders || {}).some(s => s.accountId === id);
+    if (hasForms || hasSenders) {
+        return res.status(409).json({ error: 'Account still has forms or senders. Delete or reassign them first.' });
+    }
+    try {
+        await writeConfigSafe(cfg => {
+            delete cfg.accounts[id];
+            for (const [username, u] of Object.entries(cfg.users || {})) {
+                if (u.accountId === id) delete cfg.users[username];
+            }
+        });
+        fs.rm(path.join(TEMPLATES_DIR, id), { recursive: true, force: true }).catch(() => {});
+        res.json({ message: 'Account deleted' });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.post('/accounts/:id/apikey/regenerate', requireRole('superadmin'), async (req, res) => {
+    const { id } = req.params;
+    if (!(config.accounts || {})[id]) return res.status(404).json({ error: 'Account not found' });
+    const key = 'fp_' + nodeCrypto.randomBytes(24).toString('hex');
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.accounts[id].api) cfg.accounts[id].api = { enabled: true };
+            cfg.accounts[id].api.key = key;
+        });
+        res.json({ key });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.put('/accounts/:id/api', requireRole('superadmin'), async (req, res) => {
+    const { id } = req.params;
+    if (!(config.accounts || {})[id]) return res.status(404).json({ error: 'Account not found' });
+    const enabled = !!(req.body && req.body.enabled);
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.accounts[id].api) cfg.accounts[id].api = {};
+            cfg.accounts[id].api.enabled = enabled;
+        });
+        res.json({ enabled });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+// ===== Users management (superadmin only) =====
+const VALID_ROLES = ['superadmin', 'admin', 'user'];
+
+function countSuperadmins() {
+    return Object.values(config.users || {}).filter(u => u.role === 'superadmin').length;
+}
+
+adminRouter.get('/users', requireRole('superadmin'), (req, res) => {
+    const out = {};
+    for (const [username, u] of Object.entries(config.users || {})) {
+        out[username] = { role: u.role || 'user', accountId: u.accountId || null, name: u.name || '' };
+    }
+    res.json(out);
+});
+
+adminRouter.post('/users', requireRole('superadmin'), async (req, res) => {
+    const { username, password, role, accountId, name } = req.body || {};
+    if (!username || !/^[a-zA-Z0-9_.@-]+$/.test(username) || username.length > 64) {
+        return res.status(400).json({ error: 'Invalid username' });
+    }
+    if ((config.users || {})[username]) {
+        return res.status(409).json({ error: 'User already exists' });
+    }
+    if (!password || password.length < 8) {
+        return res.status(400).json({ error: t.passwordTooShort });
+    }
+    if (!VALID_ROLES.includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+    }
+    if (role !== 'superadmin' && !(config.accounts || {})[accountId]) {
+        return res.status(400).json({ error: 'A valid accountId is required for admin/user roles' });
+    }
+    try {
+        const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+        await writeConfigSafe(cfg => {
+            if (!cfg.users) cfg.users = {};
+            cfg.users[username] = {
+                passwordHash,
+                role,
+                accountId: role === 'superadmin' ? null : accountId,
+                name: String(name || '').substring(0, 120)
+            };
+        });
+        res.status(201).json({ message: 'User created' });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.put('/users/:username', requireRole('superadmin'), async (req, res) => {
+    const { username } = req.params;
+    const existing = (config.users || {})[username];
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+    const { password, role, accountId, name } = req.body || {};
+    if (role !== undefined && !VALID_ROLES.includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+    }
+    const newRole = role !== undefined ? role : existing.role;
+    // Never demote the last superadmin
+    if (existing.role === 'superadmin' && newRole !== 'superadmin' && countSuperadmins() <= 1) {
+        return res.status(409).json({ error: 'Cannot demote the last superadmin' });
+    }
+    if (newRole !== 'superadmin') {
+        const newAccount = accountId !== undefined ? accountId : existing.accountId;
+        if (!(config.accounts || {})[newAccount]) {
+            return res.status(400).json({ error: 'A valid accountId is required for admin/user roles' });
+        }
+    }
+    if (password !== undefined && (!password || password.length < 8)) {
+        return res.status(400).json({ error: t.passwordTooShort });
+    }
+    try {
+        const passwordHash = password ? await bcrypt.hash(password, BCRYPT_ROUNDS) : null;
+        await writeConfigSafe(cfg => {
+            const u = cfg.users[username];
+            if (!u) return;
+            if (passwordHash) u.passwordHash = passwordHash;
+            if (role !== undefined) u.role = role;
+            u.accountId = (role !== undefined ? role : u.role) === 'superadmin' ? null : (accountId !== undefined ? accountId : u.accountId);
+            if (name !== undefined) u.name = String(name || '').substring(0, 120);
+        });
+        res.json({ message: 'User updated' });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
+});
+
+adminRouter.delete('/users/:username', requireRole('superadmin'), async (req, res) => {
+    const { username } = req.params;
+    const existing = (config.users || {})[username];
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+    if (username === req.user.username) {
+        return res.status(409).json({ error: 'Cannot delete your own user' });
+    }
+    if (existing.role === 'superadmin' && countSuperadmins() <= 1) {
+        return res.status(409).json({ error: 'Cannot delete the last superadmin' });
+    }
+    try {
+        await writeConfigSafe(cfg => {
+            delete cfg.users[username];
+        });
+        res.json({ message: 'User deleted' });
     } catch (e) {
         res.status(500).json({ error: t.failedSaveConfig });
     }
@@ -1861,22 +2655,37 @@ const apiLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+// API key auth. The master key (config.api) has unrestricted access (scope null);
+// each account key is strictly scoped to that account's data (req.apiScope = accountId).
 function apiAuth(req, res, next) {
-    if (!config.api || !config.api.key || config.api.enabled === false) {
-        return res.status(503).json({ error: 'Agent API is disabled. Enable it from the admin UI (Senders > Agent API).' });
-    }
     let provided = req.headers['x-api-key'] || '';
     const authHeader = req.headers['authorization'] || '';
     if (!provided && authHeader.startsWith('Bearer ')) provided = authHeader.slice(7).trim();
     if (!provided) {
         return res.status(401).json({ error: 'Missing API key. Send it in the X-API-Key header (or Authorization: Bearer <key>).' });
     }
-    const crypto = require('crypto');
-    const a = crypto.createHash('sha256').update(String(provided)).digest();
-    const b = crypto.createHash('sha256').update(String(config.api.key)).digest();
-    if (!crypto.timingSafeEqual(a, b)) {
+    const candidates = [];
+    if (config.api && config.api.key && config.api.enabled !== false) {
+        candidates.push({ key: config.api.key, scope: null });
+    }
+    for (const [id, acct] of Object.entries(config.accounts || {})) {
+        if (acct.api && acct.api.key && acct.api.enabled !== false) {
+            candidates.push({ key: acct.api.key, scope: id });
+        }
+    }
+    if (!candidates.length) {
+        return res.status(503).json({ error: 'Agent API is disabled. Enable it from the admin UI.' });
+    }
+    const a = nodeCrypto.createHash('sha256').update(String(provided)).digest();
+    let matched = null;
+    for (const c of candidates) {
+        const b = nodeCrypto.createHash('sha256').update(String(c.key)).digest();
+        if (nodeCrypto.timingSafeEqual(a, b) && !matched) matched = c;
+    }
+    if (!matched) {
         return res.status(401).json({ error: 'Invalid API key.' });
     }
+    req.apiScope = matched.scope;
     next();
 }
 
@@ -1892,13 +2701,15 @@ const FORM_CONFIG_FIELDS = [
     'captchaEnabled', 'captchaProvider', 'allowedDomains', 'redirectUrl'
 ];
 
-function validateFormConfig(body, isCreate) {
+function validateFormConfig(body, isCreate, scope, targetAccountId) {
     const cfg = {};
     const errors = [];
     const warnings = [];
     for (const f of FORM_CONFIG_FIELDS) {
         if (body[f] !== undefined) cfg[f] = body[f];
     }
+    // Preserve stored secrets when a masked/encrypted echo comes back
+    stripSecretEchoes(cfg);
     if (isCreate && cfg.to === undefined) {
         errors.push('"to" is required: destination email address(es), comma-separated.');
     }
@@ -1912,6 +2723,8 @@ function validateFormConfig(body, isCreate) {
         const resolved = path.resolve(__dirname, String(cfg.templatePath));
         if (!resolved.startsWith(__dirname)) {
             errors.push('"templatePath" must be a relative path inside formPost (e.g. "templates/contact-form.html").');
+        } else if (scope && !templatePathAllowed(cfg.templatePath, scope)) {
+            errors.push(`"templatePath" must be a shared template ("templates/x.html") or one of your account ("templates/${scope}/x.html").`);
         }
     }
     if (cfg.allowedDomains !== undefined && !Array.isArray(cfg.allowedDomains)) {
@@ -1920,8 +2733,13 @@ function validateFormConfig(body, isCreate) {
     if (cfg.captchaProvider !== undefined && !['turnstile', 'hcaptcha'].includes(cfg.captchaProvider)) {
         errors.push('"captchaProvider" must be "turnstile" or "hcaptcha".');
     }
-    if (cfg.senderId !== undefined && !(config.senders || {})[cfg.senderId]) {
-        warnings.push(`senderId "${cfg.senderId}" does not exist yet; email will fall back to the first configured sender. Create it via POST /api/v1/senders.`);
+    if (cfg.senderId !== undefined) {
+        const senderRef = (config.senders || {})[cfg.senderId];
+        if (!senderRef) {
+            warnings.push(`senderId "${cfg.senderId}" does not exist yet; email will fall back to the first configured sender. Create it via POST /api/v1/senders.`);
+        } else if (targetAccountId && !senderUsableByAccount(senderRef, targetAccountId)) {
+            errors.push(`senderId "${cfg.senderId}" belongs to another account.`);
+        }
     }
     return { cfg, errors, warnings };
 }
@@ -1971,6 +2789,8 @@ function sanitizeSenderForApi(id, cfg) {
         user: cfg.user || '',
         domain: cfg.domain || '',
         active: cfg.active !== false,
+        accountId: cfg.accountId || null,
+        global: !cfg.accountId,
         hasPassword: !!cfg.pass,
         hasApiKey: !!cfg.apiKey
     };
@@ -2000,7 +2820,8 @@ function buildApiSpec(req) {
             type: 'apiKey',
             header: 'X-API-Key',
             alternative: 'Authorization: Bearer <key>',
-            howToGetKey: 'Ask the formPost administrator. The key is shown in the admin UI under Senders > Agent API.'
+            howToGetKey: 'Ask the formPost administrator. The key is shown in the admin UI under Settings > Agent API.',
+            scoping: 'Keys are per-account: an account key only sees and manages that account\'s forms, senders and templates (plus shared/global ones, read-only). The master key has unrestricted access.'
         },
         quickstart: [
             '1. GET /api/v1/senders to check an email sender exists (or create one with POST /api/v1/senders).',
@@ -2016,7 +2837,8 @@ function buildApiSpec(req) {
             { method: 'GET', path: '/api/v1/forms/:id', auth: true, description: 'Get one form configuration.' },
             { method: 'PUT', path: '/api/v1/forms/:id', auth: true, description: 'Update a form. Body: partial formConfig (merged over existing).' },
             { method: 'DELETE', path: '/api/v1/forms/:id', auth: true, description: 'Delete a form.' },
-            { method: 'GET', path: '/api/v1/forms/:id/submissions?page=1&limit=50', auth: true, description: 'Read received submissions (newest first).' },
+            { method: 'GET', path: '/api/v1/forms/:id/submissions?page=1&limit=50', auth: true, description: 'Read received submissions (newest first). Each submission may include an "attachments" array of stored files.' },
+            { method: 'GET', path: '/api/v1/forms/:id/submissions/:entryId/attachments/:filename', auth: true, description: 'Download a stored submission attachment.' },
             { method: 'GET', path: '/api/v1/forms/:id/outbox?page=1&limit=20', auth: true, description: 'Delivery log: emails and notifications sent for this form, with ok/error status.' },
             { method: 'GET', path: '/api/v1/senders', auth: true, description: 'List email senders (secrets masked).' },
             { method: 'POST', path: '/api/v1/senders', auth: true, description: 'Create a sender. Body: { id, ...senderConfig }.', requiredFields: ['id', 'from'] },
@@ -2089,12 +2911,19 @@ apiRouter.get('/', (req, res) => {
 
 apiRouter.use(apiAuth);
 
+// Form visible to the current API key?
+function apiCanAccessForm(req, formId) {
+    const r = (config.recipients || {})[formId];
+    return !!r && formInScope(req.apiScope, r);
+}
+
 apiRouter.get('/status', (req, res) => {
     res.json({
         status: 'ok',
         version: pkg.version,
-        forms: Object.keys(config.recipients),
-        senders: Object.keys(config.senders || {}),
+        scope: req.apiScope || 'master',
+        forms: Object.keys(formsForScope(req.apiScope)),
+        senders: Object.keys(sendersForScope(req.apiScope)),
         submitUrl: apiBaseUrl(req) + '/submit'
     });
 });
@@ -2102,16 +2931,15 @@ apiRouter.get('/status', (req, res) => {
 // ---- Forms ----
 apiRouter.get('/forms', (req, res) => {
     const forms = {};
-    for (const [id, cfg] of Object.entries(config.recipients)) {
-        forms[id] = { ...cfg };
+    for (const [id, cfg] of Object.entries(formsForScope(req.apiScope))) {
+        forms[id] = sanitizeRecipientForApi(id, cfg);
     }
     res.json({ forms, submitUrl: apiBaseUrl(req) + '/submit' });
 });
 
 apiRouter.get('/forms/:id', (req, res) => {
-    const cfg = config.recipients[req.params.id];
-    if (!cfg) return res.status(404).json({ error: t.formNotFound });
-    res.json({ id: req.params.id, ...cfg });
+    if (!apiCanAccessForm(req, req.params.id)) return res.status(404).json({ error: t.formNotFound });
+    res.json({ id: req.params.id, ...sanitizeRecipientForApi(req.params.id, config.recipients[req.params.id]) });
 });
 
 apiRouter.post('/forms', async (req, res) => {
@@ -2123,8 +2951,14 @@ apiRouter.post('/forms', async (req, res) => {
     if (config.recipients[id]) {
         return res.status(409).json({ error: `Form "${id}" already exists. Use PUT /api/v1/forms/${id} to update it.` });
     }
-    const { cfg, errors, warnings } = validateFormConfig(body, true);
+    // Account keys create forms in their own account; the master key may pass accountId
+    const accountId = req.apiScope || body.accountId || 'default';
+    if (!(config.accounts || {})[accountId]) {
+        return res.status(400).json({ error: 'Unknown account: ' + accountId });
+    }
+    const { cfg, errors, warnings } = validateFormConfig(body, true, req.apiScope, accountId);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
+    cfg.accountId = accountId;
     // Sensible defaults for agent-created forms
     if (cfg.subjectPrefix === undefined) cfg.subjectPrefix = `[${id}]`;
     if (cfg.templatePath === undefined) cfg.templatePath = 'templates/contact-form.html';
@@ -2138,10 +2972,10 @@ apiRouter.post('/forms', async (req, res) => {
                 c.captcha[id] = { secretKey: body.captchaSecretKey };
             }
         });
-        log.info('Form created via Agent API', { formId: id });
+        log.info('Form created via Agent API', { formId: id, accountId });
         res.status(201).json({
             message: `Form "${id}" created.`,
-            form: { id, ...cfg },
+            form: { id, ...sanitizeRecipientForApi(id, config.recipients[id]) },
             submitUrl: apiBaseUrl(req) + '/submit',
             usage: 'POST form fields (urlencoded or multipart) to submitUrl, including a "form_id" field with this form id.',
             exampleHtml: exampleFormHtml(req, id),
@@ -2154,9 +2988,10 @@ apiRouter.post('/forms', async (req, res) => {
 
 apiRouter.put('/forms/:id', async (req, res) => {
     const { id } = req.params;
-    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    if (!apiCanAccessForm(req, id)) return res.status(404).json({ error: t.formNotFound });
     const body = req.body || {};
-    const { cfg, errors, warnings } = validateFormConfig(body, false);
+    const formAccount = config.recipients[id].accountId || 'default';
+    const { cfg, errors, warnings } = validateFormConfig(body, false, req.apiScope, formAccount);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
     try {
         await writeConfigSafe(c => {
@@ -2167,7 +3002,7 @@ apiRouter.put('/forms/:id', async (req, res) => {
             }
         });
         log.info('Form updated via Agent API', { formId: id });
-        res.json({ message: t.formUpdated, form: { id, ...config.recipients[id] }, warnings });
+        res.json({ message: t.formUpdated, form: { id, ...sanitizeRecipientForApi(id, config.recipients[id]) }, warnings });
     } catch (e) {
         res.status(500).json({ error: t.failedSaveConfig });
     }
@@ -2175,13 +3010,14 @@ apiRouter.put('/forms/:id', async (req, res) => {
 
 apiRouter.delete('/forms/:id', async (req, res) => {
     const { id } = req.params;
-    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    if (!apiCanAccessForm(req, id)) return res.status(404).json({ error: t.formNotFound });
     try {
         await writeConfigSafe(c => {
             delete c.recipients[id];
             if (c.captcha && c.captcha[id]) delete c.captcha[id];
             if (c.turnstile && c.turnstile[id]) delete c.turnstile[id];
         });
+        deleteFormAttachments(id).catch(() => {});
         log.info('Form deleted via Agent API', { formId: id });
         res.json({ message: t.formRemoved });
     } catch (e) {
@@ -2191,7 +3027,7 @@ apiRouter.delete('/forms/:id', async (req, res) => {
 
 apiRouter.get('/forms/:id/submissions', async (req, res) => {
     const { id } = req.params;
-    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    if (!apiCanAccessForm(req, id)) return res.status(404).json({ error: t.formNotFound });
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
     const submissions = await loadSubmissions(id);
@@ -2205,9 +3041,20 @@ apiRouter.get('/forms/:id/submissions', async (req, res) => {
     });
 });
 
+// Download a stored attachment
+apiRouter.get('/forms/:id/submissions/:entryId/attachments/:filename', async (req, res) => {
+    const { id, entryId, filename } = req.params;
+    if (!apiCanAccessForm(req, id)) return res.status(404).json({ error: t.formNotFound });
+    const att = await resolveAttachment(id, entryId, filename);
+    if (!att) return res.status(404).json({ error: t.entryNotFound });
+    res.download(att.path, att.filename, err => {
+        if (err && !res.headersSent) res.status(404).json({ error: t.entryNotFound });
+    });
+});
+
 apiRouter.get('/forms/:id/outbox', async (req, res) => {
     const { id } = req.params;
-    if (!config.recipients[id]) return res.status(404).json({ error: t.formNotFound });
+    if (!apiCanAccessForm(req, id)) return res.status(404).json({ error: t.formNotFound });
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const entries = await loadOutboxEntries(id);
@@ -2222,8 +3069,19 @@ apiRouter.get('/forms/:id/outbox', async (req, res) => {
 });
 
 // ---- Senders ----
+// Sender visible to this key? (global senders are visible to every scope)
+function apiCanAccessSender(req, senderId) {
+    const s = (config.senders || {})[senderId];
+    return !!s && senderInScope(req.apiScope, s);
+}
+// Sender writable by this key? (account keys may only modify their own account's senders)
+function apiCanManageSender(req, senderId) {
+    const s = (config.senders || {})[senderId];
+    return !!s && (req.apiScope === null || s.accountId === req.apiScope);
+}
+
 apiRouter.get('/senders', (req, res) => {
-    const senders = Object.entries(config.senders || {}).map(([id, cfg]) => sanitizeSenderForApi(id, cfg));
+    const senders = Object.entries(sendersForScope(req.apiScope)).map(([id, cfg]) => sanitizeSenderForApi(id, cfg));
     res.json({ senders });
 });
 
@@ -2239,13 +3097,22 @@ apiRouter.post('/senders', async (req, res) => {
     const { cfg, errors } = validateSenderConfig(body, null);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
     if (cfg.type === undefined) cfg.type = 'smtp';
+    // Account keys create senders in their own account; master key may pass accountId (or omit = global)
+    if (req.apiScope) {
+        cfg.accountId = req.apiScope;
+    } else if (body.accountId) {
+        if (!(config.accounts || {})[body.accountId]) {
+            return res.status(400).json({ error: 'Unknown account: ' + body.accountId });
+        }
+        cfg.accountId = body.accountId;
+    }
     try {
         await writeConfigSafe(c => {
             if (!c.senders) c.senders = {};
             c.senders[id] = cfg;
         });
         rebuildAllTransporters();
-        log.info('Sender created via Agent API', { senderId: id, type: cfg.type });
+        log.info('Sender created via Agent API', { senderId: id, type: cfg.type, accountId: cfg.accountId || 'global' });
         res.status(201).json({
             message: `Sender "${id}" created.`,
             sender: sanitizeSenderForApi(id, cfg),
@@ -2258,9 +3125,12 @@ apiRouter.post('/senders', async (req, res) => {
 
 apiRouter.put('/senders/:id', async (req, res) => {
     const { id } = req.params;
-    if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
-    const { cfg, errors } = validateSenderConfig(req.body || {}, config.senders[id]);
+    if (!apiCanAccessSender(req, id)) return res.status(404).json({ error: 'Sender not found' });
+    if (!apiCanManageSender(req, id)) return res.status(403).json({ error: 'Global senders are managed by the administrator.' });
+    const body = stripSenderSecretEchoes(req.body || {});
+    const { cfg, errors } = validateSenderConfig(body, config.senders[id]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
+    delete cfg.accountId;
     try {
         await writeConfigSafe(c => {
             c.senders[id] = { ...c.senders[id], ...cfg };
@@ -2275,7 +3145,8 @@ apiRouter.put('/senders/:id', async (req, res) => {
 
 apiRouter.delete('/senders/:id', async (req, res) => {
     const { id } = req.params;
-    if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    if (!apiCanAccessSender(req, id)) return res.status(404).json({ error: 'Sender not found' });
+    if (!apiCanManageSender(req, id)) return res.status(403).json({ error: 'Global senders are managed by the administrator.' });
     try {
         await writeConfigSafe(c => {
             delete c.senders[id];
@@ -2291,7 +3162,7 @@ apiRouter.delete('/senders/:id', async (req, res) => {
 apiRouter.post('/senders/:id/test', async (req, res) => {
     const { id } = req.params;
     const senderCfg = config.senders && config.senders[id];
-    if (!senderCfg) return res.status(404).json({ error: 'Sender not found' });
+    if (!senderCfg || !apiCanAccessSender(req, id)) return res.status(404).json({ error: 'Sender not found' });
     const testTo = (req.body && req.body.to) || senderCfg.from;
     if (!testTo || !isValidEmail(testTo)) {
         return res.status(400).json({ error: 'Invalid email address' });
@@ -2314,14 +3185,9 @@ apiRouter.post('/senders/:id/test', async (req, res) => {
 });
 
 // ---- Templates ----
+// Account keys see shared templates + their account folder; master key sees everything.
 apiRouter.get('/templates', async (req, res) => {
-    const templates = [];
-    try {
-        const files = await fs.readdir(TEMPLATES_DIR);
-        for (const f of files) {
-            if (f.endsWith('.html')) templates.push({ name: f, path: `templates/${f}` });
-        }
-    } catch (e) {}
+    const templates = await listTemplatesForScope(req.apiScope || null);
     res.json({
         templates,
         placeholders: {
@@ -2333,31 +3199,31 @@ apiRouter.get('/templates', async (req, res) => {
 
 apiRouter.get('/templates/:name', async (req, res) => {
     const name = req.params.name;
-    if (name.includes('/') || name.includes('\\')) {
+    if (name.includes('/') || name.includes('\\') || name.includes('..')) {
         return res.status(400).json({ error: 'Invalid template name' });
     }
-    try {
-        const content = await fs.readFile(path.join(TEMPLATES_DIR, name), 'utf8');
-        res.json({ name, path: `templates/${name}`, content });
-    } catch (e) {
-        res.status(404).json({ error: 'Template not found' });
-    }
+    const found = await resolveTemplateRead(name, req.apiScope || null, req.query.accountId);
+    if (!found) return res.status(404).json({ error: 'Template not found' });
+    res.json({ name, path: found.rel, content: found.content, shared: !!found.shared });
 });
 
+// Account keys write to their account folder; master key writes to the shared root
 apiRouter.put('/templates/:name', async (req, res) => {
     const name = req.params.name;
-    if (!name.endsWith('.html') || name.includes('/') || name.includes('\\')) {
+    if (!validTemplateName(name)) {
         return res.status(400).json({ error: 'Invalid template name: must end in .html and contain no path separators.' });
     }
     const { content } = req.body || {};
     if (typeof content !== 'string') {
         return res.status(400).json({ error: 'Body must be JSON: { "content": "<html>..." }' });
     }
-    await ensureTemplatesDir();
+    const dir = req.apiScope ? path.join(TEMPLATES_DIR, req.apiScope) : TEMPLATES_DIR;
+    const rel = req.apiScope ? `templates/${req.apiScope}/${name}` : `templates/${name}`;
     try {
-        await fs.writeFile(path.join(TEMPLATES_DIR, name), content, 'utf8');
-        log.info('Template saved via Agent API', { template: name });
-        res.json({ message: 'Template saved', path: `templates/${name}` });
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, name), content, 'utf8');
+        log.info('Template saved via Agent API', { template: rel });
+        res.json({ message: 'Template saved', path: rel });
     } catch (e) {
         res.status(500).json({ error: 'Failed to save template' });
     }
@@ -2368,4 +3234,5 @@ app.use('/api/v1', apiRouter);
 // Start the server
 app.listen(PORT, () => {
     log.info('formPost server started', { port: PORT, health: `/health`, admin: `/admin` });
+    sweepOrphanAttachments().catch(e => log.error('Orphan attachment sweep failed', { error: e.message }));
 });

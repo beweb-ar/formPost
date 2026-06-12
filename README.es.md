@@ -215,9 +215,28 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | `PORT` | `3000` | Puerto del servidor |
 | `DEBUG` | `false` | Omite verificación captcha |
 | `LANG` | `es` | Idioma (`en` o `es`) |
-| `ADMIN_USERNAME` | - | Sobreescribe usuario admin |
-| `ADMIN_PASSWORD` | - | Sobreescribe contraseña admin |
-| `API_KEY` | - | Sobreescribe la clave de la API para agentes (`/api/v1`) |
+| `ADMIN_USERNAME` | - | Crea/actualiza un usuario superadmin con este nombre |
+| `ADMIN_PASSWORD` | - | Contraseña del superadmin de `ADMIN_USERNAME` |
+| `API_KEY` | - | Sobreescribe la clave maestra de la API para agentes (`/api/v1`, sin restricción) |
+| `ENCRYPTION_KEY` | auto | 64 caracteres hex (32 bytes) para cifrar los secretos guardados (contraseñas SMTP, keys de SendGrid, tokens de Telegram, claves de captcha). Si no se define, se genera una clave en `data/.secret.key` — **hacé backup de ese archivo**: sin él no se pueden recuperar los secretos cifrados |
+
+## Cuentas, Usuarios y Roles (v1.4)
+
+formPost es multi-cuenta. Los datos (formularios, senders, plantillas, bandejas, estadísticas) están separados por **cuenta**:
+
+- **superadmin** — ve y gestiona todo: cuentas, usuarios, senders globales, plantillas compartidas, backup/restore, la clave maestra y las API keys de todas las cuentas. Las instalaciones existentes migran solas: el admin anterior pasa a ser superadmin y los formularios existentes quedan en la cuenta `default`.
+- **admin** (admin de cuenta) — gestión completa de los formularios, senders, plantillas y datos de su propia cuenta. No puede crear cuentas ni usuarios.
+- **usuario** — solo lectura dentro de la cuenta: ve bandejas de entrada/salida y envíos, y puede ver/editar las plantillas de la cuenta. No puede crear ni modificar formularios ni senders.
+
+**Senders globales**: un sender sin cuenta es *global* — todas las cuentas pueden usarlo en sus formularios, pero solo un superadmin puede editarlo. Los senders existentes migran como globales.
+
+**Plantillas compartidas**: los archivos en la raíz de `templates/` se comparten con todas las cuentas (solo lectura para ellas); las plantillas de cada cuenta viven en `templates/<accountId>/`. Si una cuenta edita una compartida, se crea automáticamente una copia propia de la cuenta.
+
+**API keys de agentes por cuenta**: cada cuenta tiene su propia clave de `/api/v1`, estrictamente limitada a sus datos — un agente configurado con la clave de una cuenta no puede leer ni tocar nada de otra. La clave maestra (visible para superadmins) mantiene acceso sin restricción.
+
+**Adjuntos**: los archivos subidos se guardan en `data/attachments/<formId>/<submissionId>/`, aparecen en cada envío y se pueden descargar desde el panel y desde `/api/v1`. Se eliminan junto con su envío.
+
+**Secretos cifrados**: las contraseñas SMTP, API keys de SendGrid, tokens de Telegram y claves de captcha se cifran (AES-256-GCM) dentro de `config.json` y ninguna API los devuelve una vez guardados. Los backups mantienen los secretos cifrados — restaurar en otro servidor requiere la misma `ENCRYPTION_KEY` / `data/.secret.key`.
 
 ## Panel de Administración
 

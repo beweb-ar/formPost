@@ -220,9 +220,28 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `PORT` | `3000` | Server listen port |
 | `DEBUG` | `false` | When `true`, skips captcha verification |
 | `LANG` | `es` | UI and server language (`en` or `es`) |
-| `ADMIN_USERNAME` | - | Override admin username |
-| `ADMIN_PASSWORD` | - | Override admin password |
-| `API_KEY` | - | Override the Agent API key (`/api/v1`) |
+| `ADMIN_USERNAME` | - | Upsert a superadmin user with this username |
+| `ADMIN_PASSWORD` | - | Password for the `ADMIN_USERNAME` superadmin |
+| `API_KEY` | - | Override the master Agent API key (`/api/v1`, unrestricted) |
+| `ENCRYPTION_KEY` | auto | 64 hex chars (32 bytes) used to encrypt stored secrets (SMTP passwords, SendGrid keys, Telegram tokens, captcha secrets). If unset, a key is auto-generated at `data/.secret.key` — **back that file up**: without it, encrypted secrets cannot be recovered |
+
+## Accounts, Users & Roles (v1.4)
+
+formPost is multi-tenant. Data (forms, senders, templates, inbox/outbox, statistics) is scoped per **account**:
+
+- **superadmin** — sees and manages everything: accounts, users, global senders, shared templates, backup/restore, the master API key and every account's API key. Existing installs migrate automatically: the legacy admin becomes a superadmin and existing forms move to the `default` account.
+- **admin** (account admin) — full management of their own account's forms, senders, templates and data. Cannot create accounts or users.
+- **user** — read-mostly within the account: views inbox/outbox and submissions, and can view/edit the account's templates. Cannot create or modify forms or senders.
+
+**Global senders**: a sender without an account is *global* — every account can use it in their forms, but only a superadmin can edit it. Existing senders migrate as global.
+
+**Shared templates**: files in the root of `templates/` are shared with all accounts (read-only for them); per-account templates live in `templates/<accountId>/`. When an account edits a shared template, a private account copy is created automatically.
+
+**Per-account Agent API keys**: each account has its own `/api/v1` key, strictly limited to that account's data — an agent configured with one account's key cannot read or touch any other account. The master key (shown to superadmins) retains unrestricted access.
+
+**Attachments**: uploaded files are stored in `data/attachments/<formId>/<submissionId>/`, listed in each submission, and downloadable from the admin UI and `/api/v1`. They are deleted together with their submission.
+
+**Secrets at rest**: SMTP passwords, SendGrid API keys, Telegram bot tokens and captcha secrets are encrypted (AES-256-GCM) inside `config.json` and never returned by any API after being saved. Backups keep secrets encrypted — restoring on another server requires the same `ENCRYPTION_KEY` / `data/.secret.key`.
 
 ## Internationalization (i18n)
 

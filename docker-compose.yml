@@ -15,6 +15,9 @@ services:
       - LANG=es
       # Optional: Enable debug mode (bypasses Turnstile for testing)
       # - DEBUG=true
+      # Optional: fixed key (64 hex chars) for secret encryption at rest.
+      # If unset, a key is auto-generated at data/.secret.key (back it up!)
+      # - ENCRYPTION_KEY=0123...64-hex-chars
       # Optional: Override SMTP settings via environment variables
       # - SMTP_HOST=smtp.example.com
       # - SMTP_PORT=587

@@ -769,7 +769,8 @@
                 <img src="/logo.png" alt="formPost" style="height: 50px; width: auto; object-fit: contain;" />
             </div>
             <div class="header-actions">
-                <button class="header-btn" id="settingsBtn" onclick="openSettingsModal()" title="Senders">&#9881; Senders</button>
+                <span id="userInfo" style="font-size:0.78rem;color:var(--text-secondary);margin-right:0.5rem;white-space:nowrap;"></span>
+                <button class="header-btn" id="settingsBtn" onclick="openSettingsModal()" title="Settings">&#9881; <span data-i18n="settings">Settings</span></button>
                 <button class="header-btn" id="templatesBtn" onclick="openTemplateManager()" data-i18n="templatesBtn">&#9993; Plantillas</button>
                 <button class="header-btn icon-btn" id="langToggleBtn" onclick="toggleLang()" title="EN / ES" style="font-size:0.8rem;font-weight:700;letter-spacing:0.03em;line-height:18px;">ES</button>
                 <button class="header-btn icon-btn" id="helpBtn" onclick="openHelpModal()" title="Guía de integración"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="18" height="18"><path fill="currentColor" d="M256 512a256 256 0 1 0 0-512 256 256 0 1 0 0 512zm0-336c-17.7 0-32 14.3-32 32 0 13.3-10.7 24-24 24s-24-10.7-24-24c0-44.2 35.8-80 80-80s80 35.8 80 80c0 47.2-36 67.2-56 74.5l0 3.8c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-8.1c0-20.5 14.8-35.2 30.1-40.2 6.4-2.1 13.2-5.5 18.2-10.3 4.3-4.2 7.7-10 7.7-19.6 0-17.7-14.3-32-32-32zM224 368a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></svg></button>
@@ -838,6 +839,12 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Account filter (superadmin only) -->
+        <div id="accountFilterBar" style="display:none;margin-bottom:0.75rem;text-align:right;">
+            <label style="font-size:0.8rem;color:var(--text-secondary);margin-right:0.4rem;" data-i18n="account">Account</label>
+            <select id="accountFilter" onchange="loadWebsitesWithStats()" style="width:auto;min-width:180px;font-size:0.8rem;padding:0.25rem 0.5rem;border-radius:var(--radius-sm);border:1px solid var(--border-color);background:var(--bg-solid);"></select>
         </div>
 
         <!-- Website Cards Grid -->
@@ -995,6 +1002,10 @@
         <div class="modal">
             <h3 id="createModalTitle" data-i18n="addNewForm">Add New Form</h3>
             <form id="createForm">
+                <div class="form-group" id="createAccountGroup" style="display:none;">
+                    <label data-i18n="account">Account</label>
+                    <select id="createAccountId"></select>
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>ID</label>
@@ -1101,7 +1112,7 @@
                     <input type="text" id="submissionsSearch" placeholder="Search name / email..." style="font-size:0.85rem;padding:0.35rem 0.6rem;border-radius:var(--radius-sm);border:1px solid var(--border-color);width:180px;" oninput="searchSubmissionsDebounced()" />
                     <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'csv')" data-i18n="exportCsv">Export CSV</button>
                     <button class="btn-sm" onclick="exportSubmissions(submissionsModalWebsiteId, 'json')" data-i18n="exportJson">Export JSON</button>
-                    <button class="btn-sm btn-danger" onclick="deleteAllSubmissions(submissionsModalWebsiteId)" data-i18n="deleteAll">Delete All</button>
+                    <button class="btn-sm btn-danger" id="deleteAllSubsBtn" onclick="deleteAllSubmissions(submissionsModalWebsiteId)" data-i18n="deleteAll">Delete All</button>
                 </div>
             </div>
             <div id="submissionsModalContent">
@@ -1155,14 +1166,33 @@
         <div class="modal" style="max-width:900px;width:95%;">
             <div class="submissions-modal-header">
                 <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
-                <button class="btn-sm btn-outline" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
+                <button class="btn-sm btn-outline" id="newSenderBtn" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
             </div>
             <div id="sendersListContent">
                 <div class="empty-state"><span class="spinner"></span> Loading...</div>
             </div>
-            <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+
+            <!-- Accounts (superadmin only) -->
+            <div id="accountsSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
                 <div class="submissions-modal-header">
-                    <h3 data-i18n="agentApi">Agent API</h3>
+                    <h3 data-i18n="accounts">Accounts</h3>
+                    <button class="btn-sm btn-outline" onclick="openAccountCreate()" data-i18n="newAccount">+ New Account</button>
+                </div>
+                <div id="accountsListContent"><div class="empty-state"><span class="spinner"></span></div></div>
+            </div>
+
+            <!-- Users (superadmin only) -->
+            <div id="usersSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                <div class="submissions-modal-header">
+                    <h3 data-i18n="users">Users</h3>
+                    <button class="btn-sm btn-outline" onclick="openUserEditor('')" data-i18n="newUser">+ New User</button>
+                </div>
+                <div id="usersListContent"><div class="empty-state"><span class="spinner"></span></div></div>
+            </div>
+
+            <div id="agentApiSection" style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                <div class="submissions-modal-header">
+                    <h3><span data-i18n="agentApi">Agent API</span> <span id="apiScopeLabel" style="font-size:0.7rem;font-weight:600;padding:0.1rem 0.4rem;border-radius:4px;background:var(--bg-tertiary);vertical-align:middle;"></span></h3>
                     <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;">
                         <input type="checkbox" id="apiEnabledToggle" onchange="toggleApiEnabled(this)" />
                         <span data-i18n="apiEnabled">Enabled</span>
@@ -1176,13 +1206,74 @@
                 </div>
             </div>
             <div class="modal-actions" style="justify-content:space-between;">
-                <div style="display:flex;gap:0.5rem;">
+                <div style="display:flex;gap:0.5rem;" id="backupRestoreGroup">
                     <button type="button" class="btn-sm btn-outline" onclick="downloadBackup()" data-i18n="backupBtn">Backup</button>
                     <button type="button" class="btn-sm btn-outline" onclick="document.getElementById('restoreFileInput').click()" data-i18n="restoreBtn">Restore</button>
                     <input type="file" id="restoreFileInput" accept=".json" style="display:none;" onchange="restoreBackup(this)" />
                 </div>
                 <button type="button" class="btn-outline" onclick="closeSettingsModal()" data-i18n="close">Close</button>
             </div>
+        </div>
+    </div>
+
+    <!-- User Editor Modal -->
+    <div class="modal-overlay" id="userEditorModal" style="display:none; z-index:600;">
+        <div class="modal" style="max-width:440px;">
+            <h3 id="userEditorTitle" data-i18n="newUser">+ New User</h3>
+            <form id="userEditorForm">
+                <input type="hidden" id="userEditorExisting" />
+                <div class="form-group">
+                    <label data-i18n="username">Username</label>
+                    <input type="text" id="userEditorUsername" required placeholder="cliente1-admin" />
+                </div>
+                <div class="form-group">
+                    <label id="userEditorPassLabel" data-i18n="password">Password</label>
+                    <input type="password" id="userEditorPassword" placeholder="" minlength="8" />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label data-i18n="role">Role</label>
+                        <select id="userEditorRole" onchange="updateUserEditorAccountVisibility()">
+                            <option value="user" data-i18n="roleUser">User</option>
+                            <option value="admin" data-i18n="roleAdmin">Account admin</option>
+                            <option value="superadmin" data-i18n="roleSuperadmin">Superadmin</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="userEditorAccountGroup">
+                        <label data-i18n="account">Account</label>
+                        <select id="userEditorAccount"></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="displayName">Display name (optional)</label>
+                    <input type="text" id="userEditorName" placeholder="Juan Pérez" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" onclick="document.getElementById('userEditorModal').style.display='none'" data-i18n="cancel">Cancel</button>
+                    <button type="submit" id="userEditorSaveBtn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Account Create Modal -->
+    <div class="modal-overlay" id="accountCreateModal" style="display:none; z-index:600;">
+        <div class="modal" style="max-width:400px;">
+            <h3 data-i18n="newAccount">+ New Account</h3>
+            <form id="accountCreateForm">
+                <div class="form-group">
+                    <label>ID</label>
+                    <input type="text" id="accountCreateId" required placeholder="cliente1" pattern="[a-zA-Z0-9_-]+" />
+                </div>
+                <div class="form-group">
+                    <label data-i18n="accountName">Name</label>
+                    <input type="text" id="accountCreateName" placeholder="Cliente 1 S.A." />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" onclick="document.getElementById('accountCreateModal').style.display='none'" data-i18n="cancel">Cancel</button>
+                    <button type="submit" id="accountCreateBtn">Save</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1208,6 +1299,11 @@
                 <div class="form-group">
                     <label data-i18n="fromEmail">From Email</label>
                     <input type="email" id="senderEditorFrom" required placeholder="noreply@example.com" />
+                </div>
+                <div class="form-group" id="senderEditorAccountGroup" style="display:none;">
+                    <label data-i18n="account">Account</label>
+                    <select id="senderEditorAccount"></select>
+                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="globalSenderHint">Global = available to every account</small>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" id="senderEditorActive" checked />
@@ -1442,6 +1538,23 @@
                 apiKeyRegenConfirm: 'Regenerate the API key? The current key will stop working immediately.',
                 apiKeyRegenerated: 'API key regenerated',
                 apiEnabledMsg: 'Agent API enabled', apiDisabledMsg: 'Agent API disabled',
+                apiScopeMaster: 'Master key (all accounts)', apiScopeAccount: 'Account key',
+                // Accounts & Users
+                accounts: 'Accounts', newAccount: '+ New Account', accountName: 'Name', account: 'Account',
+                allAccounts: 'All accounts', globalSender: 'Global', globalSenderHint: 'Global = available to every account',
+                accountCreated: 'Account created', accountDeleted: 'Account deleted', accountUpdated: 'Account updated',
+                confirmDeleteAccount: 'Delete account "{id}"? Its users will also be deleted. This cannot be undone.',
+                accountHasData: 'The account still has forms or senders. Delete or reassign them first.',
+                users: 'Users', newUser: '+ New User', role: 'Role', displayName: 'Display name (optional)',
+                roleSuperadmin: 'Superadmin', roleAdmin: 'Account admin', roleUser: 'User',
+                userCreated: 'User created', userUpdated: 'User updated', userDeleted: 'User deleted',
+                confirmDeleteUser: 'Delete user "{id}"? This cannot be undone.',
+                passwordKeepHint: 'Leave empty to keep the current password',
+                formsCount: 'Forms', usersCount: 'Users',
+                // Templates sharing
+                sharedBadge: 'Shared', savedAsCopy: 'Saved as a copy for your account',
+                // Submission detail / attachments
+                attachments: 'Attachments', download: 'Download', metadata: 'Metadata', method: 'Method',
                 // Theme
                 darkMode: 'Dark Mode', lightMode: 'Light Mode'
             },
@@ -1562,6 +1675,23 @@
                 apiKeyRegenConfirm: '¿Regenerar la API key? La clave actual dejará de funcionar inmediatamente.',
                 apiKeyRegenerated: 'API key regenerada',
                 apiEnabledMsg: 'API para agentes habilitada', apiDisabledMsg: 'API para agentes deshabilitada',
+                apiScopeMaster: 'Clave maestra (todas las cuentas)', apiScopeAccount: 'Clave de la cuenta',
+                // Accounts & Users
+                accounts: 'Cuentas', newAccount: '+ Nueva Cuenta', accountName: 'Nombre', account: 'Cuenta',
+                allAccounts: 'Todas las cuentas', globalSender: 'Global', globalSenderHint: 'Global = disponible para todas las cuentas',
+                accountCreated: 'Cuenta creada', accountDeleted: 'Cuenta eliminada', accountUpdated: 'Cuenta actualizada',
+                confirmDeleteAccount: '¿Eliminar la cuenta "{id}"? Sus usuarios también se eliminarán. Esta acción no se puede deshacer.',
+                accountHasData: 'La cuenta todavía tiene formularios o senders. Eliminálos o reasignalos primero.',
+                users: 'Usuarios', newUser: '+ Nuevo Usuario', role: 'Rol', displayName: 'Nombre (opcional)',
+                roleSuperadmin: 'Superadmin', roleAdmin: 'Admin de cuenta', roleUser: 'Usuario',
+                userCreated: 'Usuario creado', userUpdated: 'Usuario actualizado', userDeleted: 'Usuario eliminado',
+                confirmDeleteUser: '¿Eliminar el usuario "{id}"? Esta acción no se puede deshacer.',
+                passwordKeepHint: 'Dejar vacío para mantener la contraseña actual',
+                formsCount: 'Formularios', usersCount: 'Usuarios',
+                // Templates sharing
+                sharedBadge: 'Compartida', savedAsCopy: 'Guardada como copia para tu cuenta',
+                // Submission detail / attachments
+                attachments: 'Adjuntos', download: 'Descargar', metadata: 'Metadatos', method: 'Método',
                 // Theme
                 darkMode: 'Modo Oscuro', lightMode: 'Modo Claro'
             }
@@ -1974,6 +2104,32 @@
             }
         }
 
+        // ========== Current user / role ==========
+        var currentUser = null;
+
+        function isSuperadmin() { return currentUser && currentUser.role === 'superadmin'; }
+        function isAdminOrAbove() { return currentUser && (currentUser.role === 'superadmin' || currentUser.role === 'admin'); }
+        function isReadOnlyUser() { return currentUser && currentUser.role === 'user'; }
+
+        function applyRoleUI() {
+            if (!currentUser) return;
+            var info = currentUser.username +
+                (currentUser.accountName ? ' · ' + currentUser.accountName : '') +
+                ' (' + L(currentUser.role === 'superadmin' ? 'roleSuperadmin' : currentUser.role === 'admin' ? 'roleAdmin' : 'roleUser') + ')';
+            document.getElementById('userInfo').textContent = info;
+            // Role 'user': no settings (senders/API/backup), no form management
+            document.getElementById('settingsBtn').style.display = isAdminOrAbove() ? '' : 'none';
+            // Settings modal sections
+            document.getElementById('accountsSection').style.display = isSuperadmin() ? '' : 'none';
+            document.getElementById('usersSection').style.display = isSuperadmin() ? '' : 'none';
+            document.getElementById('backupRestoreGroup').style.display = isSuperadmin() ? '' : 'none';
+            var scopeLabel = document.getElementById('apiScopeLabel');
+            scopeLabel.textContent = isSuperadmin() ? L('apiScopeMaster') : L('apiScopeAccount');
+            // Delete-all button in submissions modal
+            var delAll = document.getElementById('deleteAllSubsBtn');
+            if (delAll) delAll.style.display = isAdminOrAbove() ? '' : 'none';
+        }
+
         // ========== Status Bar ==========
         async function loadStatus() {
             try {
@@ -1983,6 +2139,7 @@
                 ]);
                 var data = await results[0].json();
                 var templates = await results[1].json();
+                if (data.user) currentUser = data.user;
 
                 // Set lang: localStorage override > server default
                 var savedLang = localStorage.getItem('formpost_lang');
@@ -1992,6 +2149,7 @@
                     currentLang = data.lang;
                 }
                 applyTranslations();
+                applyRoleUI();
                 var uptime = Math.floor(data.uptime);
                 var hours = Math.floor(uptime / 3600);
                 var mins = Math.floor((uptime % 3600) / 60);
@@ -2122,6 +2280,31 @@
         }
 
         // ========== Websites + Stats ==========
+        var accountsCache = {};
+
+        async function loadAccountsCache() {
+            if (!isSuperadmin()) return {};
+            try {
+                var res = await fetch('/admin/api/accounts', { headers: { Authorization: auth } });
+                if (res.ok) accountsCache = await res.json();
+            } catch(e) {}
+            return accountsCache;
+        }
+
+        function updateAccountFilterBar() {
+            var bar = document.getElementById('accountFilterBar');
+            if (!isSuperadmin()) { bar.style.display = 'none'; return; }
+            var select = document.getElementById('accountFilter');
+            var current = select.value;
+            var html = '<option value="">' + L('allAccounts') + '</option>';
+            Object.keys(accountsCache).forEach(function(id) {
+                html += '<option value="' + esc(id) + '">' + esc(accountsCache[id].name || id) + '</option>';
+            });
+            select.innerHTML = html;
+            if (current) select.value = current;
+            bar.style.display = Object.keys(accountsCache).length > 1 ? '' : 'none';
+        }
+
         async function loadWebsitesWithStats() {
             try {
                 var results = await Promise.all([
@@ -2133,6 +2316,10 @@
                 var stats = await results[1].json();
                 sendersCache = await results[2].json();
                 websitesCache = websites;
+                if (isSuperadmin()) {
+                    await loadAccountsCache();
+                    updateAccountFilterBar();
+                }
                 renderWebsiteCards(websites, stats);
             } catch(e) {
                 document.getElementById('websiteCards').innerHTML =
@@ -2143,6 +2330,12 @@
         function renderWebsiteCards(websites, stats) {
             var container = document.getElementById('websiteCards');
             var entries = Object.entries(websites || {});
+            // Superadmin: client-side account filter
+            var filterAcct = isSuperadmin() ? (document.getElementById('accountFilter').value || '') : '';
+            if (filterAcct) {
+                entries = entries.filter(function(e) { return (e[1].accountId || 'default') === filterAcct; });
+            }
+            var canManage = isAdminOrAbove();
 
             var html = entries.map(function(entry) {
                 var id = entry[0], cfg = entry[1];
@@ -2156,7 +2349,7 @@
                 var ci = function(label, value) { return '<div class="card-info"><span class="card-info-label">' + label + ':</span> <span class="card-info-value">' + value + '</span></div>'; };
                 var redirect = cfg.redirectUrl ? ci(L('redirect'), '<a href="' + esc(cfg.redirectUrl) + '" target="_blank">' + esc(cfg.redirectUrl) + '</a>') : '';
                 var captchaInfo = '';
-                if (cfg.captchaKey || cfg.turnstileKey) {
+                if (cfg.hasCaptchaKey || cfg.captchaKey || cfg.turnstileKey) {
                     var capEnabled = (cfg.captchaEnabled !== undefined ? cfg.captchaEnabled : cfg.turnstileEnabled) !== false;
                     var providerLabel = (cfg.captchaProvider || 'turnstile') === 'hcaptcha' ? 'hCaptcha' : 'Turnstile';
                     captchaInfo = ci('Captcha (' + providerLabel + ')', capEnabled ? '<span style="color:var(--success)">' + L('captchaOn') + '</span>' : '<span style="color:var(--danger)">' + L('captchaOff') + '</span>');
@@ -2176,12 +2369,19 @@
                 var webhook = cfg.webhookUrl ? ci('Webhook', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
                 var autoReply = cfg.autoReplyEnabled ? ci('Auto-reply', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
 
+                var accountBadge = '';
+                if (isSuperadmin() && cfg.accountId) {
+                    var acctName = (accountsCache[cfg.accountId] && accountsCache[cfg.accountId].name) || cfg.accountId;
+                    accountBadge = '<span style="font-size:0.65rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:4px;background:var(--bg-tertiary);border:1px solid var(--border-color);color:var(--text-secondary);white-space:nowrap;">' + esc(acctName) + '</span>';
+                }
+
                 return '<div class="website-card">' +
                     '<div style="display:flex;align-items:center;justify-content:space-between;">' +
                         '<div style="display:flex;align-items:center;gap:0.4rem;">' +
                             '<button class="card-toggle collapsed" onclick="toggleCardDetails(this)" title="Expand">&#9660;</button>' +
                             '<h4>' + esc(id) + '</h4>' +
                         '</div>' +
+                        accountBadge +
                     '</div>' +
                     '<div class="card-details collapsed">' +
                         ci(L('to'), esc(cfg.to)) +
@@ -2197,18 +2397,20 @@
                     '</div>' +
                     '<div class="website-card-actions">' +
                         '<button class="btn-sm" onclick="openSubmissionsModal(\'' + esc(id) + '\')">' + L('submissions') + '</button>' +
-                        '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">' + L('edit') + '</button>' +
-                        '<button class="btn-icon" onclick="cloneWebsite(\'' + esc(id) + '\')" title="' + L('clone') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--accent-primary)" d="M384 336l-192 0c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l140.1 0L400 115.9 400 320c0 8.8-7.2 16-16 16zM192 384l192 0c35.3 0 64-28.7 64-64l0-204.1c0-12.7-5.1-24.9-14.1-33.9L366.1 14.1c-9-9-21.2-14.1-33.9-14.1L192 0c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64zM64 128c-35.3 0-64 28.7-64 64L0 448c0 35.3 28.7 64 64 64l192 0c35.3 0 64-28.7 64-64l0-32-48 0 0 32c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l32 0 0-48-32 0z"/></svg></button>' +
-                        '<button class="btn-icon btn-icon-danger" onclick="deleteWebsite(\'' + esc(id) + '\')" title="' + L('delete') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--danger)" d="M166.2-16c-13.3 0-25.3 8.3-30 20.8L120 48 24 48C10.7 48 0 58.7 0 72S10.7 96 24 96l400 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-96 0-16.2-43.2C307.1-7.7 295.2-16 281.8-16L166.2-16zM32 144l0 304c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-304-48 0 0 304c0 8.8-7.2 16-16 16L96 464c-8.8 0-16-7.2-16-16l0-304-48 0zm160 72c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176zm112 0c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176z"/></svg></button>' +
+                        (canManage ? '<button class="btn-sm btn-outline" onclick="openEditModal(\'' + esc(id) + '\')">' + L('edit') + '</button>' : '') +
+                        (canManage ? '<button class="btn-icon" onclick="cloneWebsite(\'' + esc(id) + '\')" title="' + L('clone') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--accent-primary)" d="M384 336l-192 0c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l140.1 0L400 115.9 400 320c0 8.8-7.2 16-16 16zM192 384l192 0c35.3 0 64-28.7 64-64l0-204.1c0-12.7-5.1-24.9-14.1-33.9L366.1 14.1c-9-9-21.2-14.1-33.9-14.1L192 0c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64zM64 128c-35.3 0-64 28.7-64 64L0 448c0 35.3 28.7 64 64 64l192 0c35.3 0 64-28.7 64-64l0-32-48 0 0 32c0 8.8-7.2 16-16 16L64 464c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l32 0 0-48-32 0z"/></svg></button>' : '') +
+                        (canManage ? '<button class="btn-icon btn-icon-danger" onclick="deleteWebsite(\'' + esc(id) + '\')" title="' + L('delete') + '"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14"><path fill="var(--danger)" d="M166.2-16c-13.3 0-25.3 8.3-30 20.8L120 48 24 48C10.7 48 0 58.7 0 72S10.7 96 24 96l400 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-96 0-16.2-43.2C307.1-7.7 295.2-16 281.8-16L166.2-16zM32 144l0 304c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-304-48 0 0 304c0 8.8-7.2 16-16 16L96 464c-8.8 0-16-7.2-16-16l0-304-48 0zm160 72c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176zm112 0c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 176c0 13.3 10.7 24 24 24s24-10.7 24-24l0-176z"/></svg></button>' : '') +
                     '</div>' +
                     '</div>';
             }).join('');
 
-            // Add the "+" card
-            html += '<div class="add-card" onclick="openCreateModal()">' +
-                '<span class="plus-icon">+</span>' +
-                '<span>' + L('addFormCard') + '</span>' +
-                '</div>';
+            // Add the "+" card (not for read-only users)
+            if (canManage) {
+                html += '<div class="add-card" onclick="openCreateModal()">' +
+                    '<span class="plus-icon">+</span>' +
+                    '<span>' + L('addFormCard') + '</span>' +
+                    '</div>';
+            }
 
             container.innerHTML = html;
         }
@@ -2307,6 +2509,22 @@
         // since the create modal has no UI for them. Reset on a normal create.
         var cloneSourceConfig = null;
 
+        async function populateCreateAccountSelect(selected) {
+            var group = document.getElementById('createAccountGroup');
+            if (!isSuperadmin()) { group.style.display = 'none'; return; }
+            await loadAccountsCache();
+            var select = document.getElementById('createAccountId');
+            select.innerHTML = '';
+            Object.keys(accountsCache).forEach(function(id) {
+                var opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = (accountsCache[id].name || id) + ' (' + id + ')';
+                select.appendChild(opt);
+            });
+            if (selected) select.value = selected;
+            group.style.display = Object.keys(accountsCache).length > 1 ? '' : 'none';
+        }
+
         async function openCreateModal() {
             cloneSourceConfig = null;
             document.getElementById('createModalTitle').textContent = L('addNewForm');
@@ -2317,7 +2535,8 @@
             renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient');
             await Promise.all([
                 populateTemplateDropdown('createTemplatePath', ''),
-                populateSenderDropdown('createSenderId', '')
+                populateSenderDropdown('createSenderId', ''),
+                populateCreateAccountSelect('')
             ]);
             document.getElementById('createModal').style.display = 'flex';
         }
@@ -2369,7 +2588,8 @@
 
                 await Promise.all([
                     populateTemplateDropdown('createTemplatePath', cfg.templatePath || ''),
-                    populateSenderDropdown('createSenderId', cfg.senderId || '')
+                    populateSenderDropdown('createSenderId', cfg.senderId || ''),
+                    populateCreateAccountSelect(cfg.accountId || '')
                 ]);
 
                 document.getElementById('createModal').style.display = 'flex';
@@ -2395,6 +2615,10 @@
             if (redirectUrl) payload.config.redirectUrl = redirectUrl;
             var senderId = formData.get('senderId');
             if (senderId) payload.config.senderId = senderId;
+            if (isSuperadmin()) {
+                var createAcct = document.getElementById('createAccountId').value;
+                if (createAcct) payload.config.accountId = createAcct;
+            }
             var captchaKey = formData.get('captchaKey');
             if (captchaKey) payload.config.captchaKey = captchaKey;
             payload.config.captchaEnabled = document.getElementById('createCaptchaEnabled').checked;
@@ -2456,7 +2680,8 @@
                     populateSenderDropdown('editSenderId', cfg.senderId || '')
                 ]);
                 document.getElementById('editSenderAlias').value = cfg.senderAlias || '';
-                document.getElementById('editCaptchaKey').value = cfg.captchaKey || cfg.turnstileKey || '';
+                document.getElementById('editCaptchaKey').value = '';
+                document.getElementById('editCaptchaKey').placeholder = cfg.hasCaptchaKey ? '•••• (configured)' : '';
                 document.getElementById('editCaptchaEnabled').checked = (cfg.captchaEnabled !== undefined ? cfg.captchaEnabled : cfg.turnstileEnabled) !== false;
                 document.getElementById('editCaptchaProvider').value = cfg.captchaProvider || 'turnstile';
                 document.getElementById('editDiscordWebhook').value = cfg.discordWebhook || '';
@@ -2487,7 +2712,7 @@
 
         function generateIntegrationCode(id, cfg) {
             var serverUrl = window.location.origin;
-            var hasCaptcha = !!(cfg.captchaKey || cfg.turnstileKey);
+            var hasCaptcha = !!(cfg.hasCaptchaKey || cfg.captchaKey || cfg.turnstileKey);
             var provider = cfg.captchaProvider || 'turnstile';
             var code = '&lt;form action="' + esc(serverUrl) + '/submit" method="POST" enctype="multipart/form-data"&gt;\n';
             code += '    &lt;input type="hidden" name="form_id" value="' + esc(id) + '"&gt;\n\n';
@@ -2617,14 +2842,21 @@
                 container.innerHTML = '<div class="empty-state">' + L('noTemplates') + '</div>';
                 return;
             }
-            var html = '<table class="submissions-table"><thead><tr><th>' + L('templateName') + '</th><th>' + L('templatePathLabel') + '</th><th></th></tr></thead><tbody>';
+            var html = '<table class="submissions-table"><thead><tr><th>' + L('templateName') + '</th><th>' + L('templatePathLabel') + '</th><th></th><th></th></tr></thead><tbody>';
             templatesCache.forEach(function(t) {
+                var badge = t.shared
+                    ? '<span style="font-size:0.65rem;font-weight:700;padding:0.1rem 0.45rem;border-radius:4px;background:var(--accent-primary);color:#fff;">' + L('sharedBadge') + '</span>'
+                    : (isSuperadmin() && t.accountId ? '<span style="font-size:0.65rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:4px;background:var(--bg-tertiary);border:1px solid var(--border-color);">' + esc((accountsCache[t.accountId] && accountsCache[t.accountId].name) || t.accountId) + '</span>' : '');
+                // Shared templates: only superadmin can delete; scoped users editing one creates an account copy
+                var canDelete = t.path.startsWith('templates/') && (!t.shared || isSuperadmin()) && isAdminOrAbove();
+                var acctArg = t.accountId ? '\'' + esc(t.accountId) + '\'' : 'null';
                 html += '<tr>' +
                     '<td>' + esc(t.name) + '</td>' +
                     '<td><code>' + esc(t.path) + '</code></td>' +
+                    '<td>' + badge + '</td>' +
                     '<td style="text-align:right;">' +
-                        '<button class="btn-sm btn-outline" onclick="editTemplate(\'' + esc(t.name) + '\')">' + L('edit') + '</button> ' +
-                        (t.path.startsWith('templates/') ? '<button class="btn-sm btn-danger" onclick="deleteTemplate(\'' + esc(t.name) + '\')">' + L('delete') + '</button>' : '') +
+                        '<button class="btn-sm btn-outline" onclick="editTemplate(\'' + esc(t.name) + '\', ' + acctArg + ')">' + L('edit') + '</button> ' +
+                        (canDelete ? '<button class="btn-sm btn-danger" onclick="deleteTemplate(\'' + esc(t.name) + '\', ' + acctArg + ')">' + L('delete') + '</button>' : '') +
                     '</td>' +
                 '</tr>';
             });
@@ -2632,10 +2864,16 @@
             container.innerHTML = html;
         }
 
-        async function editTemplate(name) {
+        // Account folder of the template being edited (superadmin editing an account's template)
+        var templateEditorAccount = null;
+
+        async function editTemplate(name, accountId) {
             try {
-                var res = await fetch('/admin/api/templates/' + encodeURIComponent(name), { headers: { Authorization: auth } });
+                var url = '/admin/api/templates/' + encodeURIComponent(name);
+                if (accountId && isSuperadmin()) url += '?accountId=' + encodeURIComponent(accountId);
+                var res = await fetch(url, { headers: { Authorization: auth } });
                 var data = await res.json();
+                templateEditorAccount = (accountId && isSuperadmin()) ? accountId : null;
                 openTemplateEditor(data.name, data.content);
             } catch(e) {
                 showToast(L('connError'), 'error');
@@ -2643,6 +2881,7 @@
         }
 
         function openTemplateEditor(name, content) {
+            if (!name) templateEditorAccount = null;
             document.getElementById('templateEditorName').value = name || '';
             document.getElementById('templateEditorName').disabled = !!name;
             document.getElementById('templateEditorContent').value = content || '';
@@ -2707,13 +2946,16 @@
             if (!name.endsWith('.html')) name += '.html';
             var content = document.getElementById('templateEditorContent').value;
             try {
-                var res = await fetch('/admin/api/templates/' + encodeURIComponent(name), {
+                var url = '/admin/api/templates/' + encodeURIComponent(name);
+                if (templateEditorAccount && isSuperadmin()) url += '?accountId=' + encodeURIComponent(templateEditorAccount);
+                var res = await fetch(url, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', Authorization: auth },
                     body: JSON.stringify({ content: content })
                 });
                 if (res.ok) {
-                    showToast(L('templateSaved'), 'success');
+                    var saveResult = await res.json();
+                    showToast(saveResult.accountCopy ? L('savedAsCopy') : L('templateSaved'), 'success');
                     closeTemplateEditor();
                     loadTemplateManager();
                 } else {
@@ -2726,10 +2968,12 @@
             setLoading(btn, false);
         });
 
-        async function deleteTemplate(name) {
+        async function deleteTemplate(name, accountId) {
             if (!confirm(L('confirmDeleteTemplate').replace('{name}', name))) return;
             try {
-                var res = await fetch('/admin/api/templates/' + encodeURIComponent(name), {
+                var url = '/admin/api/templates/' + encodeURIComponent(name);
+                if (accountId && isSuperadmin()) url += '?accountId=' + encodeURIComponent(accountId);
+                var res = await fetch(url, {
                     method: 'DELETE',
                     headers: { Authorization: auth }
                 });
@@ -2794,17 +3038,22 @@
         }
         function removeCreateRecipient(i) { createRecipients.splice(i, 1); renderDomainList('createRecipientsContainer', createRecipients, 'removeCreateRecipient'); }
 
-        // Telegram Chat ID fetch
+        // Telegram Chat ID fetch. If the input shows the masked stored token ('••••'),
+        // send the formId so the server uses the stored (encrypted) token instead.
         async function fetchTelegramChats(prefix) {
             var token = document.getElementById(prefix + 'TelegramBotToken').value.trim();
             if (!token) { showToast('Enter a Bot Token first', 'error'); return; }
             var select = document.getElementById(prefix + 'TelegramChatSelect');
             select.style.display = 'none';
+            var body = { botToken: token };
+            if (prefix === 'edit' && token === '••••') {
+                body.formId = document.getElementById('editId').value;
+            }
             try {
                 var res = await fetch('/admin/api/telegram/chats', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: auth },
-                    body: JSON.stringify({ botToken: token })
+                    body: JSON.stringify(body)
                 });
                 var data = await res.json();
                 if (!res.ok) { showToast(data.error || 'Failed', 'error'); return; }
@@ -2889,6 +3138,10 @@
             document.getElementById('settingsModal').style.display = 'flex';
             loadSendersList();
             loadApiKey();
+            if (isSuperadmin()) {
+                loadAccountsList();
+                loadUsersList();
+            }
         }
 
         function closeSettingsModal() {
@@ -2904,22 +3157,30 @@
                 container.innerHTML = '<div class="empty-state">No senders configured.</div>';
                 return;
             }
-            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>' + L('senderType') + '</th><th>' + L('fromEmail') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
+            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>' + L('senderType') + '</th><th>' + L('fromEmail') + '</th><th>' + L('account') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
             ids.forEach(function(id) {
                 var s = sendersCache[id];
                 var isActive = s.active !== false;
                 var typeLabel = s.type === 'sendgrid'
                     ? 'SendGrid' + (s.domain ? ' (' + esc(s.domain) + ')' : '')
                     : esc(s.host || '') + ':' + esc(String(s.port || ''));
+                // Global senders are managed by superadmin only
+                var canManageThis = isSuperadmin() || (currentUser && s.accountId === currentUser.accountId);
+                var acctLabel = s.global
+                    ? '<span style="font-size:0.65rem;font-weight:700;padding:0.1rem 0.45rem;border-radius:4px;background:var(--accent-primary);color:#fff;">' + L('globalSender') + '</span>'
+                    : esc((accountsCache[s.accountId] && accountsCache[s.accountId].name) || s.accountId || '');
                 html += '<tr' + (isActive ? '' : ' style="opacity:0.5;"') + '>' +
                     '<td><code>' + esc(id) + '</code></td>' +
                     '<td>' + esc(s.name || id) + '</td>' +
                     '<td>' + typeLabel + '</td>' +
                     '<td>' + esc(s.from || '') + '</td>' +
+                    '<td>' + acctLabel + '</td>' +
                     '<td><span style="color:' + (isActive ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;font-size:0.8rem;">' + (isActive ? L('captchaOn') : L('captchaOff')) + '</span></td>' +
                     '<td style="text-align:right;white-space:nowrap;">' +
-                        '<button class="btn-sm btn-outline" onclick="openSenderEditor(\'' + esc(id) + '\')">' + L('edit') + '</button> ' +
-                        '<button class="btn-sm btn-danger" onclick="deleteSender(\'' + esc(id) + '\')">' + L('delete') + '</button>' +
+                        (canManageThis
+                            ? '<button class="btn-sm btn-outline" onclick="openSenderEditor(\'' + esc(id) + '\')">' + L('edit') + '</button> ' +
+                              '<button class="btn-sm btn-danger" onclick="deleteSender(\'' + esc(id) + '\')">' + L('delete') + '</button>'
+                            : '') +
                     '</td>' +
                 '</tr>';
             });
@@ -2935,10 +3196,27 @@
             document.getElementById('senderSendgridFields').style.display = isSendgrid ? '' : 'none';
         }
 
+        async function populateSenderAccountSelect(selected) {
+            var group = document.getElementById('senderEditorAccountGroup');
+            if (!isSuperadmin()) { group.style.display = 'none'; return; }
+            await loadAccountsCache();
+            var select = document.getElementById('senderEditorAccount');
+            select.innerHTML = '<option value="">' + L('globalSender') + '</option>';
+            Object.keys(accountsCache).forEach(function(aid) {
+                var opt = document.createElement('option');
+                opt.value = aid;
+                opt.textContent = (accountsCache[aid].name || aid) + ' (' + aid + ')';
+                select.appendChild(opt);
+            });
+            select.value = selected || '';
+            group.style.display = '';
+        }
+
         function openSenderEditor(id) {
             senderEditorIsNew = !id;
             document.getElementById('senderEditorId').value = id || '';
             document.getElementById('senderEditorTitle').textContent = id ? 'Edit Sender: ' + id : L('newSender');
+            populateSenderAccountSelect(id && sendersCache[id] ? (sendersCache[id].accountId || '') : '');
             if (id && sendersCache[id]) {
                 var s = sendersCache[id];
                 document.getElementById('senderEditorName').value = s.name || '';
@@ -2984,6 +3262,10 @@
                 active: document.getElementById('senderEditorActive').checked,
                 from: document.getElementById('senderEditorFrom').value
             };
+            if (isSuperadmin()) {
+                // Empty value = global sender (no accountId)
+                payload.accountId = document.getElementById('senderEditorAccount').value || null;
+            }
             if (senderType === 'sendgrid') {
                 payload.domain = document.getElementById('senderEditorDomain').value.trim();
                 var apiKey = document.getElementById('senderEditorApiKey').value.trim();
@@ -3148,6 +3430,271 @@
             }
         }
 
+        // ========== Accounts Management (superadmin) ==========
+        async function loadAccountsList() {
+            var container = document.getElementById('accountsListContent');
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+            await loadAccountsCache();
+            var ids = Object.keys(accountsCache);
+            if (ids.length === 0) {
+                container.innerHTML = '<div class="empty-state">-</div>';
+                return;
+            }
+            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('accountName') + '</th><th>' + L('formsCount') + '</th><th>' + L('usersCount') + '</th><th>API Key</th><th></th></tr></thead><tbody>';
+            ids.forEach(function(id) {
+                var a = accountsCache[id];
+                var keyMasked = a.api && a.api.key ? a.api.key.substring(0, 8) + '••••••••' : '-';
+                var apiEnabled = a.api && a.api.enabled;
+                html += '<tr>' +
+                    '<td><code>' + esc(id) + '</code></td>' +
+                    '<td>' + esc(a.name || id) + '</td>' +
+                    '<td>' + (a.formCount || 0) + '</td>' +
+                    '<td>' + (a.userCount || 0) + '</td>' +
+                    '<td style="white-space:nowrap;">' +
+                        '<code style="font-size:0.7rem;">' + esc(keyMasked) + '</code> ' +
+                        '<button class="btn-sm btn-outline" style="padding:0.1rem 0.4rem;font-size:0.7rem;" onclick="copyAccountKey(\'' + esc(id) + '\')" title="' + L('copyBtn') + '">&#128203;</button> ' +
+                        '<button class="btn-sm btn-outline" style="padding:0.1rem 0.4rem;font-size:0.7rem;" onclick="regenAccountKey(\'' + esc(id) + '\')" title="' + L('regenerateBtn') + '">&#8635;</button> ' +
+                        '<label style="font-size:0.7rem;cursor:pointer;white-space:nowrap;"><input type="checkbox" ' + (apiEnabled ? 'checked' : '') + ' onchange="toggleAccountApi(\'' + esc(id) + '\', this)" /> ' + L('apiEnabled') + '</label>' +
+                    '</td>' +
+                    '<td style="text-align:right;white-space:nowrap;">' +
+                        '<button class="btn-sm btn-outline" onclick="renameAccount(\'' + esc(id) + '\')">' + L('edit') + '</button> ' +
+                        '<button class="btn-sm btn-danger" onclick="deleteAccount(\'' + esc(id) + '\')"' + ((a.formCount || a.senderCount) ? ' disabled title="' + L('accountHasData') + '"' : '') + '>' + L('delete') + '</button>' +
+                    '</td>' +
+                '</tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function openAccountCreate() {
+            document.getElementById('accountCreateForm').reset();
+            document.getElementById('accountCreateModal').style.display = 'flex';
+        }
+
+        document.getElementById('accountCreateForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('accountCreateBtn');
+            setLoading(btn, true);
+            try {
+                var res = await fetch('/admin/api/accounts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({
+                        id: document.getElementById('accountCreateId').value.trim(),
+                        name: document.getElementById('accountCreateName').value.trim()
+                    })
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast(L('accountCreated'), 'success');
+                    document.getElementById('accountCreateModal').style.display = 'none';
+                    loadAccountsList();
+                    loadUsersList();
+                } else {
+                    showToast(result.error || L('failedAdd'), 'error');
+                }
+            } catch(err) {
+                showToast(L('connError'), 'error');
+            }
+            setLoading(btn, false);
+        });
+
+        async function renameAccount(id) {
+            var current = (accountsCache[id] && accountsCache[id].name) || id;
+            var name = prompt(L('accountName') + ':', current);
+            if (!name || name === current) return;
+            try {
+                var res = await fetch('/admin/api/accounts/' + encodeURIComponent(id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ name: name })
+                });
+                if (res.ok) { showToast(L('accountUpdated'), 'success'); loadAccountsList(); loadWebsitesWithStats(); }
+                else { var r = await res.json(); showToast(r.error || L('failedUpdate'), 'error'); }
+            } catch(e) { showToast(L('connError'), 'error'); }
+        }
+
+        async function deleteAccount(id) {
+            if (!confirm(L('confirmDeleteAccount').replace('{id}', id))) return;
+            try {
+                var res = await fetch('/admin/api/accounts/' + encodeURIComponent(id), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast(L('accountDeleted'), 'success');
+                    loadAccountsList();
+                    loadUsersList();
+                    loadWebsitesWithStats();
+                } else {
+                    showToast(result.error || L('failedDelete'), 'error');
+                }
+            } catch(e) { showToast(L('connError'), 'error'); }
+        }
+
+        function copyAccountKey(id) {
+            var key = accountsCache[id] && accountsCache[id].api && accountsCache[id].api.key;
+            if (!key) return;
+            navigator.clipboard.writeText(key).then(function() { showToast(L('apiKeyCopied'), 'success'); });
+        }
+
+        async function regenAccountKey(id) {
+            if (!confirm(L('apiKeyRegenConfirm'))) return;
+            try {
+                var res = await fetch('/admin/api/accounts/' + encodeURIComponent(id) + '/apikey/regenerate', {
+                    method: 'POST',
+                    headers: { Authorization: auth }
+                });
+                if (res.ok) { showToast(L('apiKeyRegenerated'), 'success'); loadAccountsList(); }
+                else { showToast(L('connError'), 'error'); }
+            } catch(e) { showToast(L('connError'), 'error'); }
+        }
+
+        async function toggleAccountApi(id, cb) {
+            try {
+                var res = await fetch('/admin/api/accounts/' + encodeURIComponent(id) + '/api', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ enabled: cb.checked })
+                });
+                if (res.ok) {
+                    showToast(cb.checked ? L('apiEnabledMsg') : L('apiDisabledMsg'), 'success');
+                } else {
+                    cb.checked = !cb.checked;
+                    showToast(L('connError'), 'error');
+                }
+            } catch(e) { cb.checked = !cb.checked; showToast(L('connError'), 'error'); }
+        }
+
+        // ========== Users Management (superadmin) ==========
+        var usersCache = {};
+
+        async function loadUsersList() {
+            var container = document.getElementById('usersListContent');
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+            try {
+                var res = await fetch('/admin/api/users', { headers: { Authorization: auth } });
+                usersCache = await res.json();
+            } catch(e) { usersCache = {}; }
+            var names = Object.keys(usersCache);
+            if (names.length === 0) {
+                container.innerHTML = '<div class="empty-state">-</div>';
+                return;
+            }
+            var html = '<table class="submissions-table"><thead><tr><th>' + L('username') + '</th><th>' + L('displayName') + '</th><th>' + L('role') + '</th><th>' + L('account') + '</th><th></th></tr></thead><tbody>';
+            names.forEach(function(username) {
+                var u = usersCache[username];
+                var roleLabel = u.role === 'superadmin' ? L('roleSuperadmin') : u.role === 'admin' ? L('roleAdmin') : L('roleUser');
+                var acctLabel = u.accountId ? esc((accountsCache[u.accountId] && accountsCache[u.accountId].name) || u.accountId) : '-';
+                html += '<tr>' +
+                    '<td><code>' + esc(username) + '</code>' + (currentUser && username === currentUser.username ? ' <span style="font-size:0.65rem;color:var(--text-secondary);">(you)</span>' : '') + '</td>' +
+                    '<td>' + esc(u.name || '') + '</td>' +
+                    '<td>' + roleLabel + '</td>' +
+                    '<td>' + acctLabel + '</td>' +
+                    '<td style="text-align:right;white-space:nowrap;">' +
+                        '<button class="btn-sm btn-outline" onclick="openUserEditor(\'' + esc(username) + '\')">' + L('edit') + '</button> ' +
+                        (currentUser && username !== currentUser.username
+                            ? '<button class="btn-sm btn-danger" onclick="deleteUser(\'' + esc(username) + '\')">' + L('delete') + '</button>'
+                            : '') +
+                    '</td>' +
+                '</tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function updateUserEditorAccountVisibility() {
+            var role = document.getElementById('userEditorRole').value;
+            document.getElementById('userEditorAccountGroup').style.display = role === 'superadmin' ? 'none' : '';
+        }
+
+        async function openUserEditor(username) {
+            await loadAccountsCache();
+            var select = document.getElementById('userEditorAccount');
+            select.innerHTML = '';
+            Object.keys(accountsCache).forEach(function(aid) {
+                var opt = document.createElement('option');
+                opt.value = aid;
+                opt.textContent = (accountsCache[aid].name || aid) + ' (' + aid + ')';
+                select.appendChild(opt);
+            });
+            document.getElementById('userEditorExisting').value = username || '';
+            document.getElementById('userEditorUsername').value = username || '';
+            document.getElementById('userEditorUsername').disabled = !!username;
+            document.getElementById('userEditorPassword').value = '';
+            document.getElementById('userEditorPassword').placeholder = username ? L('passwordKeepHint') : '';
+            document.getElementById('userEditorPassword').required = !username;
+            var u = username && usersCache[username];
+            document.getElementById('userEditorRole').value = u ? u.role : 'user';
+            if (u && u.accountId) select.value = u.accountId;
+            document.getElementById('userEditorName').value = u ? (u.name || '') : '';
+            document.getElementById('userEditorTitle').textContent = username ? L('edit') + ': ' + username : L('newUser');
+            updateUserEditorAccountVisibility();
+            document.getElementById('userEditorModal').style.display = 'flex';
+        }
+
+        document.getElementById('userEditorForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('userEditorSaveBtn');
+            setLoading(btn, true);
+            var existing = document.getElementById('userEditorExisting').value;
+            var payload = {
+                role: document.getElementById('userEditorRole').value,
+                accountId: document.getElementById('userEditorAccount').value || null,
+                name: document.getElementById('userEditorName').value.trim()
+            };
+            var password = document.getElementById('userEditorPassword').value;
+            if (password) payload.password = password;
+            try {
+                var res;
+                if (existing) {
+                    res = await fetch('/admin/api/users/' + encodeURIComponent(existing), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', Authorization: auth },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    payload.username = document.getElementById('userEditorUsername').value.trim();
+                    res = await fetch('/admin/api/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: auth },
+                        body: JSON.stringify(payload)
+                    });
+                }
+                var result = await res.json();
+                if (res.ok) {
+                    showToast(existing ? L('userUpdated') : L('userCreated'), 'success');
+                    document.getElementById('userEditorModal').style.display = 'none';
+                    loadUsersList();
+                    loadAccountsList();
+                } else {
+                    showToast(result.error || L('failedUpdate'), 'error');
+                }
+            } catch(err) {
+                showToast(L('connError'), 'error');
+            }
+            setLoading(btn, false);
+        });
+
+        async function deleteUser(username) {
+            if (!confirm(L('confirmDeleteUser').replace('{id}', username))) return;
+            try {
+                var res = await fetch('/admin/api/users/' + encodeURIComponent(username), {
+                    method: 'DELETE',
+                    headers: { Authorization: auth }
+                });
+                var result = await res.json();
+                if (res.ok) {
+                    showToast(L('userDeleted'), 'success');
+                    loadUsersList();
+                    loadAccountsList();
+                } else {
+                    showToast(result.error || L('failedDelete'), 'error');
+                }
+            } catch(e) { showToast(L('connError'), 'error'); }
+        }
+
         // ========== Backup / Restore ==========
         async function downloadBackup() {
             try {
@@ -3260,35 +3807,54 @@
             return key.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
         }
 
+        // Submissions of the currently rendered page, for the detail view lookup
+        var currentModalSubmissions = [];
+
         function renderModalSubmissions(data) {
             var container = document.getElementById('submissionsModalContent');
             if (!data.submissions || (data.submissions.length === 0 && data.total === 0)) {
                 container.innerHTML = '<div class="empty-state">' + L('noSubmissions') + '</div>';
                 return;
             }
-            // Detect dynamic columns from submissions (exclude metadata)
-            var meta = ['id', 'timestamp', 'ip', '_hp_field'];
+            currentModalSubmissions = data.submissions;
+            // Detect dynamic columns from submissions (exclude metadata/reserved keys)
+            var meta = ['id', 'timestamp', 'ip', '_hp_field', 'attachments', 'submitMethod'];
             var colSet = {};
             data.submissions.forEach(function(s) {
                 Object.keys(s).forEach(function(k) {
                     if (meta.indexOf(k) === -1) colSet[k] = true;
                 });
             });
-            var cols = Object.keys(colSet);
+            // Prioritize identity columns, cap the rest
+            var priority = ['name', 'nombre', 'full_name', 'email', 'correo', 'e_mail'];
+            var cols = Object.keys(colSet).sort(function(a, b) {
+                var pa = priority.indexOf(a), pb = priority.indexOf(b);
+                if (pa === -1) pa = 99;
+                if (pb === -1) pb = 99;
+                return pa - pb;
+            });
+            var MAX_COLS = 6;
+            if (cols.length > MAX_COLS) cols = cols.slice(0, MAX_COLS);
+            var canDelete = isAdminOrAbove();
+            var hasAttachments = data.submissions.some(function(s) { return s.attachments && s.attachments.length; });
             // Build table header
             var table = '<div style="overflow-x:auto;"><table class="submissions-table"><thead><tr><th>' + L('date') + '</th>';
+            if (hasAttachments) table += '<th style="width:40px;" title="' + L('attachments') + '">&#128206;</th>';
             cols.forEach(function(c) { table += '<th>' + esc(fieldLabel(c)) + '</th>'; });
             table += '<th style="width:40px;"></th>';
             table += '</tr></thead><tbody>';
             data.submissions.forEach(function(s) {
-                table += '<tr onclick="showSubmissionDetail(' + JSON.stringify(JSON.stringify(s)).replace(/'/g, "\\'") + ')" style="cursor:pointer;">';
-                table += '<td>' + esc(new Date(s.timestamp).toLocaleString()) + '</td>';
+                table += '<tr onclick="showSubmissionDetail(\'' + esc(s.id) + '\')" style="cursor:pointer;">';
+                table += '<td style="white-space:nowrap;">' + esc(new Date(s.timestamp).toLocaleString()) + '</td>';
+                if (hasAttachments) {
+                    table += '<td style="text-align:center;">' + (s.attachments && s.attachments.length ? '&#128206; ' + s.attachments.length : '') + '</td>';
+                }
                 cols.forEach(function(c) {
-                    var val = String(s[c] || '');
-                    if (val.length > 60) val = val.substring(0, 60) + '...';
-                    table += '<td>' + esc(val) + '</td>';
+                    var full = String(s[c] || '');
+                    var val = full.length > 60 ? full.substring(0, 60) + '...' : full;
+                    table += '<td title="' + esc(full.substring(0, 300)) + '">' + esc(val) + '</td>';
                 });
-                table += '<td style="text-align:center;"><button class="btn-sm btn-danger" style="padding:0.15rem 0.4rem;font-size:0.75rem;line-height:1;" onclick="event.stopPropagation();deleteSubmission(\'' + esc(s.id) + '\')" title="' + L('delete') + '">&times;</button></td>';
+                table += '<td style="text-align:center;">' + (canDelete ? '<button class="btn-sm btn-danger" style="padding:0.15rem 0.4rem;font-size:0.75rem;line-height:1;" onclick="event.stopPropagation();deleteSubmission(\'' + esc(s.id) + '\')" title="' + L('delete') + '">&times;</button>' : '') + '</td>';
                 table += '</tr>';
             });
             table += '</tbody></table></div>';
@@ -3307,26 +3873,74 @@
             container.innerHTML = table + pagination;
         }
 
-        function showSubmissionDetail(jsonStr) {
-            var s = JSON.parse(jsonStr);
-            var content = '<div style="display:grid;gap:0.75rem;">';
-            // Show timestamp first
-            if (s.timestamp) {
-                content += '<div><strong>' + L('date') + ':</strong> ' + esc(new Date(s.timestamp).toLocaleString()) + '</div>';
-            }
-            // Show all dynamic fields (skip metadata)
-            var meta = ['id', 'timestamp', 'ip', '_hp_field'];
+        function formatBytes(bytes) {
+            if (!bytes && bytes !== 0) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function showSubmissionDetail(entryId) {
+            var s = currentModalSubmissions.find(function(x) { return x.id === entryId; });
+            if (!s) return;
+            var content = '';
+            // Header: date + submit method badge
+            var methodLabel = s.submitMethod === 'js' ? 'JS' : 'POST';
+            var methodClass = s.submitMethod === 'js' ? 'js' : 'html';
+            content += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">' +
+                '<strong>' + esc(s.timestamp ? new Date(s.timestamp).toLocaleString() : '') + '</strong>' +
+                '<span class="submit-method-badge ' + methodClass + '">' + methodLabel + '</span>' +
+            '</div>';
+            // All dynamic fields as a full-value table
+            var meta = ['id', 'timestamp', 'ip', '_hp_field', 'attachments', 'submitMethod'];
+            content += '<table class="submissions-table" style="width:100%;"><tbody>';
             Object.keys(s).forEach(function(key) {
                 if (meta.indexOf(key) === -1 && s[key]) {
-                    content += '<div><strong>' + esc(fieldLabel(key)) + ':</strong> ' + esc(String(s[key])) + '</div>';
+                    content += '<tr>' +
+                        '<td style="white-space:nowrap;vertical-align:top;font-weight:600;width:30%;">' + esc(fieldLabel(key)) + '</td>' +
+                        '<td style="white-space:pre-wrap;word-break:break-word;">' + esc(String(s[key])) + '</td>' +
+                    '</tr>';
                 }
             });
-            // Show metadata at the end
-            if (s.ip) content += '<div><strong>IP:</strong> ' + esc(s.ip) + '</div>';
-            if (s.id) content += '<div><strong>ID:</strong> ' + esc(s.id) + '</div>';
-            content += '</div>';
+            content += '</tbody></table>';
+            // Attachments section
+            if (s.attachments && s.attachments.length) {
+                content += '<div style="border-top:1px solid var(--border-color);margin-top:0.75rem;padding-top:0.75rem;">' +
+                    '<strong style="display:block;margin-bottom:0.5rem;">&#128206; ' + L('attachments') + ' (' + s.attachments.length + ')</strong>';
+                s.attachments.forEach(function(a) {
+                    content += '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.35rem 0;">' +
+                        '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(a.filename) + '">' + esc(a.filename) + '</span>' +
+                        '<span style="color:var(--text-secondary);font-size:0.8rem;white-space:nowrap;">' + formatBytes(a.size) + (a.mimetype ? ' · ' + esc(a.mimetype) : '') + '</span>' +
+                        '<button class="btn-sm btn-outline" onclick="downloadAttachment(\'' + esc(s.id) + '\', \'' + esc(a.filename).replace(/'/g, '&#39;') + '\')">' + L('download') + '</button>' +
+                    '</div>';
+                });
+                content += '</div>';
+            }
+            // Metadata footer
+            content += '<div style="border-top:1px solid var(--border-color);margin-top:0.75rem;padding-top:0.5rem;color:var(--text-secondary);font-size:0.78rem;">' +
+                L('metadata') + ': ID ' + esc(s.id || '') + (s.ip ? ' · IP ' + esc(s.ip) : '') +
+            '</div>';
             document.getElementById('detailContent').innerHTML = content;
             document.getElementById('detailModal').style.display = 'flex';
+        }
+
+        // Plain <a href> cannot carry the Basic auth header — use the fetch+blob house pattern
+        async function downloadAttachment(entryId, filename) {
+            try {
+                var url = '/admin/api/submissions/' + encodeURIComponent(submissionsModalWebsiteId) +
+                    '/attachments/' + encodeURIComponent(entryId) + '/' + encodeURIComponent(filename);
+                var res = await fetch(url, { headers: { Authorization: auth } });
+                if (!res.ok) { showToast(L('exportFailed'), 'error'); return; }
+                var blob = await res.blob();
+                var objUrl = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = objUrl;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(objUrl);
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
         }
 
         async function exportSubmissions(websiteId, format) {
@@ -3457,7 +4071,7 @@
         document.getElementById('changePasswordBtn').addEventListener('click', openPasswordModal);
 
         // ========== Close modals on overlay click ==========
-        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal', 'senderEditorModal', 'helpModal', 'outboxModal'].forEach(function(id) {
+        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal', 'senderEditorModal', 'helpModal', 'outboxModal', 'userEditorModal', 'accountCreateModal'].forEach(function(id) {
             document.getElementById(id).addEventListener('click', function(e) {
                 if (e.target === this) this.style.display = 'none';
             });
