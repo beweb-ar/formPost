@@ -402,9 +402,28 @@
         .modal input[type="password"] { max-width: 100%; }
 
         .modal-wide {
-            max-width: 950px;
-            width: 95%;
+            max-width: 1200px;
+            width: 96%;
         }
+
+        /* Fixed-header/footer modal layout: only the body scrolls */
+        .modal-fixed {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-body-scroll {
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+            padding-right: 0.5rem;
+        }
+        .modal-fixed .modal-actions {
+            flex-shrink: 0;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+        .table-scroll { overflow-x: auto; }
 
         #detailModal {
             z-index: 600;
@@ -769,7 +788,7 @@
                 <img src="/logo.png" alt="formPost" style="height: 50px; width: auto; object-fit: contain;" />
             </div>
             <div class="header-actions">
-                <span id="userInfo" style="font-size:0.78rem;color:var(--text-secondary);margin-right:0.5rem;white-space:nowrap;"></span>
+                <span id="userInfo" style="display:none;align-items:center;gap:0.4rem;font-size:0.8rem;font-weight:600;color:var(--text-primary);background:var(--bg-solid);border:1px solid var(--border-color);border-radius:999px;padding:0.3rem 0.75rem;margin-right:0.5rem;white-space:nowrap;box-shadow:var(--shadow-sm);"></span>
                 <button class="header-btn" id="settingsBtn" onclick="openSettingsModal()" title="Settings">&#9881; <span data-i18n="settings">Settings</span></button>
                 <button class="header-btn" id="templatesBtn" onclick="openTemplateManager()" data-i18n="templatesBtn">&#9993; Plantillas</button>
                 <button class="header-btn icon-btn" id="langToggleBtn" onclick="toggleLang()" title="EN / ES" style="font-size:0.8rem;font-weight:700;letter-spacing:0.03em;line-height:18px;">ES</button>
@@ -988,9 +1007,9 @@
 
     <!-- Submission Detail Modal -->
     <div class="modal-overlay" id="detailModal" style="display:none;">
-        <div class="modal">
-            <h3 data-i18n="submissionDetails">Submission Details</h3>
-            <div id="detailContent"></div>
+        <div class="modal modal-fixed" style="max-width:720px;">
+            <h3 data-i18n="submissionDetails" style="flex-shrink:0;">Submission Details</h3>
+            <div id="detailContent" class="modal-body-scroll"></div>
             <div class="modal-actions">
                 <button type="button" onclick="document.getElementById('detailModal').style.display='none'" data-i18n="close">Close</button>
             </div>
@@ -1105,8 +1124,8 @@
 
     <!-- Submissions Modal -->
     <div class="modal-overlay" id="submissionsModal" style="display:none;">
-        <div class="modal modal-wide">
-            <div class="submissions-modal-header">
+        <div class="modal modal-wide modal-fixed">
+            <div class="submissions-modal-header" style="flex-shrink:0;">
                 <h3><span data-i18n="submissions">Submissions</span>: <span id="submissionsModalTitle"></span></h3>
                 <div class="submissions-modal-actions">
                     <input type="text" id="submissionsSearch" placeholder="Search name / email..." style="font-size:0.85rem;padding:0.35rem 0.6rem;border-radius:var(--radius-sm);border:1px solid var(--border-color);width:180px;" oninput="searchSubmissionsDebounced()" />
@@ -1115,7 +1134,7 @@
                     <button class="btn-sm btn-danger" id="deleteAllSubsBtn" onclick="deleteAllSubmissions(submissionsModalWebsiteId)" data-i18n="deleteAll">Delete All</button>
                 </div>
             </div>
-            <div id="submissionsModalContent">
+            <div id="submissionsModalContent" class="modal-body-scroll">
                 <div class="empty-state"><span class="spinner"></span> <span data-i18n="loading">Loading...</span></div>
             </div>
             <div class="modal-actions">
@@ -1147,62 +1166,64 @@
 
     <!-- Outbox Log Modal -->
     <div class="modal-overlay" id="outboxModal" style="display:none;">
-        <div class="modal modal-wide">
-            <div class="submissions-modal-header">
+        <div class="modal modal-wide modal-fixed">
+            <div class="submissions-modal-header" style="flex-shrink:0;">
                 <h3><span data-i18n="outbox">Outbox</span>: <span id="outboxModalTitle"></span></h3>
                 <div style="display:flex;gap:0.5rem;">
                     <button type="button" class="btn-outline" onclick="document.getElementById('outboxModal').style.display='none'" data-i18n="close">Close</button>
                 </div>
             </div>
-            <div id="outboxModalContent" style="max-height:60vh;overflow-y:auto;">
+            <div id="outboxModalContent" class="modal-body-scroll">
                 <div class="empty-state"><span class="spinner"></span> Loading...</div>
             </div>
-            <div id="outboxModalPagination" style="display:flex;justify-content:space-between;align-items:center;padding-top:0.75rem;font-size:0.85rem;"></div>
+            <div id="outboxModalPagination" style="display:flex;justify-content:space-between;align-items:center;padding-top:0.75rem;font-size:0.85rem;flex-shrink:0;"></div>
         </div>
     </div>
 
     <!-- Settings / Senders Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none;">
-        <div class="modal" style="max-width:900px;width:95%;">
-            <div class="submissions-modal-header">
-                <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
-                <button class="btn-sm btn-outline" id="newSenderBtn" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
-            </div>
-            <div id="sendersListContent">
-                <div class="empty-state"><span class="spinner"></span> Loading...</div>
-            </div>
-
-            <!-- Accounts (superadmin only) -->
-            <div id="accountsSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+        <div class="modal modal-fixed" style="max-width:1150px;width:96%;">
+            <div class="modal-body-scroll">
                 <div class="submissions-modal-header">
-                    <h3 data-i18n="accounts">Accounts</h3>
-                    <button class="btn-sm btn-outline" onclick="openAccountCreate()" data-i18n="newAccount">+ New Account</button>
+                    <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
+                    <button class="btn-sm btn-outline" id="newSenderBtn" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
                 </div>
-                <div id="accountsListContent"><div class="empty-state"><span class="spinner"></span></div></div>
-            </div>
+                <div id="sendersListContent" class="table-scroll">
+                    <div class="empty-state"><span class="spinner"></span> Loading...</div>
+                </div>
 
-            <!-- Users (superadmin only) -->
-            <div id="usersSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
-                <div class="submissions-modal-header">
-                    <h3 data-i18n="users">Users</h3>
-                    <button class="btn-sm btn-outline" onclick="openUserEditor('')" data-i18n="newUser">+ New User</button>
+                <!-- Accounts (superadmin only) -->
+                <div id="accountsSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                    <div class="submissions-modal-header">
+                        <h3 data-i18n="accounts">Accounts</h3>
+                        <button class="btn-sm btn-outline" onclick="openAccountCreate()" data-i18n="newAccount">+ New Account</button>
+                    </div>
+                    <div id="accountsListContent" class="table-scroll"><div class="empty-state"><span class="spinner"></span></div></div>
                 </div>
-                <div id="usersListContent"><div class="empty-state"><span class="spinner"></span></div></div>
-            </div>
 
-            <div id="agentApiSection" style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
-                <div class="submissions-modal-header">
-                    <h3><span data-i18n="agentApi">Agent API</span> <span id="apiScopeLabel" style="font-size:0.7rem;font-weight:600;padding:0.1rem 0.4rem;border-radius:4px;background:var(--bg-tertiary);vertical-align:middle;"></span></h3>
-                    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;">
-                        <input type="checkbox" id="apiEnabledToggle" onchange="toggleApiEnabled(this)" />
-                        <span data-i18n="apiEnabled">Enabled</span>
-                    </label>
+                <!-- Users (superadmin only) -->
+                <div id="usersSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                    <div class="submissions-modal-header">
+                        <h3 data-i18n="users">Users</h3>
+                        <button class="btn-sm btn-outline" onclick="openUserEditor('')" data-i18n="newUser">+ New User</button>
+                    </div>
+                    <div id="usersListContent" class="table-scroll"><div class="empty-state"><span class="spinner"></span></div></div>
                 </div>
-                <p style="font-size:0.82rem;opacity:0.75;margin:0.25rem 0 0.75rem;" data-i18n="agentApiHint">REST API for AI agents to create forms and senders programmatically. Self-documented at GET /api/v1 — give the agent that URL and this key.</p>
-                <div style="display:flex;gap:0.5rem;align-items:center;">
-                    <input type="text" id="apiKeyDisplay" readonly style="flex:1;font-family:monospace;font-size:0.8rem;" />
-                    <button type="button" class="btn-sm btn-outline" onclick="copyApiKey()" data-i18n="copyBtn">Copy</button>
-                    <button type="button" class="btn-sm btn-outline" onclick="regenerateApiKey()" data-i18n="regenerateBtn">Regenerate</button>
+
+                <div id="agentApiSection" style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                    <div class="submissions-modal-header">
+                        <h3><span data-i18n="agentApi">Agent API</span> <span id="apiScopeLabel" style="font-size:0.7rem;font-weight:600;padding:0.1rem 0.4rem;border-radius:4px;background:var(--bg-tertiary);vertical-align:middle;"></span></h3>
+                        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;">
+                            <input type="checkbox" id="apiEnabledToggle" onchange="toggleApiEnabled(this)" />
+                            <span data-i18n="apiEnabled">Enabled</span>
+                        </label>
+                    </div>
+                    <p style="font-size:0.82rem;opacity:0.75;margin:0.25rem 0 0.75rem;" data-i18n="agentApiHint">REST API for AI agents to create forms and senders programmatically. Self-documented at GET /api/v1 — give the agent that URL and this key.</p>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <input type="text" id="apiKeyDisplay" readonly style="flex:1;font-family:monospace;font-size:0.8rem;" />
+                        <button type="button" class="btn-sm btn-outline" onclick="copyApiKey()" data-i18n="copyBtn">Copy</button>
+                        <button type="button" class="btn-sm btn-outline" onclick="regenerateApiKey()" data-i18n="regenerateBtn">Regenerate</button>
+                    </div>
                 </div>
             </div>
             <div class="modal-actions" style="justify-content:space-between;">
@@ -1397,7 +1418,7 @@
                 <h3 data-i18n="manageTemplates">Email Templates</h3>
                 <button class="btn-sm btn-outline" onclick="openTemplateEditor('', '')" data-i18n="newTemplate">+ New Template</button>
             </div>
-            <div id="templateManagerContent">
+            <div id="templateManagerContent" class="table-scroll">
                 <div class="empty-state"><span class="spinner"></span> Loading...</div>
             </div>
             <div class="modal-actions">
@@ -1408,9 +1429,9 @@
 
     <!-- Help / Integration Guide Modal -->
     <div class="modal-overlay" id="helpModal" style="display:none;">
-        <div class="modal modal-wide">
-            <h3 data-i18n="helpTitle">Integration Guide</h3>
-            <div id="helpContent"></div>
+        <div class="modal modal-wide modal-fixed">
+            <h3 data-i18n="helpTitle" style="flex-shrink:0;">Integration Guide</h3>
+            <div id="helpContent" class="modal-body-scroll"></div>
             <div class="modal-actions">
                 <button type="button" class="btn-outline" onclick="document.getElementById('helpModal').style.display='none'" data-i18n="close">Close</button>
             </div>
@@ -1514,10 +1535,18 @@
                 helpStep1: 'Create an HTML form with <code>method="POST"</code> and <code>action</code> pointing to this server\'s <code>/submit</code> endpoint.',
                 helpStep2: 'Include a hidden field <code>form_id</code> with the form identifier.',
                 helpStep3: 'Add any form fields you need (name, email, phone, message, etc.). All fields are dynamic - no hardcoded schema required.',
-                helpStep4: 'To accept file attachments, add <code>&lt;input type="file" name="attachments" multiple&gt;</code> and set <code>enctype="multipart/form-data"</code> on the form. Limits: max 5 files, 10 MB each. Attachments are forwarded via email, Discord and Telegram.',
+                helpStep4: 'To accept file attachments, add <code>&lt;input type="file" name="attachments" multiple&gt;</code> and set <code>enctype="multipart/form-data"</code> on the form. Limits: max 5 files, 10 MB each. Attachments are forwarded via email, Discord and Telegram, and also stored on the server: you can see and download them from each submission\'s detail view.',
                 helpStep5: 'If captcha is configured, add the corresponding widget (Cloudflare Turnstile or hCaptcha) with your site key.',
                 helpStep6: 'The server sends the email, saves the submission, triggers notifications (Discord, Telegram, webhook), sends the auto-reply if enabled, and redirects or responds with JSON.',
                 helpCopyTip: 'Use the <strong>Integration</strong> section at the bottom of each form\'s edit modal to copy ready-to-use HTML code.',
+                helpAgentTitle: 'Integrate with an AI agent',
+                helpAgentIntro: 'Instead of configuring forms by hand, you can let an AI agent (Claude, ChatGPT, n8n, etc.) do it through the <strong>Agent API</strong> — a self-documented REST API: the agent reads <code>GET /api/v1</code> and learns every endpoint on its own.',
+                helpAgent1: 'Get the API key from <strong>Settings &gt; Agent API</strong>. Each account has its own key, limited to that account\'s data — an agent with your key can never see or touch other accounts. Superadmins also have a master key with full access.',
+                helpAgent2: 'Give the agent two things: this server\'s URL + <code>/api/v1</code>, and the API key (sent as <code>X-API-Key</code> header or <code>Authorization: Bearer</code>).',
+                helpAgent3: 'The agent can then create and configure forms, create senders (SMTP/SendGrid), create email templates, read received submissions, download attachments, and check the delivery log (outbox) to verify emails went out.',
+                helpAgent4: 'Example prompt for your agent: <em>"Read {server}/api/v1 with the key I gave you and create a contact form for my site example.com that sends submissions to info@example.com, then give me the HTML to embed."</em>',
+                helpRolesTitle: 'Accounts and roles',
+                helpRolesIntro: 'Data is separated per account: each account manages its own forms, senders, templates, inbox/outbox and API key. The <strong>account admin</strong> manages everything in their account; <strong>users</strong> can view submissions and inbox/outbox and edit templates. Senders and templates marked <strong>Global/Shared</strong> are provided by the platform administrator and available to every account.',
                 // Templates
                 templatesBtn: '&#9993; Templates', manageTemplates: 'Email Templates',
                 templateEditor: 'Template Editor', templateName: 'Template Name',
@@ -1651,10 +1680,18 @@
                 helpStep1: 'Crea un formulario HTML con <code>method="POST"</code> y <code>action</code> apuntando al endpoint <code>/submit</code> de este servidor.',
                 helpStep2: 'Incluye un campo oculto <code>form_id</code> con el identificador del formulario.',
                 helpStep3: 'Agrega los campos que necesites (nombre, email, tel\u00e9fono, mensaje, etc.). Todos los campos son din\u00e1micos, no hay esquema fijo.',
-                helpStep4: 'Para aceptar archivos adjuntos, agrega <code>&lt;input type="file" name="attachments" multiple&gt;</code> y <code>enctype="multipart/form-data"</code> en el form. L\u00edmites: m\u00e1x 5 archivos, 10 MB cada uno. Los adjuntos se reenv\u00edan por email, Discord y Telegram.',
+                helpStep4: 'Para aceptar archivos adjuntos, agrega <code>&lt;input type="file" name="attachments" multiple&gt;</code> y <code>enctype="multipart/form-data"</code> en el form. L\u00edmites: m\u00e1x 5 archivos, 10 MB cada uno. Los adjuntos se reenv\u00edan por email, Discord y Telegram, y adem\u00e1s quedan guardados en el servidor: pod\u00e9s verlos y descargarlos desde el detalle de cada env\u00edo.',
                 helpStep5: 'Si el captcha est\u00e1 configurado, agrega el widget correspondiente (Cloudflare Turnstile o hCaptcha) con tu site key.',
                 helpStep6: 'El servidor env\u00eda el email, guarda el env\u00edo, dispara notificaciones (Discord, Telegram, webhook), env\u00eda auto-respuesta si est\u00e1 habilitada, y redirige o responde con JSON.',
                 helpCopyTip: 'Us\u00e1 la secci\u00f3n <strong>Integraci\u00f3n</strong> al final del modal de edici\u00f3n de cada formulario para copiar c\u00f3digo HTML listo para usar.',
+                helpAgentTitle: 'Integraci\u00f3n con un agente de IA',
+                helpAgentIntro: 'En lugar de configurar los formularios a mano, pod\u00e9s dejar que un agente de IA (Claude, ChatGPT, n8n, etc.) lo haga a trav\u00e9s de la <strong>API para Agentes</strong> \u2014 una API REST auto-documentada: el agente lee <code>GET /api/v1</code> y aprende solo todos los endpoints.',
+                helpAgent1: 'Obten\u00e9 la API key en <strong>Configuraci\u00f3n &gt; API para Agentes</strong>. Cada cuenta tiene su propia clave, limitada a los datos de esa cuenta \u2014 un agente con tu clave nunca puede ver ni tocar otras cuentas. Los superadmins tienen adem\u00e1s una clave maestra con acceso total.',
+                helpAgent2: 'Dale al agente dos cosas: la URL de este servidor + <code>/api/v1</code>, y la API key (se env\u00eda en el header <code>X-API-Key</code> o <code>Authorization: Bearer</code>).',
+                helpAgent3: 'El agente puede entonces crear y configurar formularios, crear senders (SMTP/SendGrid), crear plantillas de email, leer los env\u00edos recibidos, descargar adjuntos y consultar la bandeja de salida para verificar que los mails salieron.',
+                helpAgent4: 'Ejemplo de prompt para tu agente: <em>"Le\u00e9 {server}/api/v1 con la clave que te di y cre\u00e1 un formulario de contacto para mi sitio ejemplo.com que env\u00ede los datos a info@ejemplo.com, despu\u00e9s dame el HTML para pegar."</em>',
+                helpRolesTitle: 'Cuentas y roles',
+                helpRolesIntro: 'Los datos est\u00e1n separados por cuenta: cada cuenta gestiona sus propios formularios, senders, plantillas, bandejas y API key. El <strong>admin de cuenta</strong> gestiona todo lo de su cuenta; los <strong>usuarios</strong> pueden ver env\u00edos y bandejas y editar plantillas. Los senders y plantillas marcados como <strong>Global/Compartida</strong> los provee el administrador de la plataforma y est\u00e1n disponibles para todas las cuentas.',
                 // Templates
                 templatesBtn: '&#9993; Plantillas', manageTemplates: 'Plantillas de Email',
                 templateEditor: 'Editor de Plantilla', templateName: 'Nombre de Plantilla',
@@ -2113,10 +2150,13 @@
 
         function applyRoleUI() {
             if (!currentUser) return;
-            var info = currentUser.username +
-                (currentUser.accountName ? ' · ' + currentUser.accountName : '') +
-                ' (' + L(currentUser.role === 'superadmin' ? 'roleSuperadmin' : currentUser.role === 'admin' ? 'roleAdmin' : 'roleUser') + ')';
-            document.getElementById('userInfo').textContent = info;
+            var roleLabel = L(currentUser.role === 'superadmin' ? 'roleSuperadmin' : currentUser.role === 'admin' ? 'roleAdmin' : 'roleUser');
+            var roleColor = currentUser.role === 'superadmin' ? '#e8713a' : currentUser.role === 'admin' ? 'var(--accent-primary)' : '#10b981';
+            var userInfoEl = document.getElementById('userInfo');
+            userInfoEl.innerHTML = '&#128100; ' + esc(currentUser.username) +
+                (currentUser.accountName ? ' <span style="color:var(--text-secondary);font-weight:400;">· ' + esc(currentUser.accountName) + '</span>' : '') +
+                ' <span style="font-size:0.68rem;font-weight:700;letter-spacing:0.02em;text-transform:uppercase;color:#fff;background:' + roleColor + ';border-radius:999px;padding:0.12rem 0.5rem;">' + roleLabel + '</span>';
+            userInfoEl.style.display = 'inline-flex';
             // Role 'user': no settings (senders/API/backup), no form management
             document.getElementById('settingsBtn').style.display = isAdminOrAbove() ? '' : 'none';
             // Settings modal sections
@@ -2493,6 +2533,21 @@
             content += '</ul>';
 
             content += '<p style="margin-top:1rem;padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border-color);font-size:0.875rem;">' + L('helpCopyTip') + '</p>';
+
+            // AI agent integration
+            content += '<h4 style="margin-top:1.5rem;">&#129302; ' + L('helpAgentTitle') + '</h4>';
+            content += '<p>' + L('helpAgentIntro') + '</p>';
+            content += '<ol style="line-height:1.8;">';
+            content += '<li>' + L('helpAgent1') + '</li>';
+            content += '<li>' + L('helpAgent2') + '</li>';
+            content += '<li>' + L('helpAgent3') + '</li>';
+            content += '</ol>';
+            content += '<p style="padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border-color);font-size:0.875rem;">' + L('helpAgent4').replace(/\{server\}/g, esc(serverUrl)) + '</p>';
+
+            // Accounts & roles
+            content += '<h4 style="margin-top:1.5rem;">' + L('helpRolesTitle') + '</h4>';
+            content += '<p>' + L('helpRolesIntro') + '</p>';
+
             document.getElementById('helpContent').innerHTML = content;
             document.getElementById('helpModal').style.display = 'flex';
         }
@@ -3372,6 +3427,9 @@
                 var data = await res.json();
                 document.getElementById('apiKeyDisplay').value = data.key || '';
                 document.getElementById('apiEnabledToggle').checked = !!data.enabled;
+                // Scope reported by the server is authoritative
+                document.getElementById('apiScopeLabel').textContent =
+                    data.scope === 'master' ? L('apiScopeMaster') : L('apiScopeAccount');
             } catch(e) {}
         }
 
