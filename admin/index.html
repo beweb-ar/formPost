@@ -2175,6 +2175,11 @@
             // Delete-all button in submissions modal
             var delAll = document.getElementById('deleteAllSubsBtn');
             if (delAll) delAll.style.display = isAdminOrAbove() ? '' : 'none';
+            // Account filter only makes sense for superadmin (users belong to exactly one account)
+            if (!isSuperadmin()) {
+                document.getElementById('accountFilterBar').style.display = 'none';
+                document.getElementById('accountFilter').value = '';
+            }
         }
 
         // ========== Status Bar ==========
@@ -2366,6 +2371,10 @@
                 if (isSuperadmin()) {
                     await loadAccountsCache();
                     updateAccountFilterBar();
+                } else {
+                    // Hide leftover filter state from a previous superadmin session
+                    document.getElementById('accountFilterBar').style.display = 'none';
+                    document.getElementById('accountFilter').value = '';
                 }
                 renderWebsiteCards(websites, stats);
             } catch(e) {
