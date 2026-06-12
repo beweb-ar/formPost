@@ -887,6 +887,11 @@
             <form id="editForm" style="display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0;">
                 <input type="hidden" name="editId" id="editId" />
                 <div style="overflow-y:auto;flex:1;min-height:0;padding-right:0.5rem;">
+                    <div class="form-group" id="editAccountGroup" style="display:none;">
+                        <label data-i18n="account">Account</label>
+                        <select id="editAccountId"></select>
+                        <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="formAccountHint">Moving the form to another account also moves its submissions and outbox</small>
+                    </div>
                     <div class="form-group">
                         <label data-i18n="toEmail">To Email(s)</label>
                         <div id="editRecipientsContainer"></div>
@@ -1580,6 +1585,7 @@
                 confirmDeleteUser: 'Delete user "{id}"? This cannot be undone.',
                 passwordKeepHint: 'Leave empty to keep the current password',
                 formsCount: 'Forms', usersCount: 'Users',
+                formAccountHint: 'Moving the form to another account also moves its submissions and outbox',
                 // Templates sharing
                 sharedBadge: 'Shared', savedAsCopy: 'Saved as a copy for your account',
                 // Submission detail / attachments
@@ -1725,6 +1731,7 @@
                 confirmDeleteUser: '¿Eliminar el usuario "{id}"? Esta acción no se puede deshacer.',
                 passwordKeepHint: 'Dejar vacío para mantener la contraseña actual',
                 formsCount: 'Formularios', usersCount: 'Usuarios',
+                formAccountHint: 'Mover el formulario a otra cuenta también mueve sus envíos y bandeja de salida',
                 // Templates sharing
                 sharedBadge: 'Compartida', savedAsCopy: 'Guardada como copia para tu cuenta',
                 // Submission detail / attachments
@@ -2564,11 +2571,12 @@
         // since the create modal has no UI for them. Reset on a normal create.
         var cloneSourceConfig = null;
 
-        async function populateCreateAccountSelect(selected) {
-            var group = document.getElementById('createAccountGroup');
+        // Populate an account <select> for superadmin; hides the group otherwise
+        async function populateAccountSelect(groupId, selectId, selected) {
+            var group = document.getElementById(groupId);
             if (!isSuperadmin()) { group.style.display = 'none'; return; }
             await loadAccountsCache();
-            var select = document.getElementById('createAccountId');
+            var select = document.getElementById(selectId);
             select.innerHTML = '';
             Object.keys(accountsCache).forEach(function(id) {
                 var opt = document.createElement('option');
@@ -2578,6 +2586,10 @@
             });
             if (selected) select.value = selected;
             group.style.display = Object.keys(accountsCache).length > 1 ? '' : 'none';
+        }
+
+        function populateCreateAccountSelect(selected) {
+            return populateAccountSelect('createAccountGroup', 'createAccountId', selected);
         }
 
         async function openCreateModal() {
@@ -2732,7 +2744,8 @@
                 document.getElementById('editRedirectUrl').value = cfg.redirectUrl || '';
                 await Promise.all([
                     populateTemplateDropdown('editTemplatePath', cfg.templatePath || ''),
-                    populateSenderDropdown('editSenderId', cfg.senderId || '')
+                    populateSenderDropdown('editSenderId', cfg.senderId || ''),
+                    populateAccountSelect('editAccountGroup', 'editAccountId', cfg.accountId || 'default')
                 ]);
                 document.getElementById('editSenderAlias').value = cfg.senderAlias || '';
                 document.getElementById('editCaptchaKey').value = '';
@@ -2816,6 +2829,10 @@
                 senderId: document.getElementById('editSenderId').value,
                 senderAlias: document.getElementById('editSenderAlias').value.trim()
             };
+            if (isSuperadmin()) {
+                var editAcct = document.getElementById('editAccountId').value;
+                if (editAcct) payload.accountId = editAcct;
+            }
             var captchaKey = document.getElementById('editCaptchaKey').value;
             if (captchaKey) payload.captchaKey = captchaKey;
             payload.captchaEnabled = document.getElementById('editCaptchaEnabled').checked;
