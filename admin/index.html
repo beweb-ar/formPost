@@ -3323,7 +3323,8 @@
                 document.getElementById('senderEditorApiKey').placeholder = 'SG.xxxxxxxx';
             }
             updateSenderTypeFields();
-            document.getElementById('senderTestBtn').style.display = id ? '' : 'none';
+            // Test works for unsaved senders too: it uses the editor values directly
+            document.getElementById('senderTestBtn').style.display = '';
             document.getElementById('senderEditorModal').style.display = 'flex';
         }
 
@@ -3331,11 +3332,9 @@
             document.getElementById('senderEditorModal').style.display = 'none';
         }
 
-        document.getElementById('senderEditorForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            var btn = document.getElementById('senderEditorSaveBtn');
-            setLoading(btn, true);
-            var existingId = document.getElementById('senderEditorId').value;
+        // Collect the sender editor form into a config payload (shared by Save and Test).
+        // Returns null after showing a toast when basic validation fails.
+        function collectSenderEditorPayload() {
             var senderType = document.getElementById('senderEditorType').value;
             var payload = {
                 name: document.getElementById('senderEditorName').value,
@@ -3351,24 +3350,33 @@
                 payload.domain = document.getElementById('senderEditorDomain').value.trim();
                 var apiKey = document.getElementById('senderEditorApiKey').value.trim();
                 if (apiKey) payload.apiKey = apiKey;
-                if (senderEditorIsNew && !apiKey) {
-                    showToast(L('sendgridApiKeyRequired'), 'error');
-                    setLoading(btn, false);
-                    return;
-                }
             } else {
                 payload.host = document.getElementById('senderEditorHost').value;
                 payload.port = Number(document.getElementById('senderEditorPort').value);
                 payload.secure = document.getElementById('senderEditorSecure').checked;
                 if (!payload.host || !payload.port) {
                     showToast(L('smtpHostPortRequired'), 'error');
-                    setLoading(btn, false);
-                    return;
+                    return null;
                 }
                 var user = document.getElementById('senderEditorUser').value;
                 var pass = document.getElementById('senderEditorPass').value;
                 if (user) payload.user = user;
                 if (pass) payload.pass = pass;
+            }
+            return payload;
+        }
+
+        document.getElementById('senderEditorForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('senderEditorSaveBtn');
+            setLoading(btn, true);
+            var existingId = document.getElementById('senderEditorId').value;
+            var payload = collectSenderEditorPayload();
+            if (!payload) { setLoading(btn, false); return; }
+            if (payload.type === 'sendgrid' && senderEditorIsNew && !payload.apiKey) {
+                showToast(L('sendgridApiKeyRequired'), 'error');
+                setLoading(btn, false);
+                return;
             }
             try {
                 var res;
@@ -3418,20 +3426,26 @@
             }
         }
 
+        // Tests what is currently typed in the editor (unsaved values included);
+        // empty secret fields fall back to the stored secret of an existing sender.
         async function testSender() {
             var id = document.getElementById('senderEditorId').value;
-            if (!id) return;
+            var cfg = collectSenderEditorPayload();
+            if (!cfg) return;
             var testEmail = prompt('Email de destino para el test:', document.getElementById('senderEditorFrom').value);
             if (!testEmail) return;
             var btn = document.getElementById('senderTestBtn');
             var origText = btn.textContent;
             btn.disabled = true;
             btn.textContent = 'Testing...';
+            var url = id
+                ? '/admin/api/senders/' + encodeURIComponent(id) + '/test'
+                : '/admin/api/senders/test';
             try {
-                var res = await fetch('/admin/api/senders/' + encodeURIComponent(id) + '/test', {
+                var res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: auth },
-                    body: JSON.stringify({ to: testEmail })
+                    body: JSON.stringify({ to: testEmail, config: cfg })
                 });
                 var result = await res.json();
                 if (res.ok) {

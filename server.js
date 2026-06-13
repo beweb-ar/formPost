@@ -454,24 +454,46 @@ function parseAddress(addr) {
 // SendGrid transporter: same sendMail()/verify() interface as nodemailer,
 // implemented over the SendGrid v3 HTTP API (no SMTP ports needed)
 function buildSendGridTransporter(senderCfg) {
+    const plainKey = decryptSecret(senderCfg.apiKey);
+    const keyUndecryptable = !!senderCfg.apiKey && plainKey === null;
     const client = axios.create({
         baseURL: 'https://api.sendgrid.com/v3',
-        headers: { Authorization: `Bearer ${decryptSecret(senderCfg.apiKey) || ''}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${plainKey || ''}`, 'Content-Type': 'application/json' },
         timeout: 15000
     });
+    function sgErrorDetail(e) {
+        const errs = e.response && e.response.data && e.response.data.errors;
+        return errs && errs.length ? errs.map(er => er.message).filter(Boolean).join('; ') : '';
+    }
+    function assertKeyReadable() {
+        if (keyUndecryptable) {
+            throw new Error('SendGrid: stored API key cannot be decrypted — the encryption key (data/.secret.key or ENCRYPTION_KEY) changed since it was saved. Re-enter the API key in the sender editor.');
+        }
+        if (!plainKey) {
+            throw new Error('SendGrid: no API key configured for this sender.');
+        }
+    }
     return {
         isSendGrid: true,
         async verify() {
-            // Any valid API key can read its own scopes
+            assertKeyReadable();
             try {
                 await client.get('/scopes');
             } catch (e) {
                 const status = e.response && e.response.status;
-                throw new Error(status === 401 ? 'SendGrid: invalid API key' : 'SendGrid: ' + e.message);
+                const detail = sgErrorDetail(e);
+                // Restricted keys (e.g. Mail Send only) may not be allowed to read /scopes;
+                // that does not mean the key is invalid for sending.
+                if (status === 403) return true;
+                if (status === 401) {
+                    throw new Error('SendGrid: invalid API key (401)' + (detail ? ' — ' + detail : '') + '. If this key works elsewhere, check SendGrid IP Access Management: this server\'s IP may not be allowed.');
+                }
+                throw new Error('SendGrid: ' + (detail || e.message));
             }
             return true;
         },
         async sendMail(mailOptions) {
+            assertKeyReadable();
             const toList = String(mailOptions.to || '')
                 .split(',').map(s => s.trim()).filter(Boolean).map(parseAddress);
             const payload = {
@@ -1681,12 +1703,8 @@ adminRouter.delete('/senders/:id', requireRole('superadmin', 'admin'), async (re
     }
 });
 
-// Test sender connection
-adminRouter.post('/senders/:id/test', requireRole('superadmin', 'admin'), async (req, res) => {
-    const { id } = req.params;
-    const senderCfg = config.senders && config.senders[id];
-    if (!senderCfg || !canAccessSender(req, id)) return res.status(404).json({ error: 'Sender not found' });
-    const testTo = (req.body && req.body.to) || senderCfg.from;
+// Run a sender connection test against an in-memory config (never persisted)
+async function runSenderTest(res, senderCfg, testTo, label) {
     if (!testTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testTo)) {
         return res.status(400).json({ error: 'Invalid email address' });
     }
@@ -1698,13 +1716,34 @@ adminRouter.post('/senders/:id/test', requireRole('superadmin', 'admin'), async 
             from: senderCfg.from,
             to: testTo,
             subject: 'formPost - Test Connection',
-            html: '<h2>formPost ' + senderType + ' Test</h2><p>This is a test email from formPost to verify that the ' + senderType + ' sender <strong>' + escapeHtml(senderCfg.name || id) + '</strong> is working correctly.</p><p>If you received this email, the configuration is correct.</p>'
+            html: '<h2>formPost ' + senderType + ' Test</h2><p>This is a test email from formPost to verify that the ' + senderType + ' sender <strong>' + escapeHtml(label) + '</strong> is working correctly.</p><p>If you received this email, the configuration is correct.</p>'
         });
         res.json({ message: 'Test email sent to ' + testTo });
     } catch (e) {
-        log.error('Sender test failed', { senderId: id, error: e.message });
+        log.error('Sender test failed', { sender: label, error: e.message });
         res.status(500).json({ error: 'Connection failed: ' + e.message });
     }
+}
+
+// Test an unsaved sender config straight from the editor (body: { to, config })
+adminRouter.post('/senders/test', requireRole('superadmin', 'admin'), async (req, res) => {
+    const senderCfg = (req.body && req.body.config) || {};
+    stripSenderSecretEchoes(senderCfg);
+    if (!senderCfg.from) return res.status(400).json({ error: '"from" is required' });
+    await runSenderTest(res, senderCfg, (req.body && req.body.to) || senderCfg.from, senderCfg.name || 'new sender');
+});
+
+// Test sender connection. Accepts unsaved editor values in body.config,
+// merged over the stored config (empty/masked secrets fall back to stored ones).
+adminRouter.post('/senders/:id/test', requireRole('superadmin', 'admin'), async (req, res) => {
+    const { id } = req.params;
+    const stored = config.senders && config.senders[id];
+    if (!stored || !canAccessSender(req, id)) return res.status(404).json({ error: 'Sender not found' });
+    const override = (req.body && req.body.config) || {};
+    stripSenderSecretEchoes(override);
+    delete override.accountId;
+    const senderCfg = { ...stored, ...override };
+    await runSenderTest(res, senderCfg, (req.body && req.body.to) || senderCfg.from, senderCfg.name || id);
 });
 
 // Telegram: fetch available chats from getUpdates.
