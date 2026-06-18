@@ -510,13 +510,57 @@ function buildSendGridTransporter(senderCfg) {
             }
             if (atts.length) payload.attachments = atts;
             try {
-                await client.post('/mail/send', payload);
+                const resp = await client.post('/mail/send', payload);
+                // SendGrid returns 202 Accepted (queued for delivery) with no body.
+                // The x-message-id header is the handle to trace this message in
+                // SendGrid's Activity Feed / Event Webhook (delivered, bounced, dropped...).
+                // NOTE: 202 means "accepted for delivery", NOT "delivered".
+                return {
+                    provider: 'sendgrid',
+                    statusCode: resp.status,
+                    messageId: (resp.headers && resp.headers['x-message-id']) || null,
+                    accepted: toList.map(a => a.email),
+                    rejected: []
+                };
             } catch (e) {
+                const status = e.response && e.response.status;
                 const sgErrors = e.response && e.response.data && e.response.data.errors;
                 const detail = sgErrors ? sgErrors.map(er => er.message).join('; ') : e.message;
-                throw new Error('SendGrid: ' + detail);
+                const err = new Error('SendGrid' + (status ? ' ' + status : '') + ': ' + detail);
+                err.statusCode = status || null;
+                err.provider = 'sendgrid';
+                throw err;
             }
         }
+    };
+}
+
+// Normalize the result of transporter.sendMail() across SendGrid (HTTP API) and
+// nodemailer (SMTP) into one shape we can log and persist in the outbox.
+// For SendGrid, statusCode 202 = accepted-for-delivery (not yet delivered).
+// For SMTP, `response` is the server's reply (e.g. "250 2.0.0 OK") and
+// `accepted`/`rejected` list the recipients the server acknowledged/refused.
+function normalizeSendResult(info) {
+    info = info || {};
+    if (info.provider === 'sendgrid') {
+        return {
+            provider: 'sendgrid',
+            statusCode: info.statusCode || null,
+            messageId: info.messageId || null,
+            accepted: info.accepted || [],
+            rejected: info.rejected || [],
+            response: info.statusCode === 202
+                ? 'Accepted (HTTP 202) by SendGrid for delivery'
+                : ('SendGrid HTTP ' + (info.statusCode || '?'))
+        };
+    }
+    return {
+        provider: 'smtp',
+        statusCode: null,
+        messageId: info.messageId || null,
+        accepted: info.accepted || [],
+        rejected: info.rejected || [],
+        response: info.response || ''
     };
 }
 
@@ -942,8 +986,18 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
             };
 
             try {
-                await senderInfo.transporter.sendMail(mailOptions);
-                log.info('Email sent', { formId, to: recipientConfig.to });
+                const sendMeta = normalizeSendResult(await senderInfo.transporter.sendMail(mailOptions));
+                // Detailed delivery log: provider, accept status code, message id (trace handle),
+                // and per-recipient accepted/rejected. For SendGrid, statusCode 202 = queued, not delivered.
+                log.info('Email sent', {
+                    formId, to: recipientConfig.to,
+                    provider: sendMeta.provider,
+                    statusCode: sendMeta.statusCode,
+                    messageId: sendMeta.messageId,
+                    accepted: sendMeta.accepted,
+                    rejected: sendMeta.rejected,
+                    response: sendMeta.response
+                });
                 emailOk = true;
 
                 const mailEntry = {
@@ -952,12 +1006,21 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     channel: 'email',
                     to: recipientConfig.to,
                     subject: emailSubject,
-                    status: 'ok'
+                    status: 'ok',
+                    provider: sendMeta.provider,
+                    providerStatus: sendMeta.statusCode,
+                    messageId: sendMeta.messageId,
+                    response: sendMeta.response
                 };
                 saveOutboxEntry(formId, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
                 broadcastSSE({ type: 'outbox', websiteId: formId, ...mailEntry });
             } catch (error) {
-                log.error('Error sending email', { formId, error: error.message });
+                log.error('Error sending email', {
+                    formId, to: recipientConfig.to,
+                    provider: error.provider || 'smtp',
+                    statusCode: error.statusCode || null,
+                    error: error.message
+                });
 
                 const mailFailEntry = {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -966,6 +1029,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     to: recipientConfig.to,
                     subject: emailSubject,
                     status: 'error',
+                    provider: error.provider || 'smtp',
+                    providerStatus: error.statusCode || null,
                     error: error.message
                 };
                 saveOutboxEntry(formId, mailFailEntry).catch(() => {});
@@ -1210,14 +1275,20 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         autoReplyBody = '<h2>Thank you for your submission</h2><p>We have received your message and will get back to you soon.</p>';
                     }
                     const arSubject = recipientConfig.autoReplySubject || 'Thank you for your submission';
-                    await senderInfo.transporter.sendMail({
+                    const arMeta = normalizeSendResult(await senderInfo.transporter.sendMail({
                         from: `"${escapeHtml(String(senderAlias || senderInfo.senderCfg.name || 'No Reply'))}" <${senderInfo.senderCfg.from}>`,
                         to: senderEmail,
                         subject: arSubject,
                         html: autoReplyBody,
                         replyTo: recipientConfig.autoReplyReplyTo || undefined
+                    }));
+                    log.info('Auto-reply sent', {
+                        formId, to: senderEmail,
+                        provider: arMeta.provider,
+                        statusCode: arMeta.statusCode,
+                        messageId: arMeta.messageId,
+                        response: arMeta.response
                     });
-                    log.info('Auto-reply sent', { formId, to: senderEmail });
 
                     const arEntry = {
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -1226,7 +1297,11 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         to: senderEmail,
                         subject: arSubject,
                         status: 'ok',
-                        autoReply: true
+                        autoReply: true,
+                        provider: arMeta.provider,
+                        providerStatus: arMeta.statusCode,
+                        messageId: arMeta.messageId,
+                        response: arMeta.response
                     };
                     saveOutboxEntry(formId, arEntry).catch(() => {});
                     broadcastSSE({ type: 'outbox', websiteId: formId, ...arEntry });
@@ -1712,13 +1787,19 @@ async function runSenderTest(res, senderCfg, testTo, label) {
         const testTransporter = buildTransporter(senderCfg);
         await testTransporter.verify();
         const senderType = senderCfg.type === 'sendgrid' ? 'SendGrid' : 'SMTP';
-        await testTransporter.sendMail({
+        const meta = normalizeSendResult(await testTransporter.sendMail({
             from: senderCfg.from,
             to: testTo,
             subject: 'formPost - Test Connection',
             html: '<h2>formPost ' + senderType + ' Test</h2><p>This is a test email from formPost to verify that the ' + senderType + ' sender <strong>' + escapeHtml(label) + '</strong> is working correctly.</p><p>If you received this email, the configuration is correct.</p>'
-        });
-        res.json({ message: 'Test email sent to ' + testTo });
+        }));
+        log.info('Sender test sent', { sender: label, to: testTo, provider: meta.provider, statusCode: meta.statusCode, messageId: meta.messageId, response: meta.response });
+        // Report the real provider response so "OK" is verifiable, not assumed.
+        // For SendGrid, 202 = accepted for delivery; trace the message-id in the Activity Feed to confirm actual delivery.
+        const detail = meta.provider === 'sendgrid'
+            ? ('SendGrid accepted it (HTTP ' + (meta.statusCode || '?') + ')' + (meta.messageId ? ', message-id ' + meta.messageId : ''))
+            : (meta.response || 'sent');
+        res.json({ message: 'Test email sent to ' + testTo + ' — ' + detail, provider: meta.provider, statusCode: meta.statusCode, messageId: meta.messageId, response: meta.response });
     } catch (e) {
         log.error('Sender test failed', { sender: label, error: e.message });
         res.status(500).json({ error: 'Connection failed: ' + e.message });
@@ -3210,13 +3291,14 @@ apiRouter.post('/senders/:id/test', async (req, res) => {
         const testTransporter = buildTransporter(senderCfg);
         await testTransporter.verify();
         const senderType = senderCfg.type === 'sendgrid' ? 'SendGrid' : 'SMTP';
-        await testTransporter.sendMail({
+        const meta = normalizeSendResult(await testTransporter.sendMail({
             from: senderCfg.from,
             to: testTo,
             subject: 'formPost - Test Connection',
             html: '<h2>formPost ' + senderType + ' Test</h2><p>Test email sent via the Agent API to verify that the sender <strong>' + escapeHtml(senderCfg.name || id) + '</strong> is working correctly.</p>'
-        });
-        res.json({ message: 'Test email sent to ' + testTo });
+        }));
+        log.info('Sender test sent (Agent API)', { senderId: id, to: testTo, provider: meta.provider, statusCode: meta.statusCode, messageId: meta.messageId });
+        res.json({ message: 'Test email sent to ' + testTo, provider: meta.provider, statusCode: meta.statusCode, messageId: meta.messageId, response: meta.response });
     } catch (e) {
         log.error('Sender test failed (Agent API)', { senderId: id, error: e.message });
         res.status(500).json({ error: 'Connection failed: ' + e.message });
