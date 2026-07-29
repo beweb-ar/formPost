@@ -42,6 +42,7 @@ Persistencia en archivos: `config.json` (configuración) y `data/` (envíos, out
 | `/admin/api/auth/*` | ninguna (pública) | Ingreso: contraseña, código de un solo uso, Google |
 | `/admin/api/*` | `Authorization: Bearer <sesión>` o HTTP Basic | API del panel, con roles |
 | `/api/v1/*` | `X-API-Key` o `Authorization: Bearer <api key>` | API para agentes |
+| `/agent-api/*` | JWT del usuario (HS256, `SUPPORTHUB_TOOLS_SECRET`) | Herramientas de solo lectura para el agente de ayuda (SupportHub) |
 
 [evidencia: server.js:788, 1349, 1483, 3040-3170, 1504-2763, 2765-3421]
 

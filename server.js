@@ -390,17 +390,40 @@ function googleClientId() {
     return (process.env.GOOGLE_CLIENT_ID || (config.auth && config.auth.googleClientId) || '').trim();
 }
 
-// Store the default client id so it can be edited in config.json.
-// User emails are NOT seeded here: they belong to each user record and are
-// loaded from the admin UI (Settings > Users) or the admin API.
+// Emails of existing users, seeded from the deployment environment so they can
+// sign in with Google or a one-time code without editing anything by hand.
+// They are user data: this only writes them into each user record, and only
+// when that user has no email yet. Nothing is hardcoded in the source.
+// Format: USER_EMAILS="usuario1=mail1@dominio,usuario2=mail2@dominio"
+function seedUserEmailsFromEnv() {
+    const out = {};
+    for (const pair of (process.env.USER_EMAILS || '').split(',')) {
+        const [username, email] = pair.split('=').map(s => (s || '').trim());
+        if (username && email && isValidEmail(email)) out[username] = email;
+    }
+    return out;
+}
+
+// Stores the default Google client id (editable in config.json) and applies the
+// email seeds from the environment.
 async function migrateLoginSettings() {
-    if (config.auth && config.auth.googleClientId) return;
+    const seeds = seedUserEmailsFromEnv();
+    const needsClientId = !(config.auth && config.auth.googleClientId);
+    const pending = Object.entries(seeds).filter(([username, email]) => {
+        const u = (config.users || {})[username];
+        return u && !(u.email || '').trim() && !userEmailTaken(email, username);
+    });
+    if (!needsClientId && !pending.length) return;
     try {
         await writeConfigSafe(cfg => {
             if (!cfg.auth) cfg.auth = {};
             if (!cfg.auth.googleClientId) cfg.auth.googleClientId = DEFAULT_GOOGLE_CLIENT_ID;
+            for (const [username, email] of pending) {
+                if (cfg.users && cfg.users[username]) cfg.users[username].email = email;
+            }
         });
-        log.info('Login settings migration applied (Google client id)');
+        if (pending.length) log.info('User emails seeded from USER_EMAILS', { users: pending.map(p => p[0]) });
+        log.info('Login settings migration applied');
     } catch (e) {
         log.error('Login settings migration failed', { error: e.message });
     }
@@ -3803,6 +3826,168 @@ apiRouter.put('/templates/:name', async (req, res) => {
 });
 
 app.use('/api/v1', apiRouter);
+
+// ===================== SupportHub agent tools (/agent-api) =====================
+// READ-ONLY, purposely tiny responses for a support agent (SupportHub, ADR-0007).
+// Auth: the JWT of the logged-in user, forwarded by the platform as
+// `Authorization: Bearer <jwt>` and signed HS256 with SUPPORTHUB_TOOLS_SECRET.
+// Claims: sub, email, name, exp + ctx { accountId, role }. Scoping is by ctx.
+// Never returns secrets (webhooks, tokens, captcha keys) nor submitted content
+// (names, emails or messages of the people who filled the forms).
+
+const agentApiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    message: { error: 'Too many requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+function b64urlDecode(part) {
+    return Buffer.from(String(part).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+}
+
+// Verify an HS256 JWT signed with SUPPORTHUB_TOOLS_SECRET. Returns { payload } or { error }.
+function verifyToolsJwt(token) {
+    const secret = (process.env.SUPPORTHUB_TOOLS_SECRET || '').trim();
+    if (!secret) return { error: 'disabled' };
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) return { error: 'invalid' };
+    const expected = b64url(nodeCrypto.createHmac('sha256', secret).update(parts[0] + '.' + parts[1]).digest());
+    const a = Buffer.from(parts[2]), b = Buffer.from(expected);
+    if (a.length !== b.length || !nodeCrypto.timingSafeEqual(a, b)) return { error: 'invalid' };
+    let header, payload;
+    try {
+        header = JSON.parse(b64urlDecode(parts[0]));
+        payload = JSON.parse(b64urlDecode(parts[1]));
+    } catch (e) {
+        return { error: 'invalid' };
+    }
+    if (!header || header.alg !== 'HS256') return { error: 'invalid' };
+    if (!payload || !payload.exp || payload.exp * 1000 < Date.now()) return { error: 'expired' };
+    return { payload };
+}
+
+function toolsAuth(req, res, next) {
+    const header = req.headers['authorization'] || '';
+    if (!header.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing user token. Send it as Authorization: Bearer <jwt>.' });
+    }
+    const { payload, error } = verifyToolsJwt(header.slice(7).trim());
+    if (error === 'disabled') return res.status(503).json({ error: 'Agent tools are not enabled on this server.' });
+    if (error === 'expired') return res.status(401).json({ error: 'The user token expired.' });
+    if (error) return res.status(401).json({ error: 'Invalid user token.' });
+    const ctx = payload.ctx || {};
+    // Scope: superadmin sees every account (scope null); everyone else is pinned
+    // to their accountId, exactly like the panel.
+    if (ctx.role === 'superadmin') {
+        req.toolsScope = null;
+    } else if (ctx.accountId && (config.accounts || {})[ctx.accountId]) {
+        req.toolsScope = ctx.accountId;
+    } else {
+        return res.status(403).json({ error: 'The user token has no valid ctx.accountId for this server.' });
+    }
+    req.toolsUser = { sub: payload.sub || '', email: payload.email || '' };
+    next();
+}
+
+const agentApi = express.Router();
+agentApi.use(agentApiLimiter);
+agentApi.use(toolsAuth);
+
+function toolsCanAccessForm(req, formId) {
+    const r = (config.recipients || {})[formId];
+    return !!r && formInScope(req.toolsScope, r);
+}
+
+// Forms of the user's account with their delivery setup and counters.
+agentApi.get('/forms', (req, res) => {
+    const stats = config.statistics || {};
+    const forms = Object.entries(formsForScope(req.toolsScope)).map(([id, cfg]) => {
+        const s = stats[id] || {};
+        const sender = (config.senders || {})[cfg.senderId] || null;
+        return {
+            id,
+            to: cfg.to || '',
+            senderName: sender ? (sender.name || cfg.senderId) : null,
+            senderActive: sender ? sender.active !== false : null,
+            captchaEnabled: cfg.captchaEnabled !== false && !!((config.captcha || {})[id] || (config.turnstile || {})[id]),
+            autoReplyEnabled: !!cfg.autoReplyEnabled,
+            notifications: {
+                discord: !!cfg.discordWebhook,
+                telegram: !!(cfg.telegramBotToken && cfg.telegramChatId),
+                webhook: !!cfg.webhookUrl
+            },
+            submissions: s.successfulSubmissions || 0,
+            mailsSent: s.mailsSent || 0,
+            notificationsSent: s.notificationsSent || 0,
+            lastSubmission: s.lastSubmission || null
+        };
+    });
+    res.json({ forms, total: forms.length });
+});
+
+// Delivery log of one form: did the email go out, and why not.
+// The stored subject embeds the submitter's name, so it is never returned.
+agentApi.get('/deliveries', async (req, res) => {
+    const formId = String(req.query.formId || '');
+    if (!toolsCanAccessForm(req, formId)) return res.status(404).json({ error: 'Form not found' });
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit) || 10));
+    const entries = (await loadOutboxEntries(formId)).slice(0, limit).map(e => ({
+        timestamp: e.timestamp,
+        channel: e.channel,
+        status: e.status,
+        // Auto-replies go to the person who filled the form: never expose that address
+        to: e.autoReply ? '(auto-respuesta al remitente del formulario)' : (e.to || ''),
+        autoReply: !!e.autoReply,
+        provider: e.provider || null,
+        providerStatus: e.providerStatus || null,
+        error: e.error || null
+    }));
+    res.json({ formId, entries, count: entries.length });
+});
+
+// How many submissions came in, without any of their content.
+agentApi.get('/activity', async (req, res) => {
+    const formId = String(req.query.formId || '');
+    if (!toolsCanAccessForm(req, formId)) return res.status(404).json({ error: 'Form not found' });
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days) || 7));
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+    const submissions = await loadSubmissions(formId);
+    const perDay = {};
+    let inRange = 0;
+    for (const s of submissions) {
+        if (!s.timestamp) continue;
+        const ts = new Date(s.timestamp).getTime();
+        if (ts < since) continue;
+        inRange++;
+        const day = new Date(s.timestamp).toISOString().substring(0, 10);
+        perDay[day] = (perDay[day] || 0) + 1;
+    }
+    res.json({
+        formId,
+        days,
+        submissionsInRange: inRange,
+        submissionsStored: submissions.length,
+        perDay,
+        lastSubmission: submissions[0] ? submissions[0].timestamp : null
+    });
+});
+
+// Email senders available to the account: the usual reason mail stops going out.
+agentApi.get('/senders', (req, res) => {
+    const senders = Object.entries(sendersForScope(req.toolsScope)).map(([id, cfg]) => ({
+        id,
+        name: cfg.name || id,
+        type: cfg.type || 'smtp',
+        from: cfg.from || '',
+        active: cfg.active !== false,
+        global: !cfg.accountId
+    }));
+    res.json({ senders, activeCount: senders.filter(s => s.active).length });
+});
+
+app.use('/agent-api', agentApi);
 
 // Start the server
 app.listen(PORT, () => {

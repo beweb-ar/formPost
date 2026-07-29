@@ -18,6 +18,11 @@ services:
       # Optional: fixed key (64 hex chars) for secret encryption at rest.
       # If unset, a key is auto-generated at data/.secret.key (back it up!)
       # - ENCRYPTION_KEY=0123...64-hex-chars
+      # Optional: Google client id for "Sign in with Google" on the admin panel
+      # - GOOGLE_CLIENT_ID=xxxxx.apps.googleusercontent.com
+      # Optional: seed the email of existing users so they can sign in with
+      # Google or a one-time code. Applied once per user, only if they have none.
+      # - USER_EMAILS=usuario1=mail1@dominio.com,usuario2=mail2@dominio.com
       # Optional: Override SMTP settings via environment variables
       # - SMTP_HOST=smtp.example.com
       # - SMTP_PORT=587

@@ -54,7 +54,7 @@ Detalles que suelen sorprender:
 
 Sirve para dos cosas: que pueda entrar con **Google** y que pueda pedir un **código de un solo uso**. Sin email, ese usuario solo puede entrar con usuario/email + contraseña [evidencia: server.js:1481-1503].
 
-Los usuarios que ya existían antes de esta función arrancan sin email: hay que cargárselo acá (o por la API admin, `PUT /admin/api/users/:username` con `{ "email": "..." }`). El servidor no completa emails por su cuenta [evidencia: verificado a c73bdc5 + v1.6.1 — la migración de arranque solo guarda el client id de Google].
+Los usuarios que ya existían antes de esta función arrancan sin email. Se les carga de tres maneras: acá en el panel, por la API admin (`PUT /admin/api/users/:username` con `{ "email": "..." }`), o con la variable de entorno `USER_EMAILS` del servidor, que al arrancar escribe el email en cada usuario listado **solo si todavía no tiene uno** [evidencia: server.js, `seedUserEmailsFromEnv` y `migrateLoginSettings`].
 
 ## Cómo cambiarle la contraseña a alguien que la perdió
 

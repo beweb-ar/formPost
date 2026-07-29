@@ -1,0 +1,71 @@
+# Manifest de herramientas de datos para el agente de ayuda de formPost.
+# Generado con tools-manifest@v1. Todo es de SOLO LECTURA.
+#
+# Los endpoints declarados acá viven en el router /agent-api de server.js y
+# fueron creados para esto: los endpoints existentes (/admin/api y /api/v1) no
+# servían — el primero exige una sesión de browser y el segundo una API key
+# estática por cuenta, y ambos devuelven la configuración completa del
+# formulario (webhooks, tokens) y los envíos con datos personales de terceros.
+#
+# Auth: user_token. La plataforma reenvía el JWT del usuario logueado como
+# `Authorization: Bearer <jwt>` (HS256, secret SUPPORTHUB_TOOLS_SECRET).
+# Claims usados: exp + ctx { accountId, role }. El servidor valida firma y
+# vencimiento, y scopea por ctx.accountId igual que el panel (ctx.role
+# "superadmin" ve todas las cuentas). Sin ctx válido responde 403.
+
+version: 1
+tools:
+  - name: listar_formularios
+    description: >
+      Formularios del usuario con su configuración de entrega (destinatarios,
+      remitente y si está activo, captcha, auto-respuesta, qué notificaciones
+      tiene prendidas) y sus contadores: envíos recibidos, mails enviados,
+      notificaciones y fecha del último envío. Usar cuando el usuario pregunta
+      qué formularios tiene, a dónde llegan los mensajes de uno, o cuántos
+      envíos lleva.
+    method: GET
+    path: /agent-api/forms
+    params: {}
+    auth: user_token
+    redact: [discordWebhook, telegramBotToken, telegramChatId, webhookUrl, captchaKey, secretKey, senderId]
+
+  - name: consultar_entregas
+    description: >
+      Últimas entregas de un formulario (mails, Discord y Telegram) con su
+      estado ok / error / skipped, el motivo del error cuando falló y el
+      proveedor usado. Usar cuando el usuario dice que no le llegan los mails
+      de un formulario, o quiere confirmar si un envío salió.
+    method: GET
+    path: /agent-api/deliveries
+    params:
+      formId: { type: string, required: true, description: "ID del formulario, tal como aparece en el panel" }
+      limit: { type: integer, required: false, description: "Cuántas entregas devolver (1-20, default 10)" }
+    auth: user_token
+    redact: [subject, messageId, response]
+
+  - name: consultar_actividad
+    description: >
+      Cuántos envíos recibió un formulario en los últimos N días, con el
+      desglose por día, el total almacenado y la fecha del último envío. No
+      devuelve el contenido de los envíos. Usar cuando el usuario pregunta si
+      está entrando algo, cuántas consultas recibió o desde cuándo no le llega
+      nada.
+    method: GET
+    path: /agent-api/activity
+    params:
+      formId: { type: string, required: true, description: "ID del formulario, tal como aparece en el panel" }
+      days: { type: integer, required: false, description: "Ventana en días (1-90, default 7)" }
+    auth: user_token
+    redact: [name, nombre, email, correo, message, mensaje, phone, telefono, ip, attachments, fields]
+
+  - name: consultar_remitentes
+    description: >
+      Remitentes de email disponibles para la cuenta (nombre, tipo SMTP o
+      SendGrid, dirección de envío y si están activos) y cuántos están activos.
+      Usar cuando ningún mail está saliendo, para verificar si el remitente
+      está desactivado o mal configurado.
+    method: GET
+    path: /agent-api/senders
+    params: {}
+    auth: user_token
+    redact: [pass, apiKey, user, host, port, domain]
