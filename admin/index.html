@@ -333,6 +333,21 @@
         .login-box input { max-width: 100%; }
         .login-box button { width: 100%; margin-top: 0.5rem; }
         .login-error { color: var(--danger); font-size: 0.875rem; margin-top: 0.5rem; text-align: center; }
+        .login-divider {
+            display: flex; align-items: center; gap: 0.6rem;
+            margin: 1rem 0; color: var(--text-secondary); font-size: 0.8rem;
+        }
+        .login-divider::before, .login-divider::after {
+            content: ''; flex: 1; height: 1px; background: var(--border-color);
+        }
+        .login-links { margin-top: 0.9rem; text-align: center; }
+        .login-link {
+            background: none; border: none; box-shadow: none;
+            color: var(--accent-primary); font-size: 0.83rem; font-weight: 500;
+            cursor: pointer; padding: 0.2rem; width: auto;
+            text-decoration: underline;
+        }
+        .login-link:hover { color: var(--accent-hover); }
 
         /* Toast notifications */
         .toast-container {
@@ -792,18 +807,50 @@
     <div class="login-overlay" id="loginOverlay">
         <div class="login-box">
             <p style="text-align:center;margin-bottom:1.5rem;"><img src="/logo.png" alt="formPost" style="height:48px;" /></p>
+
+            <!-- Google sign-in (only when the server has a client id configured) -->
+            <div id="googleSignInHolder" style="display:none;">
+                <div id="googleSignInBtn" style="display:flex;justify-content:center;"></div>
+                <div class="login-divider"><span data-i18n="loginOr">or</span></div>
+            </div>
+
+            <!-- Email + password -->
             <form id="loginForm">
                 <div class="form-group">
-                    <label for="loginUser" data-i18n="username">Username</label>
-                    <input type="text" id="loginUser" required autocomplete="username" />
+                    <label for="loginUser" data-i18n="emailOrUser">Email</label>
+                    <input type="text" id="loginUser" required autocomplete="username" placeholder="nombre@empresa.com" />
                 </div>
                 <div class="form-group">
                     <label for="loginPass" data-i18n="password">Password</label>
                     <input type="password" id="loginPass" required autocomplete="current-password" />
                 </div>
                 <button type="submit" data-i18n="loginBtn">Login</button>
-                <div class="login-error" id="loginError"></div>
             </form>
+
+            <!-- One-time code: step 1, ask for it -->
+            <form id="otpRequestForm" style="display:none;">
+                <div class="form-group">
+                    <label for="otpEmail" data-i18n="email">Email</label>
+                    <input type="email" id="otpEmail" required placeholder="nombre@empresa.com" />
+                </div>
+                <button type="submit" id="otpRequestBtn" data-i18n="otpSendBtn">Send me a code</button>
+            </form>
+
+            <!-- One-time code: step 2, enter it -->
+            <form id="otpVerifyForm" style="display:none;">
+                <p id="otpSentHint" style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;"></p>
+                <div class="form-group">
+                    <label for="otpCode" data-i18n="otpCodeLabel">6-digit code</label>
+                    <input type="text" id="otpCode" required inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="letter-spacing:0.4em;font-size:1.1rem;text-align:center;" />
+                </div>
+                <button type="submit" id="otpVerifyBtn" data-i18n="loginBtn">Login</button>
+            </form>
+
+            <div class="login-links">
+                <button type="button" class="login-link" id="linkOtp" onclick="setLoginMode('otp')" data-i18n="otpUseCode">Sign in with a one-time code</button>
+                <button type="button" class="login-link" id="linkPassword" style="display:none;" onclick="setLoginMode('password')" data-i18n="otpBackToPassword">Back to email and password</button>
+            </div>
+            <div class="login-error" id="loginError"></div>
         </div>
     </div>
 
@@ -1296,6 +1343,10 @@
                     <input type="text" id="userEditorUsername" required placeholder="cliente1-admin" />
                 </div>
                 <div class="form-group">
+                    <label data-i18n="userEmail">Email (used to sign in with Google or a one-time code)</label>
+                    <input type="email" id="userEditorEmail" placeholder="nombre@empresa.com" />
+                </div>
+                <div class="form-group">
                     <label id="userEditorPassLabel" data-i18n="password">Password</label>
                     <input type="password" id="userEditorPassword" placeholder="" minlength="8" />
                 </div>
@@ -1495,6 +1546,13 @@
                 loginTitle: 'Admin Login', username: 'Username', password: 'Password', loginBtn: 'Login',
                 invalidCredentials: 'Invalid credentials. Please try again.',
                 connectionError: 'Connection error. Please try again.',
+                email: 'Email', emailOrUser: 'Email', loginOr: 'or',
+                otpUseCode: 'Sign in with a one-time code',
+                otpBackToPassword: 'Back to email and password',
+                otpSendBtn: 'Send me a code',
+                otpCodeLabel: '6-digit code',
+                otpSentHint: 'If {email} belongs to a user, the code is on its way. It is valid for 10 minutes.',
+                sessionExpired: 'Your session expired. Sign in again.',
                 // Header
                 passwordBtn: '&#128274; Password', logout: 'Logout', sendersBtn: '&#9881; Senders',
                 // Status bar
@@ -1630,6 +1688,7 @@
                 confirmDeleteAccount: 'Delete account "{id}"? Its users will also be deleted. This cannot be undone.',
                 accountHasData: 'The account still has forms or senders. Delete or reassign them first.',
                 users: 'Users', newUser: '+ New User', role: 'Role', displayName: 'Display name (optional)',
+                userEmail: 'Email (used to sign in with Google or a one-time code)',
                 roleSuperadmin: 'Superadmin', roleAdmin: 'Account admin', roleUser: 'User',
                 userCreated: 'User created', userUpdated: 'User updated', userDeleted: 'User deleted',
                 confirmDeleteUser: 'Delete user "{id}"? This cannot be undone.',
@@ -1648,6 +1707,13 @@
                 loginTitle: 'Inicio de Sesi\u00f3n', username: 'Usuario', password: 'Contrase\u00f1a', loginBtn: 'Ingresar',
                 invalidCredentials: 'Credenciales inv\u00e1lidas. Intente nuevamente.',
                 connectionError: 'Error de conexi\u00f3n. Intente nuevamente.',
+                email: 'Email', emailOrUser: 'Email', loginOr: 'o',
+                otpUseCode: 'Ingresar con un código de un solo uso',
+                otpBackToPassword: 'Volver a email y contraseña',
+                otpSendBtn: 'Enviarme un código',
+                otpCodeLabel: 'Código de 6 dígitos',
+                otpSentHint: 'Si {email} corresponde a un usuario, el código ya salió. Vale por 10 minutos.',
+                sessionExpired: 'Tu sesión expiró. Ingresá de nuevo.',
                 // Header
                 passwordBtn: '&#128274; Clave', logout: 'Salir', sendersBtn: '&#9881; Senders',
                 // Status bar
@@ -1783,6 +1849,7 @@
                 confirmDeleteAccount: '¿Eliminar la cuenta "{id}"? Sus usuarios también se eliminarán. Esta acción no se puede deshacer.',
                 accountHasData: 'La cuenta todavía tiene formularios o senders. Eliminálos o reasignalos primero.',
                 users: 'Usuarios', newUser: '+ Nuevo Usuario', role: 'Rol', displayName: 'Nombre (opcional)',
+                userEmail: 'Email (con el que ingresa por Google o código de un solo uso)',
                 roleSuperadmin: 'Superadmin', roleAdmin: 'Admin de cuenta', roleUser: 'Usuario',
                 userCreated: 'Usuario creado', userUpdated: 'Usuario actualizado', userDeleted: 'Usuario eliminado',
                 confirmDeleteUser: '¿Eliminar el usuario "{id}"? Esta acción no se puede deshacer.',
@@ -1842,48 +1909,173 @@
         var auth = sessionStorage.getItem('adm_auth') || '';
 
         function checkAuth() {
+            loadAuthConfig();
             if (auth) {
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainContent').style.display = 'block';
                 document.getElementById('appFooter').style.display = 'flex';
                 loadAll();
+            } else {
+                setLoginMode('password');
             }
+        }
+
+        // ========== Login: Google / one-time code / email+password ==========
+        var otpEmailInFlight = '';
+
+        function loginError(msg) {
+            document.getElementById('loginError').textContent = msg || '';
+        }
+
+        // Switch between 'password', 'otp' (ask for a code) and 'code' (enter it)
+        function setLoginMode(mode) {
+            loginError('');
+            document.getElementById('loginForm').style.display = mode === 'password' ? '' : 'none';
+            document.getElementById('otpRequestForm').style.display = mode === 'otp' ? '' : 'none';
+            document.getElementById('otpVerifyForm').style.display = mode === 'code' ? '' : 'none';
+            document.getElementById('googleSignInHolder').style.display =
+                (googleReady && mode !== 'code') ? '' : 'none';
+            document.getElementById('linkOtp').style.display = mode === 'password' ? '' : 'none';
+            document.getElementById('linkPassword').style.display = mode === 'password' ? 'none' : '';
+            if (mode === 'otp') document.getElementById('otpEmail').focus();
+            if (mode === 'code') document.getElementById('otpCode').focus();
+        }
+
+        // A successful login of any kind lands here
+        function applySession(data) {
+            auth = 'Bearer ' + data.token;
+            sessionStorage.setItem('adm_auth', auth);
+            if (data.user) currentUser = data.user;
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+            document.getElementById('appFooter').style.display = 'flex';
+            document.getElementById('loginPass').value = '';
+            document.getElementById('otpCode').value = '';
+            loginError('');
+            loadAll();
+        }
+
+        async function postLogin(url, payload) {
+            var res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            var data = {};
+            try { data = await res.json(); } catch (e) {}
+            return { ok: res.ok, status: res.status, data: data };
         }
 
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            var u = document.getElementById('loginUser').value;
-            var p = document.getElementById('loginPass').value;
-            var testAuth = 'Basic ' + btoa(u + ':' + p);
+            var email = document.getElementById('loginUser').value.trim();
+            var password = document.getElementById('loginPass').value;
             try {
-                var res = await fetch('/admin/api/status', { headers: { Authorization: testAuth } });
-                if (res.ok) {
-                    auth = testAuth;
-                    sessionStorage.setItem('adm_auth', auth);
-                    document.getElementById('loginOverlay').style.display = 'none';
-                    document.getElementById('mainContent').style.display = 'block';
-                    document.getElementById('appFooter').style.display = 'flex';
-                    document.getElementById('loginError').textContent = '';
-                    loadAll();
-                } else {
-                    document.getElementById('loginError').textContent = L('invalidCredentials');
-                }
+                var r = await postLogin('/admin/api/auth/password', { email: email, password: password });
+                if (r.ok && r.data.token) applySession(r.data);
+                else loginError(r.data.error || L('invalidCredentials'));
             } catch (err) {
-                document.getElementById('loginError').textContent = L('connectionError');
+                loginError(L('connectionError'));
             }
         });
 
-        document.getElementById('logoutBtn').addEventListener('click', function() {
+        document.getElementById('otpRequestForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('otpRequestBtn');
+            var email = document.getElementById('otpEmail').value.trim();
+            btn.disabled = true;
+            try {
+                var r = await postLogin('/admin/api/auth/otp/request', { email: email });
+                if (r.ok) {
+                    // Always advance: the server never reveals whether the email exists
+                    otpEmailInFlight = email;
+                    document.getElementById('otpSentHint').textContent = L('otpSentHint').replace('{email}', email);
+                    setLoginMode('code');
+                } else {
+                    loginError(r.data.error || L('connectionError'));
+                }
+            } catch (err) {
+                loginError(L('connectionError'));
+            }
+            btn.disabled = false;
+        });
+
+        document.getElementById('otpVerifyForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('otpVerifyBtn');
+            var code = document.getElementById('otpCode').value.trim();
+            btn.disabled = true;
+            try {
+                var r = await postLogin('/admin/api/auth/otp/verify', { email: otpEmailInFlight, code: code });
+                if (r.ok && r.data.token) applySession(r.data);
+                else loginError(r.data.error || L('invalidCredentials'));
+            } catch (err) {
+                loginError(L('connectionError'));
+            }
+            btn.disabled = false;
+        });
+
+        // ---- Google Identity Services ----
+        var googleReady = false;
+
+        async function onGoogleCredential(response) {
+            loginError('');
+            try {
+                var r = await postLogin('/admin/api/auth/google', { credential: response.credential });
+                if (r.ok && r.data.token) applySession(r.data);
+                else loginError(r.data.error || L('invalidCredentials'));
+            } catch (e) {
+                loginError(L('connectionError'));
+            }
+        }
+
+        function renderGoogleButton(clientId) {
+            if (!window.google || !google.accounts || !google.accounts.id) return;
+            google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
+            google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), {
+                theme: 'outline', size: 'large', text: 'signin_with', shape: 'rectangular', width: 300
+            });
+            googleReady = true;
+            document.getElementById('googleSignInHolder').style.display = '';
+        }
+
+        // Ask the server what the login screen should offer
+        async function loadAuthConfig() {
+            try {
+                var res = await fetch('/admin/api/auth/config');
+                var cfg = await res.json();
+                if (cfg.lang && i18n[cfg.lang] && !localStorage.getItem('formpost_lang')) {
+                    currentLang = cfg.lang;
+                    applyTranslations();
+                }
+                if (cfg.googleEnabled && cfg.googleClientId) {
+                    var s = document.createElement('script');
+                    s.src = 'https://accounts.google.com/gsi/client';
+                    s.async = true;
+                    s.defer = true;
+                    s.onload = function() { renderGoogleButton(cfg.googleClientId); };
+                    document.head.appendChild(s);
+                }
+            } catch (e) {}
+        }
+
+        document.getElementById('logoutBtn').addEventListener('click', function() { doLogout(); });
+
+        function doLogout(message) {
             disconnectInbox();
             resetInboxOutbox();
             sessionStorage.removeItem('adm_auth');
             auth = '';
+            currentUser = null;
             document.getElementById('loginOverlay').style.display = 'flex';
             document.getElementById('mainContent').style.display = 'none';
             document.getElementById('appFooter').style.display = 'none';
             document.getElementById('loginUser').value = '';
             document.getElementById('loginPass').value = '';
-        });
+            document.getElementById('otpCode').value = '';
+            setLoginMode('password');
+            loginError(message || '');
+        }
 
         // ========== Loading helpers ==========
         function setLoading(btn, loading) {
@@ -2274,6 +2466,11 @@
                     fetch('/admin/api/status', { headers: { Authorization: auth } }),
                     fetch('/admin/api/templates', { headers: { Authorization: auth } })
                 ]);
+                // Expired or revoked session: back to the login screen
+                if (results[0].status === 401 || results[0].status === 403) {
+                    doLogout(L('sessionExpired'));
+                    return;
+                }
                 var data = await results[0].json();
                 var templates = await results[1].json();
                 if (data.user) currentUser = data.user;
@@ -3812,13 +4009,14 @@
                 container.innerHTML = '<div class="empty-state">-</div>';
                 return;
             }
-            var html = '<table class="submissions-table"><thead><tr><th>' + L('username') + '</th><th>' + L('displayName') + '</th><th>' + L('role') + '</th><th>' + L('account') + '</th><th></th></tr></thead><tbody>';
+            var html = '<table class="submissions-table"><thead><tr><th>' + L('username') + '</th><th>Email</th><th>' + L('displayName') + '</th><th>' + L('role') + '</th><th>' + L('account') + '</th><th></th></tr></thead><tbody>';
             names.forEach(function(username) {
                 var u = usersCache[username];
                 var roleLabel = u.role === 'superadmin' ? L('roleSuperadmin') : u.role === 'admin' ? L('roleAdmin') : L('roleUser');
                 var acctLabel = u.accountId ? esc((accountsCache[u.accountId] && accountsCache[u.accountId].name) || u.accountId) : '-';
                 html += '<tr>' +
                     '<td><code>' + esc(username) + '</code>' + (currentUser && username === currentUser.username ? ' <span style="font-size:0.65rem;color:var(--text-secondary);">(you)</span>' : '') + '</td>' +
+                    '<td>' + (u.email ? esc(u.email) : '<span style="color:var(--text-secondary);">-</span>') + '</td>' +
                     '<td>' + esc(u.name || '') + '</td>' +
                     '<td>' + roleLabel + '</td>' +
                     '<td>' + acctLabel + '</td>' +
@@ -3859,6 +4057,7 @@
             document.getElementById('userEditorRole').value = u ? u.role : 'user';
             if (u && u.accountId) select.value = u.accountId;
             document.getElementById('userEditorName').value = u ? (u.name || '') : '';
+            document.getElementById('userEditorEmail').value = u ? (u.email || '') : '';
             document.getElementById('userEditorTitle').textContent = username ? L('edit') + ': ' + username : L('newUser');
             updateUserEditorAccountVisibility();
             document.getElementById('userEditorModal').style.display = 'flex';
@@ -3872,7 +4071,8 @@
             var payload = {
                 role: document.getElementById('userEditorRole').value,
                 accountId: document.getElementById('userEditorAccount').value || null,
-                name: document.getElementById('userEditorName').value.trim()
+                name: document.getElementById('userEditorName').value.trim(),
+                email: document.getElementById('userEditorEmail').value.trim()
             };
             var password = document.getElementById('userEditorPassword').value;
             if (password) payload.password = password;

@@ -44,6 +44,7 @@
 - **Multi-sender de email** - Múltiples senders (relays SMTP o SendGrid API) con toggle activo/desactivado por sender
 - **Soporte SendGrid** - Envío vía la API HTTP v3 de SendGrid con solo una API key y un dominio de envío verificado (no requiere puertos SMTP)
 - **API para Agentes** - API REST auto-documentada (`/api/v1`) para que agentes de IA creen cuentas, formularios, senders y plantillas programáticamente
+- **Tres formas de ingresar** - Google, email + código de un solo uso (OTP) o email + contraseña. No hay auto-registro: el email tiene que pertenecer a un usuario existente
 - **Múltiples destinatarios** - Enviar a varias direcciones email por formulario (separados por coma, UI de chips)
 - **Notificaciones por email** - Plantillas HTML personalizadas con inyección dinámica de campos
 - **Archivos adjuntos** - Recibe archivos (máx 5, 10 MB cada uno) y los reenvía por email, Discord y Telegram
@@ -218,6 +219,8 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | `ADMIN_USERNAME` | - | Crea/actualiza un usuario superadmin con este nombre |
 | `ADMIN_PASSWORD` | - | Contraseña del superadmin de `ADMIN_USERNAME` |
 | `API_KEY` | - | Sobreescribe la clave maestra de la API para agentes (`/api/v1`, sin restricción) |
+| `GOOGLE_CLIENT_ID` | (se guarda en `config.auth.googleClientId`) | Client id de Google OAuth para el botón "Acceder con Google" del panel |
+| `USER_EMAILS` | - | Carga inicial de emails de usuarios: `usuario1=mail1@dom,usuario2=mail2@dom` (solo completa los que no tienen email) |
 | `ENCRYPTION_KEY` | auto | 64 caracteres hex (32 bytes) para cifrar los secretos guardados (contraseñas SMTP, keys de SendGrid, tokens de Telegram, claves de captcha). Si no se define, se genera una clave en `data/.secret.key` — **hacé backup de ese archivo**: sin él no se pueden recuperar los secretos cifrados |
 
 ## Cuentas, Usuarios y Roles (v1.4)
@@ -227,6 +230,8 @@ formPost es multi-cuenta. Los datos (formularios, senders, plantillas, bandejas,
 - **superadmin** — ve y gestiona todo: cuentas, usuarios, senders globales, plantillas compartidas, backup/restore, la clave maestra y las API keys de todas las cuentas. Las instalaciones existentes migran solas: el admin anterior pasa a ser superadmin y los formularios existentes quedan en la cuenta `default`.
 - **admin** (admin de cuenta) — gestión completa de los formularios, senders, plantillas y datos de su propia cuenta. No puede crear cuentas ni usuarios.
 - **usuario** — solo lectura dentro de la cuenta: ve bandejas de entrada/salida y envíos, y puede ver/editar las plantillas de la cuenta. No puede crear ni modificar formularios ni senders.
+
+**Ingreso al panel**: cada usuario puede entrar de tres formas, todas contra el mismo usuario: **Google** (botón "Acceder con Google"), **email + código de un solo uso** (código de 6 dígitos que llega por mail, vale 10 minutos y una sola vez) o **email + contraseña**. Para Google y para el código, el usuario tiene que tener cargado su **email** — no hay auto-registro: si el email no corresponde a un usuario existente, no se entra. El ingreso emite un token de sesión firmado (12 h) que el panel manda como `Authorization: Bearer`.
 
 **Senders globales**: un sender sin cuenta es *global* — todas las cuentas pueden usarlo en sus formularios, pero solo un superadmin puede editarlo. Los senders existentes migran como globales.
 

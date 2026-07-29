@@ -45,6 +45,7 @@
 - **Multi-sender email** - Configure multiple senders (SMTP relays or SendGrid API) with active/disabled toggle per sender
 - **SendGrid support** - Send via the SendGrid v3 HTTP API with just an API key and a verified sending domain (no SMTP ports needed)
 - **Agent API** - Self-documented REST API (`/api/v1`) so AI agents can create accounts, forms, senders and templates programmatically
+- **Three ways to sign in** - Google, email + one-time code (OTP), or email + password. Users are never self-registered: the email must already belong to a user
 - **Multiple recipients** - Send to multiple email addresses per form (comma-separated, chip UI)
 - **HTML email notifications** - Custom email templates per form with dynamic field injection
 - **File attachments** - Accept file uploads (max 5 files, 10 MB each) and forward them via email, Discord, and Telegram
@@ -223,6 +224,8 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `ADMIN_USERNAME` | - | Upsert a superadmin user with this username |
 | `ADMIN_PASSWORD` | - | Password for the `ADMIN_USERNAME` superadmin |
 | `API_KEY` | - | Override the master Agent API key (`/api/v1`, unrestricted) |
+| `GOOGLE_CLIENT_ID` | (stored in `config.auth.googleClientId`) | Google OAuth client id for "Sign in with Google" on the admin panel |
+| `USER_EMAILS` | - | One-time seeding of user emails: `user1=mail1@dom,user2=mail2@dom` (only fills users that have no email yet) |
 | `ENCRYPTION_KEY` | auto | 64 hex chars (32 bytes) used to encrypt stored secrets (SMTP passwords, SendGrid keys, Telegram tokens, captcha secrets). If unset, a key is auto-generated at `data/.secret.key` — **back that file up**: without it, encrypted secrets cannot be recovered |
 
 ## Accounts, Users & Roles (v1.4)
@@ -232,6 +235,8 @@ formPost is multi-tenant. Data (forms, senders, templates, inbox/outbox, statist
 - **superadmin** — sees and manages everything: accounts, users, global senders, shared templates, backup/restore, the master API key and every account's API key. Existing installs migrate automatically: the legacy admin becomes a superadmin and existing forms move to the `default` account.
 - **admin** (account admin) — full management of their own account's forms, senders, templates and data. Cannot create accounts or users.
 - **user** — read-mostly within the account: views inbox/outbox and submissions, and can view/edit the account's templates. Cannot create or modify forms or senders.
+
+**Signing in**: every user has three ways in, all resolving to the same user: **Google** ("Sign in with Google" button), **email + one-time code** (a 6-digit code emailed to them, valid for 10 minutes and single use) or **email + password**. Google and one-time codes require the user to have an **email** on file — there is no self-registration: if the email does not belong to an existing user, sign-in is refused. A successful sign-in issues a signed session token (12 h) that the panel sends as `Authorization: Bearer`.
 
 **Global senders**: a sender without an account is *global* — every account can use it in their forms, but only a superadmin can edit it. Existing senders migrate as global.
 
@@ -373,6 +378,11 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 | `POST` | `/admin/api/restore` | Restore from backup |
 | `POST` | `/admin/api/inbox/token` | Issue SSE token |
 | `GET` | `/admin/api/inbox/stream` | SSE stream (inbox + outbox events) |
+| `GET` | `/admin/api/auth/config` | Public: which sign-in methods the login screen should offer |
+| `POST` | `/admin/api/auth/password` | Public: sign in with email (or legacy username) + password. Returns a session token |
+| `POST` | `/admin/api/auth/otp/request` | Public: email a 6-digit one-time code (always answers `202`, never reveals if the email exists) |
+| `POST` | `/admin/api/auth/otp/verify` | Public: exchange email + code for a session token |
+| `POST` | `/admin/api/auth/google` | Public: exchange a Google ID token for a session token |
 | `GET` | `/admin/api/apikey` | View Agent API key and enabled state |
 | `POST` | `/admin/api/apikey/regenerate` | Regenerate the Agent API key |
 | `PUT` | `/admin/api/apikey` | Enable/disable the Agent API (`{ "enabled": true }`) |

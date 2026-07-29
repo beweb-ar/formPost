@@ -182,7 +182,23 @@ const serverMessages = {
         passwordUpdated: 'Password updated successfully',
         failedUpdatePassword: 'Failed to update password',
         failedRetrieveStatus: 'Failed to retrieve status',
-        domainNotAllowed: 'Submissions from this domain are not allowed.'
+        domainNotAllowed: 'Submissions from this domain are not allowed.',
+        // Login (password / OTP / Google)
+        loginInvalid: 'Invalid credentials.',
+        loginEmailRequired: 'Email is required.',
+        loginCodeRequired: 'Email and code are required.',
+        googleDisabled: 'Google sign-in is not enabled on this server.',
+        googleInvalidToken: 'Could not validate the Google sign-in.',
+        googleEmailNotVerified: 'Your Google email is not verified.',
+        googleUserNotFound: 'There is no user with that email. Ask your administrator to create it — accounts are not self-registered.',
+        otpNoSender: 'The one-time code cannot be sent: no email sender is configured.',
+        otpSendFailed: 'We could not send the code by email. Try again in a few minutes.',
+        otpTooMany: 'Too many codes requested. Try again later.',
+        otpInvalid: 'Invalid code.',
+        otpExpired: 'The code expired — request a new one.',
+        otpTooManyAttempts: 'Too many attempts with this code — request a new one.',
+        otpSubject: 'Your formPost access code',
+        sessionExpired: 'Your session expired. Sign in again.'
     },
     es: {
         invalidFormId: 'ID de formulario no v\u00e1lido.',
@@ -223,7 +239,23 @@ const serverMessages = {
         passwordUpdated: 'Contrase\u00f1a actualizada correctamente',
         failedUpdatePassword: 'Error al actualizar contrase\u00f1a',
         failedRetrieveStatus: 'Error al obtener estado',
-        domainNotAllowed: 'No se permiten envíos desde este dominio.'
+        domainNotAllowed: 'No se permiten envíos desde este dominio.',
+        // Login (contraseña / OTP / Google)
+        loginInvalid: 'Credenciales inválidas.',
+        loginEmailRequired: 'El email es requerido.',
+        loginCodeRequired: 'Email y código son requeridos.',
+        googleDisabled: 'El ingreso con Google no está habilitado en este servidor.',
+        googleInvalidToken: 'No se pudo validar el ingreso con Google.',
+        googleEmailNotVerified: 'Tu email de Google no está verificado.',
+        googleUserNotFound: 'No existe un usuario con ese email. Pedile a tu administrador que lo cree — no hay auto-registro.',
+        otpNoSender: 'No se puede enviar el código: no hay ningún sender de email configurado.',
+        otpSendFailed: 'No pudimos enviar el código por email. Probá de nuevo en unos minutos.',
+        otpTooMany: 'Pediste demasiados códigos. Probá de nuevo más tarde.',
+        otpInvalid: 'Código inválido.',
+        otpExpired: 'El código expiró — pedí uno nuevo.',
+        otpTooManyAttempts: 'Demasiados intentos con este código — pedí uno nuevo.',
+        otpSubject: 'Tu código de acceso a formPost',
+        sessionExpired: 'Tu sesión expiró. Ingresá de nuevo.'
     }
 };
 const t = serverMessages[LANG] || serverMessages.es;
@@ -349,11 +381,63 @@ async function migrateMultiTenant() {
     }
 }
 
+// ===== Login settings (Google sign-in + per-user email) =====
+// The Google client id is public by design (it travels to the browser).
+// Precedence: GOOGLE_CLIENT_ID env var > config.auth.googleClientId.
+const DEFAULT_GOOGLE_CLIENT_ID = '1053341747502-cdp5kkmgipvvov1rrdurkdejhkt0k17e.apps.googleusercontent.com';
+
+// Emails of users that existed before this field: seeded once so they can use
+// Google / one-time-code sign-in. Only applied when the user has no email yet.
+// Override or extend with the USER_EMAILS env var (see seedUserEmailsFromEnv).
+const LEGACY_USER_EMAILS = {
+    rollpix: 'nicolas@rollpix.com',
+    mariano: 'MLerner@exactian.com'
+};
+
+function googleClientId() {
+    return (process.env.GOOGLE_CLIENT_ID || (config.auth && config.auth.googleClientId) || '').trim();
+}
+
+// One-time email seeding for users created before the email field existed.
+// Format: USER_EMAILS="usuario1=mail1@dom,usuario2=mail2@dom"
+function seedUserEmailsFromEnv() {
+    const raw = (process.env.USER_EMAILS || '').trim();
+    const out = {};
+    for (const pair of raw.split(',')) {
+        const [user, email] = pair.split('=').map(s => (s || '').trim());
+        if (user && email && isValidEmail(email)) out[user] = email;
+    }
+    return out;
+}
+
+// Backfill: default Google client id + emails for pre-existing users.
+async function migrateLoginSettings() {
+    const seeds = { ...LEGACY_USER_EMAILS, ...seedUserEmailsFromEnv() };
+    const needsClientId = !config.auth || !config.auth.googleClientId;
+    const needsEmails = Object.entries(seeds).some(([u, mail]) =>
+        (config.users || {})[u] && !(config.users[u].email || '').trim() && !userEmailTaken(mail, u));
+    if (!needsClientId && !needsEmails) return;
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.auth) cfg.auth = {};
+            if (!cfg.auth.googleClientId) cfg.auth.googleClientId = DEFAULT_GOOGLE_CLIENT_ID;
+            for (const [username, email] of Object.entries(seeds)) {
+                const u = (cfg.users || {})[username];
+                if (u && !(u.email || '').trim()) u.email = email;
+            }
+        });
+        log.info('Login settings migration applied (Google client id + user emails)');
+    } catch (e) {
+        log.error('Login settings migration failed', { error: e.message });
+    }
+}
+
 // Run startup config migrations sequentially — they rewrite config.json and would race otherwise.
 // The final no-op write encrypts any plaintext secrets via the writeConfigSafe hook.
 ensurePasswordHashed()
     .then(ensureApiKey)
     .then(migrateMultiTenant)
+    .then(migrateLoginSettings)
     .then(() => writeConfigSafe(() => {}))
     .catch(e => log.error('Startup migrations failed', { error: e.message }));
 
@@ -362,12 +446,13 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+            // accounts.google.com / gstatic: Google Identity Services (sign-in button)
+            styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://accounts.google.com", "https://apis.google.com"],
             scriptSrcAttr: ["'unsafe-inline'"],
-            connectSrc: ["'self'", "https://cdn.jsdelivr.net"],
-            imgSrc: ["'self'", "data:"],
-            frameSrc: ["'self'"],
+            connectSrc: ["'self'", "https://cdn.jsdelivr.net", "https://accounts.google.com"],
+            imgSrc: ["'self'", "data:", "https://lh3.googleusercontent.com"],
+            frameSrc: ["'self'", "https://accounts.google.com"],
         }
     }
 }));
@@ -1350,9 +1435,188 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Admin authentication middleware
+// ===================== Login: sessions, one-time codes, Google =====================
+// Three ways in, all resolving to the same session token:
+//   1. email (or username) + password   2. email + one-time code (OTP)   3. Google
+// Users are never auto-registered: the email must already belong to a user.
+
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 h
+const SESSION_PREFIX = 'fps1.';
+// Session signing key derived from the server's encryption key, so tokens keep
+// working across restarts and die if the encryption key is rotated.
+const SESSION_KEY = nodeCrypto.createHmac('sha256', ENCRYPTION_KEY).update('formpost-session-v1').digest();
+
+function b64url(buf) {
+    return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function issueSessionToken(username) {
+    const payload = b64url(JSON.stringify({ u: username, exp: Date.now() + SESSION_TTL_MS }));
+    const sig = b64url(nodeCrypto.createHmac('sha256', SESSION_KEY).update(payload).digest());
+    return SESSION_PREFIX + payload + '.' + sig;
+}
+
+// Returns the username carried by a valid, unexpired token, or null.
+function verifySessionToken(token) {
+    if (typeof token !== 'string' || !token.startsWith(SESSION_PREFIX)) return null;
+    const [payload, sig] = token.slice(SESSION_PREFIX.length).split('.');
+    if (!payload || !sig) return null;
+    const expected = b64url(nodeCrypto.createHmac('sha256', SESSION_KEY).update(payload).digest());
+    const a = Buffer.from(sig), b = Buffer.from(expected);
+    if (a.length !== b.length || !nodeCrypto.timingSafeEqual(a, b)) return null;
+    try {
+        const data = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+        if (!data || !data.u || !data.exp || data.exp < Date.now()) return null;
+        return data.u;
+    } catch (e) {
+        return null;
+    }
+}
+
+function normalizeEmail(email) {
+    return String(email || '').trim().toLowerCase();
+}
+
+// Find a user by email (case-insensitive). Returns [username, userRecord] or null.
+function findUserByEmail(email) {
+    const wanted = normalizeEmail(email);
+    if (!wanted) return null;
+    for (const [username, u] of Object.entries(config.users || {})) {
+        if (normalizeEmail(u.email) === wanted) return [username, u];
+    }
+    return null;
+}
+
+// Is this email already used by another user? (email is the login identifier)
+function userEmailTaken(email, exceptUsername) {
+    const found = findUserByEmail(email);
+    return !!found && found[0] !== exceptUsername;
+}
+
+// Login identifier accepts email or username (the historic login).
+function findLoginUser(identifier) {
+    const byEmail = findUserByEmail(identifier);
+    if (byEmail) return byEmail;
+    const username = String(identifier || '').trim();
+    const rec = (config.users || {})[username];
+    return rec ? [username, rec] : null;
+}
+
+// ---- One-time codes (OTP) ----
+// In memory on purpose: codes live 10 minutes, a restart simply invalidates them.
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 3;
+const OTP_MAX_PER_HOUR = 5;
+const loginCodes = new Map();   // email -> { codeHash, expires, attempts }
+const otpRequestLog = new Map(); // email -> [timestamps]
+
+function hashLoginCode(code) {
+    return nodeCrypto.createHmac('sha256', SESSION_KEY).update('otp:' + String(code)).digest('hex');
+}
+
+function otpRequestAllowed(email) {
+    const now = Date.now();
+    const recent = (otpRequestLog.get(email) || []).filter(ts => now - ts < 60 * 60 * 1000);
+    if (recent.length >= OTP_MAX_PER_HOUR) {
+        otpRequestLog.set(email, recent);
+        return false;
+    }
+    recent.push(now);
+    otpRequestLog.set(email, recent);
+    return true;
+}
+
+// Pick a transporter to deliver the code: the user's account sender first,
+// then any global one. Same visibility rules as the rest of the app.
+function getTransporterForAccount(accountId) {
+    const ids = Object.keys(transporters).filter(id => {
+        const s = config.senders[id];
+        return s && s.active !== false && (accountId === null || senderUsableByAccount(s, accountId));
+    });
+    ids.sort((a, b) => {
+        const aOwn = config.senders[a].accountId === accountId ? 0 : 1;
+        const bOwn = config.senders[b].accountId === accountId ? 0 : 1;
+        return aOwn - bOwn;
+    });
+    const id = ids[0];
+    return id ? { transporter: transporters[id], senderCfg: config.senders[id] } : null;
+}
+
+async function sendLoginCodeEmail(user, email, code) {
+    const senderInfo = getTransporterForAccount(user.role === 'superadmin' ? null : (user.accountId || 'default'));
+    if (!senderInfo) throw new Error('no-sender');
+    const minutes = Math.round(OTP_TTL_MS / 60000);
+    const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#212529;">
+        <h2 style="color:#2c3d7f;">formPost</h2>
+        <p>${escapeHtml(user.name || '')}${user.name ? ', t' : 'T'}u código de acceso de un solo uso es:</p>
+        <p style="font-size:30px;font-weight:700;letter-spacing:6px;color:#2c3d7f;">${escapeHtml(code)}</p>
+        <p>Vence en ${minutes} minutos y sirve una sola vez.</p>
+        <p style="color:#6c757d;font-size:13px;">Si no pediste este código, ignorá este mensaje.</p>
+    </div>`;
+    await senderInfo.transporter.sendMail({
+        from: `"formPost" <${senderInfo.senderCfg.from}>`,
+        to: email,
+        subject: t.otpSubject,
+        html
+    });
+}
+
+// ---- Google sign-in ----
+// The browser gets an ID token from Google Identity Services and posts it here.
+// Anti-substitution: the token must have been issued for OUR client id.
+async function verifyGoogleIdToken(credential) {
+    const clientId = googleClientId();
+    if (!clientId) { const e = new Error(t.googleDisabled); e.code = 'disabled'; throw e; }
+    let data;
+    try {
+        const resp = await axios.get('https://oauth2.googleapis.com/tokeninfo', {
+            params: { id_token: credential },
+            timeout: 8000
+        });
+        data = resp.data || {};
+    } catch (err) {
+        const e = new Error(t.googleInvalidToken); e.code = 'invalid'; throw e;
+    }
+    if (data.aud !== clientId && data.azp !== clientId) {
+        log.warn('Google token with foreign audience rejected', { aud: data.aud, azp: data.azp });
+        const e = new Error(t.googleInvalidToken); e.code = 'invalid'; throw e;
+    }
+    if (!data.email) { const e = new Error(t.googleInvalidToken); e.code = 'invalid'; throw e; }
+    if (data.email_verified !== true && data.email_verified !== 'true') {
+        const e = new Error(t.googleEmailNotVerified); e.code = 'unverified'; throw e;
+    }
+    return { email: normalizeEmail(data.email), name: data.name || '' };
+}
+
+function sessionResponse(res, username, user, method) {
+    log.info('Admin login', { username, method, role: user.role || 'user' });
+    res.json({
+        token: issueSessionToken(username),
+        user: {
+            username,
+            role: user.role || 'user',
+            accountId: user.role === 'superadmin' ? null : (user.accountId || null),
+            name: user.name || '',
+            email: user.email || ''
+        }
+    });
+}
+
+// Admin authentication middleware.
+// Accepts a session token (Authorization: Bearer <token>) or HTTP Basic.
 async function adminAuth(req, res, next) {
     const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const username = verifySessionToken(authHeader.slice(7).trim());
+        const userRec = username && (config.users || {})[username];
+        if (!userRec) return res.status(401).json({ error: t.sessionExpired });
+        req.user = {
+            username,
+            role: userRec.role || 'user',
+            accountId: userRec.role === 'superadmin' ? null : (userRec.accountId || null)
+        };
+        return next();
+    }
     if (!authHeader || !authHeader.startsWith('Basic ')) {
         res.set('WWW-Authenticate', 'Basic realm="Admin Area"');
         return res.status(401).send(t.authRequired);
@@ -1536,7 +1800,8 @@ adminRouter.get('/status', async (req, res) => {
                 username: req.user.username,
                 role: req.user.role,
                 accountId: req.user.accountId,
-                accountName
+                accountName,
+                email: ((config.users || {})[req.user.username] || {}).email || ''
             },
             memory: {
                 used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
@@ -2663,13 +2928,13 @@ function countSuperadmins() {
 adminRouter.get('/users', requireRole('superadmin'), (req, res) => {
     const out = {};
     for (const [username, u] of Object.entries(config.users || {})) {
-        out[username] = { role: u.role || 'user', accountId: u.accountId || null, name: u.name || '' };
+        out[username] = { role: u.role || 'user', accountId: u.accountId || null, name: u.name || '', email: u.email || '' };
     }
     res.json(out);
 });
 
 adminRouter.post('/users', requireRole('superadmin'), async (req, res) => {
-    const { username, password, role, accountId, name } = req.body || {};
+    const { username, password, role, accountId, name, email } = req.body || {};
     if (!username || !/^[a-zA-Z0-9_.@-]+$/.test(username) || username.length > 64) {
         return res.status(400).json({ error: 'Invalid username' });
     }
@@ -2678,6 +2943,14 @@ adminRouter.post('/users', requireRole('superadmin'), async (req, res) => {
     }
     if (!password || password.length < 8) {
         return res.status(400).json({ error: t.passwordTooShort });
+    }
+    // Email is the login identifier for Google and one-time-code sign-in
+    const userEmail = String(email || '').trim();
+    if (userEmail && !isValidEmail(userEmail)) {
+        return res.status(400).json({ error: t.invalidEmail });
+    }
+    if (userEmail && userEmailTaken(userEmail, username)) {
+        return res.status(409).json({ error: 'That email is already used by another user' });
     }
     if (!VALID_ROLES.includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
@@ -2693,7 +2966,8 @@ adminRouter.post('/users', requireRole('superadmin'), async (req, res) => {
                 passwordHash,
                 role,
                 accountId: role === 'superadmin' ? null : accountId,
-                name: String(name || '').substring(0, 120)
+                name: String(name || '').substring(0, 120),
+                email: userEmail
             };
         });
         res.status(201).json({ message: 'User created' });
@@ -2706,9 +2980,18 @@ adminRouter.put('/users/:username', requireRole('superadmin'), async (req, res) 
     const { username } = req.params;
     const existing = (config.users || {})[username];
     if (!existing) return res.status(404).json({ error: 'User not found' });
-    const { password, role, accountId, name } = req.body || {};
+    const { password, role, accountId, name, email } = req.body || {};
     if (role !== undefined && !VALID_ROLES.includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
+    }
+    if (email !== undefined) {
+        const userEmail = String(email || '').trim();
+        if (userEmail && !isValidEmail(userEmail)) {
+            return res.status(400).json({ error: t.invalidEmail });
+        }
+        if (userEmail && userEmailTaken(userEmail, username)) {
+            return res.status(409).json({ error: 'That email is already used by another user' });
+        }
     }
     const newRole = role !== undefined ? role : existing.role;
     // Never demote the last superadmin
@@ -2733,6 +3016,7 @@ adminRouter.put('/users/:username', requireRole('superadmin'), async (req, res) 
             if (role !== undefined) u.role = role;
             u.accountId = (role !== undefined ? role : u.role) === 'superadmin' ? null : (accountId !== undefined ? accountId : u.accountId);
             if (name !== undefined) u.name = String(name || '').substring(0, 120);
+            if (email !== undefined) u.email = String(email || '').trim();
         });
         res.json({ message: 'User updated' });
     } catch (e) {
@@ -2759,6 +3043,132 @@ adminRouter.delete('/users/:username', requireRole('superadmin'), async (req, re
         res.status(500).json({ error: t.failedSaveConfig });
     }
 });
+
+// ===================== Public login endpoints (/admin/api/auth) =====================
+// Mounted BEFORE the admin router so they are reachable without a session.
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Too many login attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true
+});
+
+const otpRequestLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many codes requested. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+const authRouter = express.Router();
+
+// What the login screen should offer (public, no secrets: the Google client id
+// is meant to travel to the browser).
+authRouter.get('/config', (req, res) => {
+    res.json({
+        googleClientId: googleClientId(),
+        googleEnabled: !!googleClientId(),
+        otpEnabled: Object.values(config.senders || {}).some(s => s.active !== false),
+        lang: LANG
+    });
+});
+
+// Email (or legacy username) + password
+authRouter.post('/password', loginLimiter, async (req, res) => {
+    const { email, password } = req.body || {};
+    const identifier = String(email || '').trim();
+    if (!identifier || !password) return res.status(400).json({ error: t.loginInvalid });
+    const found = findLoginUser(identifier);
+    if (found && found[1].passwordHash && await bcrypt.compare(String(password), found[1].passwordHash)) {
+        return sessionResponse(res, found[0], found[1], 'password');
+    }
+    // Pre-migration fallback (legacy single-admin config)
+    if (config.admin && identifier === config.admin.username && config.admin.password
+        && await bcrypt.compare(String(password), config.admin.password)) {
+        return sessionResponse(res, identifier, { role: 'superadmin', accountId: null }, 'password');
+    }
+    log.warn('Login failed', { identifier, method: 'password', ip: req.ip });
+    res.status(401).json({ error: t.loginInvalid });
+});
+
+// Ask for a one-time code. Always answers 202 so the endpoint never reveals
+// which emails exist.
+authRouter.post('/otp/request', otpRequestLimiter, async (req, res) => {
+    const email = normalizeEmail((req.body || {}).email);
+    if (!email || !isValidEmail(email)) return res.status(400).json({ error: t.loginEmailRequired });
+    const found = findUserByEmail(email);
+    if (!found) {
+        log.warn('One-time code requested for unknown email', { email, ip: req.ip });
+        return res.status(202).json({ ok: true });
+    }
+    if (!otpRequestAllowed(email)) return res.status(429).json({ error: t.otpTooMany });
+    const code = String(nodeCrypto.randomInt(0, 1000000)).padStart(6, '0');
+    loginCodes.set(email, { codeHash: hashLoginCode(code), expires: Date.now() + OTP_TTL_MS, attempts: 0 });
+    try {
+        await sendLoginCodeEmail(found[1], found[1].email || email, code);
+    } catch (e) {
+        loginCodes.delete(email);
+        if (e.message === 'no-sender') {
+            log.error('Cannot send one-time code: no active sender', { email });
+            return res.status(503).json({ error: t.otpNoSender });
+        }
+        log.error('Failed to send one-time code', { email, error: e.message });
+        return res.status(502).json({ error: t.otpSendFailed });
+    }
+    log.info('One-time code sent', { username: found[0] });
+    res.status(202).json({ ok: true });
+});
+
+// Verify the one-time code: single use, 10 minutes, 3 attempts.
+authRouter.post('/otp/verify', loginLimiter, (req, res) => {
+    const { email, code } = req.body || {};
+    const normalized = normalizeEmail(email);
+    if (!normalized || !code) return res.status(400).json({ error: t.loginCodeRequired });
+    const entry = loginCodes.get(normalized);
+    const found = findUserByEmail(normalized);
+    if (!entry || !found) return res.status(401).json({ error: t.otpInvalid });
+    if (entry.expires < Date.now()) {
+        loginCodes.delete(normalized);
+        return res.status(401).json({ error: t.otpExpired });
+    }
+    if (entry.attempts >= OTP_MAX_ATTEMPTS) {
+        loginCodes.delete(normalized);
+        return res.status(429).json({ error: t.otpTooManyAttempts });
+    }
+    const given = hashLoginCode(String(code).trim());
+    if (given !== entry.codeHash) {
+        entry.attempts++;
+        log.warn('Invalid one-time code', { email: normalized, attempts: entry.attempts, ip: req.ip });
+        return res.status(401).json({ error: t.otpInvalid });
+    }
+    loginCodes.delete(normalized);
+    sessionResponse(res, found[0], found[1], 'otp');
+});
+
+// Google sign-in. The user must already exist: no self-registration.
+authRouter.post('/google', loginLimiter, async (req, res) => {
+    const credential = (req.body || {}).credential;
+    if (!credential) return res.status(400).json({ error: t.googleInvalidToken });
+    let profile;
+    try {
+        profile = await verifyGoogleIdToken(credential);
+    } catch (e) {
+        const status = e.code === 'disabled' ? 503 : 401;
+        return res.status(status).json({ error: e.message });
+    }
+    const found = findUserByEmail(profile.email);
+    if (!found) {
+        log.warn('Google sign-in for unknown email', { email: profile.email, ip: req.ip });
+        return res.status(403).json({ error: t.googleUserNotFound });
+    }
+    sessionResponse(res, found[0], found[1], 'google');
+});
+
+app.use('/admin/api/auth', authRouter);
 
 app.use('/admin/api', adminRouter);
 
