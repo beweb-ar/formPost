@@ -2064,6 +2064,7 @@
         function doLogout(message) {
             disconnectInbox();
             resetInboxOutbox();
+            unmountSupportHubWidget();
             sessionStorage.removeItem('adm_auth');
             auth = '';
             currentUser = null;
@@ -2075,6 +2076,42 @@
             document.getElementById('otpCode').value = '';
             setLoginMode('password');
             loginError(message || '');
+        }
+
+        // ========== SupportHub help widget ==========
+        // Loads only for a signed-in user and only if the server has
+        // SUPPORTHUB_URL configured. The identity token comes from the backend
+        // (/agent-api/token) so the agent can use the read-only data tools; if
+        // it is not available the widget still mounts, just without tools.
+        var supporthubScript = null;
+
+        async function mountSupportHubWidget(baseUrl) {
+            if (!baseUrl || supporthubScript || !auth || !currentUser) return;
+            var token = '';
+            try {
+                var res = await fetch('/agent-api/token', { headers: { Authorization: auth } });
+                if (res.ok) token = (await res.json()).token || '';
+            } catch (e) {}
+            var script = document.createElement('script');
+            script.src = baseUrl.replace(/\/+$/, '') + '/widget.js';
+            script.defer = true;
+            script.dataset.appId = 'app_formpost';
+            script.dataset.userId = currentUser.username || '';
+            script.dataset.userEmail = currentUser.email || '';
+            script.dataset.userName = currentUser.name || currentUser.username || '';
+            if (token) script.dataset.userToken = token;
+            document.body.appendChild(script);
+            supporthubScript = script;
+        }
+
+        function unmountSupportHubWidget() {
+            if (!supporthubScript) return;
+            try {
+                if (window.SupportHub && typeof window.SupportHub.destroy === 'function') window.SupportHub.destroy();
+            } catch (e) {}
+            supporthubScript.remove();
+            supporthubScript = null;
+            try { delete window.SupportHub; } catch (e) { window.SupportHub = undefined; }
         }
 
         // ========== Loading helpers ==========
@@ -2511,6 +2548,9 @@
                 if (data.version) {
                     document.getElementById('footerVersion').textContent = 'v' + data.version;
                 }
+
+                // Help widget: only for a signed-in user, only if the server enables it
+                mountSupportHubWidget(data.supporthubUrl);
 
                 // Load chart
                 loadChartData();

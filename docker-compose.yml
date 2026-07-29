@@ -23,6 +23,11 @@ services:
       # Optional: seed the email of existing users so they can sign in with
       # Google or a one-time code. Applied once per user, only if they have none.
       # - USER_EMAILS=usuario1=mail1@dominio.com,usuario2=mail2@dominio.com
+      # Optional: SupportHub help widget. Without SUPPORTHUB_URL the panel does
+      # not load it; without the secret the widget loads but the agent gets no
+      # data tools. Both are read at runtime (no frontend build involved).
+      # - SUPPORTHUB_URL=https://supporthub.rollpix.app
+      # - SUPPORTHUB_TOOLS_SECRET=<secret del panel de SupportHub>
       # Optional: Override SMTP settings via environment variables
       # - SMTP_HOST=smtp.example.com
       # - SMTP_PORT=587

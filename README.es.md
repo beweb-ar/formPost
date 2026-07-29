@@ -220,7 +220,8 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | `ADMIN_PASSWORD` | - | Contraseña del superadmin de `ADMIN_USERNAME` |
 | `API_KEY` | - | Sobreescribe la clave maestra de la API para agentes (`/api/v1`, sin restricción) |
 | `GOOGLE_CLIENT_ID` | (se guarda en `config.auth.googleClientId`) | Client id de Google OAuth para el botón "Acceder con Google" del panel |
-| `SUPPORTHUB_TOOLS_SECRET` | - | Secret HS256 con el que se firman los tokens de usuario que aceptan los endpoints de solo lectura `/agent-api` (herramientas del agente de SupportHub). Sin definir = `/agent-api` deshabilitado |
+| `SUPPORTHUB_TOOLS_SECRET` | - | Secret HS256 con el que se firman los tokens de usuario que aceptan los endpoints de solo lectura `/agent-api` (herramientas del agente de SupportHub). Sin definir = `/agent-api` y el endpoint de token quedan deshabilitados |
+| `SUPPORTHUB_URL` | - | URL base de la plataforma SupportHub. Definida, el panel carga el widget de ayuda para los usuarios logueados; sin definir, no se carga nada |
 | `USER_EMAILS` | - | Semilla del email de usuarios existentes para que puedan usar Google / código de un solo uso: `usuario1=mail1@dom,usuario2=mail2@dom`. Se escribe en el registro de cada usuario, solo si todavía no tiene email |
 | `ENCRYPTION_KEY` | auto | 64 caracteres hex (32 bytes) para cifrar los secretos guardados (contraseñas SMTP, keys de SendGrid, tokens de Telegram, claves de captcha). Si no se define, se genera una clave en `data/.secret.key` — **hacé backup de ese archivo**: sin él no se pueden recuperar los secretos cifrados |
 

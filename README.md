@@ -225,7 +225,8 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `ADMIN_PASSWORD` | - | Password for the `ADMIN_USERNAME` superadmin |
 | `API_KEY` | - | Override the master Agent API key (`/api/v1`, unrestricted) |
 | `GOOGLE_CLIENT_ID` | (stored in `config.auth.googleClientId`) | Google OAuth client id for "Sign in with Google" on the admin panel |
-| `SUPPORTHUB_TOOLS_SECRET` | - | HS256 secret that signs the user tokens accepted by the read-only `/agent-api` endpoints (SupportHub agent tools). Unset = `/agent-api` disabled |
+| `SUPPORTHUB_TOOLS_SECRET` | - | HS256 secret that signs the user tokens accepted by the read-only `/agent-api` endpoints (SupportHub agent tools). Unset = `/agent-api` and the token endpoint are disabled |
+| `SUPPORTHUB_URL` | - | Base URL of the SupportHub platform. Set it and the admin panel loads the help widget for signed-in users; unset, nothing is loaded |
 | `USER_EMAILS` | - | Seeds the email of existing users so they can use Google / one-time-code sign-in: `user1=mail1@dom,user2=mail2@dom`. Written into each user record, only when that user has no email yet |
 | `ENCRYPTION_KEY` | auto | 64 hex chars (32 bytes) used to encrypt stored secrets (SMTP passwords, SendGrid keys, Telegram tokens, captcha secrets). If unset, a key is auto-generated at `data/.secret.key` — **back that file up**: without it, encrypted secrets cannot be recovered |
 

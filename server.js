@@ -438,18 +438,23 @@ ensurePasswordHashed()
     .then(() => writeConfigSafe(() => {}))
     .catch(e => log.error('Startup migrations failed', { error: e.message }));
 
+// SupportHub help widget: the admin panel only loads it when this is set.
+// Runtime env (no frontend build), so a redeploy with the variable is enough.
+const SUPPORTHUB_URL = (process.env.SUPPORTHUB_URL || '').trim().replace(/\/+$/, '');
+const supporthubCsp = SUPPORTHUB_URL ? [SUPPORTHUB_URL] : [];
+
 // Security headers
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
             // accounts.google.com / gstatic: Google Identity Services (sign-in button)
-            styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://accounts.google.com", "https://apis.google.com"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com", ...supporthubCsp],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://accounts.google.com", "https://apis.google.com", ...supporthubCsp],
             scriptSrcAttr: ["'unsafe-inline'"],
-            connectSrc: ["'self'", "https://cdn.jsdelivr.net", "https://accounts.google.com"],
-            imgSrc: ["'self'", "data:", "https://lh3.googleusercontent.com"],
-            frameSrc: ["'self'", "https://accounts.google.com"],
+            connectSrc: ["'self'", "https://cdn.jsdelivr.net", "https://accounts.google.com", ...supporthubCsp],
+            imgSrc: ["'self'", "data:", "https://lh3.googleusercontent.com", ...supporthubCsp],
+            frameSrc: ["'self'", "https://accounts.google.com", ...supporthubCsp],
         }
     }
 }));
@@ -1793,12 +1798,14 @@ adminRouter.get('/status', async (req, res) => {
             totalSubmissions,
             totalMails,
             totalNotifications,
+            supporthubUrl: SUPPORTHUB_URL,
             user: {
                 username: req.user.username,
                 role: req.user.role,
                 accountId: req.user.accountId,
                 accountName,
-                email: ((config.users || {})[req.user.username] || {}).email || ''
+                email: ((config.users || {})[req.user.username] || {}).email || '',
+                name: ((config.users || {})[req.user.username] || {}).name || ''
             },
             memory: {
                 used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
@@ -3890,6 +3897,27 @@ function toolsAuth(req, res, next) {
     req.toolsUser = { sub: payload.sub || '', email: payload.email || '' };
     next();
 }
+
+// Issues the identity token the help widget hands to SupportHub, which forwards
+// it back to the /agent-api tools above. Authenticated with the normal panel
+// session — the secret never leaves the backend. Registered before the router
+// so the tools guard does not intercept it.
+app.get('/agent-api/token', adminLimiter, adminAuth, (req, res) => {
+    const secret = (process.env.SUPPORTHUB_TOOLS_SECRET || '').trim();
+    if (!secret) return res.status(404).json({ error: 'Agent tools are not enabled on this server.' });
+    const user = (config.users || {})[req.user.username] || {};
+    const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payload = b64url(JSON.stringify({
+        sub: req.user.username,
+        email: user.email || '',
+        name: user.name || req.user.username,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        // Exactly what toolsAuth reads to resolve the scope
+        ctx: { accountId: req.user.accountId, role: req.user.role }
+    }));
+    const signature = b64url(nodeCrypto.createHmac('sha256', secret).update(header + '.' + payload).digest());
+    res.json({ token: `${header}.${payload}.${signature}`, expiresIn: 3600 });
+});
 
 const agentApi = express.Router();
 agentApi.use(agentApiLimiter);

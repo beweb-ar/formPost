@@ -69,6 +69,7 @@ Saber qué límites aplica formPost sin que nadie los configure, cuánto tiempo 
 | `API_KEY` | Fija la clave maestra de la API para agentes |
 | `GOOGLE_CLIENT_ID` | Client id de Google para el botón "Acceder con Google" |
 | `SUPPORTHUB_TOOLS_SECRET` | Secret que firma los tokens de las herramientas del agente de ayuda (`/agent-api`). Sin definir, esos endpoints no responden |
+| `SUPPORTHUB_URL` | URL de la plataforma de soporte. Definida, el panel muestra el botón flotante de ayuda a los usuarios logueados |
 | `USER_EMAILS` | Semilla del email de usuarios existentes: `usuario1=mail1@dom,usuario2=mail2@dom` (solo si el usuario no tiene email) |
 | `ENCRYPTION_KEY` | Clave de cifrado de secretos (64 caracteres hexadecimales) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, `SMTP_USER`, `SMTP_PASS` | Pisan la configuración del sender por defecto |
