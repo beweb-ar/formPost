@@ -456,7 +456,13 @@ app.use(helmet({
             imgSrc: ["'self'", "data:", "https://lh3.googleusercontent.com", ...supporthubCsp],
             frameSrc: ["'self'", "https://accounts.google.com", ...supporthubCsp],
         }
-    }
+    },
+    // Google Identity Services signs in through a popup that hands the
+    // credential back via window.opener. Helmet's default (same-origin) severs
+    // that reference and the popup just hangs blank on accounts.google.com.
+    // same-origin-allow-popups keeps the protection for this document while
+    // letting the popups it opens talk back.
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }
 }));
 
 // Rate limiting for form submissions (per IP)
