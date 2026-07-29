@@ -386,47 +386,21 @@ async function migrateMultiTenant() {
 // Precedence: GOOGLE_CLIENT_ID env var > config.auth.googleClientId.
 const DEFAULT_GOOGLE_CLIENT_ID = '1053341747502-cdp5kkmgipvvov1rrdurkdejhkt0k17e.apps.googleusercontent.com';
 
-// Emails of users that existed before this field: seeded once so they can use
-// Google / one-time-code sign-in. Only applied when the user has no email yet.
-// Override or extend with the USER_EMAILS env var (see seedUserEmailsFromEnv).
-const LEGACY_USER_EMAILS = {
-    rollpix: 'nicolas@rollpix.com',
-    mariano: 'MLerner@exactian.com'
-};
-
 function googleClientId() {
     return (process.env.GOOGLE_CLIENT_ID || (config.auth && config.auth.googleClientId) || '').trim();
 }
 
-// One-time email seeding for users created before the email field existed.
-// Format: USER_EMAILS="usuario1=mail1@dom,usuario2=mail2@dom"
-function seedUserEmailsFromEnv() {
-    const raw = (process.env.USER_EMAILS || '').trim();
-    const out = {};
-    for (const pair of raw.split(',')) {
-        const [user, email] = pair.split('=').map(s => (s || '').trim());
-        if (user && email && isValidEmail(email)) out[user] = email;
-    }
-    return out;
-}
-
-// Backfill: default Google client id + emails for pre-existing users.
+// Store the default client id so it can be edited in config.json.
+// User emails are NOT seeded here: they belong to each user record and are
+// loaded from the admin UI (Settings > Users) or the admin API.
 async function migrateLoginSettings() {
-    const seeds = { ...LEGACY_USER_EMAILS, ...seedUserEmailsFromEnv() };
-    const needsClientId = !config.auth || !config.auth.googleClientId;
-    const needsEmails = Object.entries(seeds).some(([u, mail]) =>
-        (config.users || {})[u] && !(config.users[u].email || '').trim() && !userEmailTaken(mail, u));
-    if (!needsClientId && !needsEmails) return;
+    if (config.auth && config.auth.googleClientId) return;
     try {
         await writeConfigSafe(cfg => {
             if (!cfg.auth) cfg.auth = {};
             if (!cfg.auth.googleClientId) cfg.auth.googleClientId = DEFAULT_GOOGLE_CLIENT_ID;
-            for (const [username, email] of Object.entries(seeds)) {
-                const u = (cfg.users || {})[username];
-                if (u && !(u.email || '').trim()) u.email = email;
-            }
         });
-        log.info('Login settings migration applied (Google client id + user emails)');
+        log.info('Login settings migration applied (Google client id)');
     } catch (e) {
         log.error('Login settings migration failed', { error: e.message });
     }

@@ -220,7 +220,6 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | `ADMIN_PASSWORD` | - | Contraseña del superadmin de `ADMIN_USERNAME` |
 | `API_KEY` | - | Sobreescribe la clave maestra de la API para agentes (`/api/v1`, sin restricción) |
 | `GOOGLE_CLIENT_ID` | (se guarda en `config.auth.googleClientId`) | Client id de Google OAuth para el botón "Acceder con Google" del panel |
-| `USER_EMAILS` | - | Carga inicial de emails de usuarios: `usuario1=mail1@dom,usuario2=mail2@dom` (solo completa los que no tienen email) |
 | `ENCRYPTION_KEY` | auto | 64 caracteres hex (32 bytes) para cifrar los secretos guardados (contraseñas SMTP, keys de SendGrid, tokens de Telegram, claves de captcha). Si no se define, se genera una clave en `data/.secret.key` — **hacé backup de ese archivo**: sin él no se pueden recuperar los secretos cifrados |
 
 ## Cuentas, Usuarios y Roles (v1.4)

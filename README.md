@@ -225,7 +225,6 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `ADMIN_PASSWORD` | - | Password for the `ADMIN_USERNAME` superadmin |
 | `API_KEY` | - | Override the master Agent API key (`/api/v1`, unrestricted) |
 | `GOOGLE_CLIENT_ID` | (stored in `config.auth.googleClientId`) | Google OAuth client id for "Sign in with Google" on the admin panel |
-| `USER_EMAILS` | - | One-time seeding of user emails: `user1=mail1@dom,user2=mail2@dom` (only fills users that have no email yet) |
 | `ENCRYPTION_KEY` | auto | 64 hex chars (32 bytes) used to encrypt stored secrets (SMTP passwords, SendGrid keys, Telegram tokens, captcha secrets). If unset, a key is auto-generated at `data/.secret.key` — **back that file up**: without it, encrypted secrets cannot be recovered |
 
 ## Accounts, Users & Roles (v1.4)

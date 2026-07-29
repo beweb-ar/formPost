@@ -111,7 +111,7 @@ Campos cifrados con AES-256-GCM y prefijo `enc:v1:`: `senders[*].pass`, `senders
 
 ## Migraciones de arranque
 
-Se ejecutan en orden y reescriben `config.json`: hash de la contraseña admin heredada → clave de API maestra → multi-cuenta (crea `accounts`, `users`, estampa `accountId`, genera claves por cuenta) → configuración de ingreso (client id de Google y emails de usuarios) → escritura final que cifra secretos pendientes [evidencia: server.js:291-451].
+Se ejecutan en orden y reescriben `config.json`: hash de la contraseña admin heredada → clave de API maestra → multi-cuenta (crea `accounts`, `users`, estampa `accountId`, genera claves por cuenta) → configuración de ingreso (client id de Google) → escritura final que cifra secretos pendientes [evidencia: server.js:291-451].
 
 ## Notas de trazabilidad
 

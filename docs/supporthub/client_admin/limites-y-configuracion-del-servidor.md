@@ -68,11 +68,10 @@ Saber qué límites aplica formPost sin que nadie los configure, cuánto tiempo 
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Crea/actualiza un superadmin al arrancar |
 | `API_KEY` | Fija la clave maestra de la API para agentes |
 | `GOOGLE_CLIENT_ID` | Client id de Google para el botón "Acceder con Google" |
-| `USER_EMAILS` | Carga inicial de emails: `usuario1=mail1@dom,usuario2=mail2@dom` |
 | `ENCRYPTION_KEY` | Clave de cifrado de secretos (64 caracteres hexadecimales) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, `SMTP_USER`, `SMTP_PASS` | Pisan la configuración del sender por defecto |
 
-[evidencia: server.js:140-142, server.js:246-272, server.js:376-395, server.js:392-436, server.js:51-65]
+[evidencia: server.js:140-142, server.js:246-272, server.js:376-395, server.js:384-399, server.js:51-65]
 
 ## Dónde viven los datos
 
@@ -95,5 +94,5 @@ Los envíos y adjuntos crecen con el uso. Puntos de control: cantidad de formula
 - Limitadores: [evidencia: server.js:376-414, server.js:2770-2776, server.js:3050-3068]
 - Límites de tamaño y de campos: [evidencia: server.js:17-30, server.js:417-418, server.js:838-845]
 - Retenciones: [evidencia: server.js:669-678, server.js:765]
-- Variables de entorno: [evidencia: server.js:140-142, server.js:246-272, server.js:392-436]
+- Variables de entorno: [evidencia: server.js:140-142, server.js:246-272, server.js:384-399]
 - Rutas de datos: [evidencia: server.js:50, server.js:647-724, server.js:2105]
