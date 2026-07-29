@@ -239,13 +239,13 @@
             box-shadow: var(--shadow-sm);
         }
 
-        button:hover:not(:disabled):not(.header-btn):not(.logout-btn):not(.btn-icon):not(.btn-outline) {
+        button:hover:not(:disabled):not(.header-btn):not(.logout-btn):not(.btn-icon):not(.btn-outline):not(.tab-btn) {
             background: var(--accent-hover);
             transform: translateY(-1px);
             box-shadow: var(--shadow-md);
         }
 
-        button:focus:not(.btn-outline):not(.btn-icon):not(.header-btn) { color: white; }
+        button:focus:not(.btn-outline):not(.btn-icon):not(.header-btn):not(.tab-btn) { color: white; }
         button:active { transform: translateY(0); }
         button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
@@ -447,7 +447,13 @@
             flex-wrap: wrap;
             border-bottom: 1px solid var(--border-color);
             margin-bottom: 1rem;
+            flex-shrink: 0;
         }
+        /* Same modal size on every tab: the nav and the footer stay put and
+           only the panel scrolls. */
+        #settingsModal .modal { height: 72vh; }
+        #settingsModal .tab-nav { margin-bottom: 0; }
+        #settingsModal .modal-body-scroll { padding-top: 1rem; }
         .tab-btn {
             background: none;
             border: none;
@@ -461,12 +467,17 @@
             cursor: pointer;
             transition: color 0.15s, background 0.15s, border-color 0.15s;
         }
-        .tab-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+        .tab-btn:hover:not(.active) {
+            color: var(--accent-primary);
+            background: var(--bg-tertiary);
+            box-shadow: none;
+        }
         .tab-btn.active {
             color: var(--accent-primary);
             border-bottom-color: var(--accent-primary);
             background: var(--bg-tertiary);
         }
+        .tab-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
         .tab-panel { display: none; }
         .tab-panel.active { display: block; }
 
@@ -1265,7 +1276,6 @@
     <!-- Settings / Senders Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none;">
         <div class="modal modal-fixed" style="max-width:1150px;width:96%;">
-            <div class="modal-body-scroll">
                 <div class="tab-nav">
                     <button type="button" class="tab-btn active" id="settingsTabBtn-senders" onclick="showSettingsTab('senders')" data-i18n="tabSenders">Senders</button>
                     <button type="button" class="tab-btn" id="settingsTabBtn-accounts" style="display:none;" onclick="showSettingsTab('accounts')" data-i18n="tabAccounts">Accounts</button>
@@ -1273,6 +1283,7 @@
                     <button type="button" class="tab-btn" id="settingsTabBtn-agentapi" onclick="showSettingsTab('agentapi')" data-i18n="tabAgentApi">Agent API</button>
                 </div>
 
+            <div class="modal-body-scroll">
                 <div class="tab-panel active" id="settingsTab-senders">
                     <div class="submissions-modal-header">
                         <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
