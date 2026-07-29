@@ -2944,14 +2944,17 @@ function buildApiSpec(req) {
             scoping: 'Keys are per-account: an account key only sees and manages that account\'s forms, senders and templates (plus shared/global ones, read-only). The master key has unrestricted access.'
         },
         quickstart: [
-            '1. GET /api/v1/senders to check an email sender exists (or create one with POST /api/v1/senders).',
-            '2. POST /api/v1/forms with at least {"id": "my-form", "to": "owner@example.com"} to create a form.',
-            '3. The response includes exampleHtml — paste it into the website. Submissions POST to /submit with a form_id field.',
-            '4. GET /api/v1/forms/my-form/submissions to read received submissions, GET .../outbox to verify emails were delivered.'
+            '1. GET /api/v1/accounts to check whether the account for this integration already exists. If it does not, create it with POST /api/v1/accounts (master key only); an account key is already bound to its own account.',
+            '2. GET /api/v1/senders to check an email sender exists (or create one with POST /api/v1/senders).',
+            '3. POST /api/v1/forms with at least {"id": "my-form", "to": "owner@example.com"} to create a form.',
+            '4. The response includes exampleHtml — paste it into the website. Submissions POST to /submit with a form_id field.',
+            '5. GET /api/v1/forms/my-form/submissions to read received submissions, GET .../outbox to verify emails were delivered.'
         ],
         endpoints: [
             { method: 'GET', path: '/api/v1', auth: false, description: 'This API specification.' },
             { method: 'GET', path: '/api/v1/status', auth: true, description: 'Server status: version, forms, senders.' },
+            { method: 'GET', path: '/api/v1/accounts', auth: true, description: 'List accounts visible to this key, with their forms and senders. An account key only sees its own account.' },
+            { method: 'POST', path: '/api/v1/accounts', auth: true, description: 'Create an account (master key only). Body: { id, name }. Returns the new account-scoped apiKey once.', requiredFields: ['id'] },
             { method: 'GET', path: '/api/v1/forms', auth: true, description: 'List all forms with their full configuration.' },
             { method: 'POST', path: '/api/v1/forms', auth: true, description: 'Create a form. Body: { id, ...formConfig }. Returns the form, submitUrl and a ready-to-paste exampleHtml.', requiredFields: ['id', 'to'] },
             { method: 'GET', path: '/api/v1/forms/:id', auth: true, description: 'Get one form configuration.' },
@@ -3004,6 +3007,10 @@ function buildApiSpec(req) {
             apiKey: 'string. SendGrid only: API key with Mail Send permission (write-only, never returned).',
             domain: 'string. SendGrid only: verified sending domain, e.g. "example.com". Used to validate "from".'
         },
+        accountConfig: {
+            id: 'string, required on create. Letters, numbers, hyphens, underscores. Identifies the tenant that owns forms, senders and templates.',
+            name: 'string. Display name. Defaults to the id.'
+        },
         submitEndpoint: {
             method: 'POST',
             url: base + '/submit',
@@ -3046,6 +3053,67 @@ apiRouter.get('/status', (req, res) => {
         senders: Object.keys(sendersForScope(req.apiScope)),
         submitUrl: apiBaseUrl(req) + '/submit'
     });
+});
+
+// ---- Accounts ----
+// An account is a tenant: it owns its forms, senders, templates and API key.
+// An account key only ever sees its own account; only the master key can create accounts.
+function accountSummary(id, acct) {
+    return {
+        id,
+        name: acct.name || id,
+        apiEnabled: !!(acct.api && acct.api.key) && acct.api.enabled !== false,
+        forms: Object.entries(config.recipients || {})
+            .filter(([, r]) => (r.accountId || 'default') === id).map(([fid]) => fid),
+        senders: Object.entries(config.senders || {})
+            .filter(([, s]) => s.accountId === id).map(([sid]) => sid)
+    };
+}
+
+apiRouter.get('/accounts', (req, res) => {
+    const accounts = Object.entries(config.accounts || {})
+        .filter(([id]) => !req.apiScope || req.apiScope === id)
+        .map(([id, acct]) => accountSummary(id, acct));
+    res.json({
+        accounts,
+        scope: req.apiScope || 'master',
+        canCreateAccounts: req.apiScope === null,
+        hint: req.apiScope
+            ? `Your API key belongs to account "${req.apiScope}"; everything you create lands there. Only the master key can create new accounts.`
+            : 'Check here whether the account for this integration already exists. If it does not, create it with POST /api/v1/accounts.'
+    });
+});
+
+apiRouter.post('/accounts', async (req, res) => {
+    if (req.apiScope !== null) {
+        return res.status(403).json({
+            error: `Your API key is scoped to account "${req.apiScope}" and cannot create accounts. Use that account (GET /api/v1/accounts), or ask the administrator for the master key.`
+        });
+    }
+    const body = req.body || {};
+    const id = body.id;
+    if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id) || id.length > 64 || RESERVED_ACCOUNT_IDS.includes(id.toLowerCase())) {
+        return res.status(400).json({ error: 'Invalid "id": use only letters, numbers, hyphens and underscores (max 64 chars) and avoid the reserved words master/null/none.' });
+    }
+    if ((config.accounts || {})[id]) {
+        return res.status(409).json({ error: `Account "${id}" already exists. Use it as-is (GET /api/v1/accounts); do not create it again.` });
+    }
+    const key = 'fp_' + nodeCrypto.randomBytes(24).toString('hex');
+    try {
+        await writeConfigSafe(cfg => {
+            if (!cfg.accounts) cfg.accounts = {};
+            cfg.accounts[id] = { name: String(body.name || id).substring(0, 120), api: { key, enabled: true } };
+        });
+        log.info('Account created via Agent API', { accountId: id });
+        res.status(201).json({
+            message: `Account "${id}" created.`,
+            account: accountSummary(id, config.accounts[id]),
+            apiKey: key,
+            hint: `Store this key: it is the account-scoped API key for "${id}" and is only returned once. With the master key, create this account's forms and senders by sending "accountId": "${id}" in the body.`
+        });
+    } catch (e) {
+        res.status(500).json({ error: t.failedSaveConfig });
+    }
 });
 
 // ---- Forms ----

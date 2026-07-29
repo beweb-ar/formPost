@@ -44,7 +44,7 @@
 - **Multi-form support** - Handle unlimited forms, each with its own configuration
 - **Multi-sender email** - Configure multiple senders (SMTP relays or SendGrid API) with active/disabled toggle per sender
 - **SendGrid support** - Send via the SendGrid v3 HTTP API with just an API key and a verified sending domain (no SMTP ports needed)
-- **Agent API** - Self-documented REST API (`/api/v1`) so AI agents can create forms, senders and templates programmatically
+- **Agent API** - Self-documented REST API (`/api/v1`) so AI agents can create accounts, forms, senders and templates programmatically
 - **Multiple recipients** - Send to multiple email addresses per form (comma-separated, chip UI)
 - **HTML email notifications** - Custom email templates per form with dynamic field injection
 - **File attachments** - Accept file uploads (max 5 files, 10 MB each) and forward them via email, Discord, and Telegram
@@ -287,11 +287,14 @@ environment:
 - Click any outbox entry to open paginated log modal
 - Shows: date, channel (Mail/Discord/Telegram), destination, subject, status (OK/Error/Skipped)
 
-### Senders
+### Settings
+
+The Settings modal is split into tabs: **Senders**, **Accounts** and **Users** (superadmin only) and **Agent API**.
 
 - Add, edit, delete senders (SMTP or SendGrid) with active/disabled toggle
 - Test connection from the UI
 - Agent API key management: view, copy, regenerate, enable/disable
+- Copy integration prompt: a ready-to-paste paragraph instructing an AI agent to integrate the site's forms through `/api/v1`
 - Backup / Restore buttons (exports forms, senders, templates as JSON)
 
 ## Email Templates
@@ -382,10 +385,13 @@ formPost is often the backend for websites built by AI agents. The **Agent API**
 
 1. **Base URL:** `https://your-server.com/api/v1`
 2. **Self-documentation:** `GET /api/v1` (no auth) returns a machine-readable JSON spec of every endpoint, every field and the submit contract. An agent can bootstrap itself from that single URL.
-3. **Authentication:** send the API key in the `X-API-Key` header (or `Authorization: Bearer <key>`). The key is auto-generated on first run; the admin can view/copy/regenerate it in the admin UI under **Senders > Agent API**, or set it via the `API_KEY` environment variable.
+3. **Authentication:** send the API key in the `X-API-Key` header (or `Authorization: Bearer <key>`). The key is auto-generated on first run; the admin can view/copy/regenerate it in the admin UI under **Settings > Agent API**, or set it via the `API_KEY` environment variable.
+4. **Accounts:** `GET /api/v1/accounts` tells the agent whether the account for the integration already exists. With the master key it can create a new one with `POST /api/v1/accounts` and get back that account's own scoped key; an account key is already bound to its account and cannot create more.
 
 > Prompt suggestion for your AI agent:
 > *"You can create the backend for this contact form on my formPost instance. Fetch `https://your-server.com/api/v1` to learn the API; authenticate with header `X-API-Key: fp_xxx`. Create a form, then use the `exampleHtml` from the response in the website."*
+
+The admin UI writes that prompt for you: **Settings > Agent API > Copy integration prompt** copies a full paragraph of instructions with this server's URL and your key already filled in, including the account check and the account-creation step.
 
 ### Endpoints
 
@@ -393,6 +399,8 @@ formPost is often the backend for websites built by AI agents. The **Agent API**
 |---|---|---|
 | `GET` | `/api/v1` | API spec (public, no auth, no secrets) |
 | `GET` | `/api/v1/status` | Version, configured forms and senders |
+| `GET` | `/api/v1/accounts` | List accounts visible to the key (an account key only sees its own), with their forms and senders |
+| `POST` | `/api/v1/accounts` | Create an account — master key only. Body: `{ "id", "name" }`. Returns the new account-scoped `apiKey` once |
 | `GET` | `/api/v1/forms` | List all forms with full config |
 | `POST` | `/api/v1/forms` | Create a form. Body: `{ "id", ...formConfig }` |
 | `GET` | `/api/v1/forms/:id` | Get one form |
@@ -424,6 +432,13 @@ KEY="fp_xxxxxxxxxxxxxxxx"
 
 # 0. Discover the API (no auth)
 curl "$BASE/api/v1"
+
+# 0b. Check the account for this integration (with the master key, create it if missing)
+curl -H "X-API-Key: $KEY" "$BASE/api/v1/accounts"
+curl -X POST "$BASE/api/v1/accounts" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{ "id": "acme", "name": "ACME Inc" }'
+# -> returns "apiKey": the scoped key for that account (shown only once)
 
 # 1. Create a SendGrid sender (or skip if GET /api/v1/senders shows one)
 curl -X POST "$BASE/api/v1/senders" \
@@ -465,7 +480,7 @@ curl -H "X-API-Key: $KEY" "$BASE/api/v1/forms/landing-contact/outbox"
 
 - Agent API: 240 requests/minute.
 - The key grants admin-level configuration access — treat it like a password. Regenerate it anytime from the admin UI.
-- The API can be disabled entirely with the **Enabled** toggle in **Senders > Agent API** (requests then get `503`).
+- The API can be disabled entirely with the **Enabled** toggle in **Settings > Agent API** (requests then get `503`).
 - Secrets (`pass`, `apiKey`) are write-only: never returned by `GET` endpoints.
 
 ## Docker Deployment

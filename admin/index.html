@@ -425,6 +425,36 @@
         }
         .table-scroll { overflow-x: auto; }
 
+        /* Tabbed sections (settings modal) */
+        .tab-nav {
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 1rem;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+            padding: 0.5rem 0.9rem;
+            margin-bottom: -1px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s, border-color 0.15s;
+        }
+        .tab-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+        .tab-btn.active {
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
+            background: var(--bg-tertiary);
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
         #detailModal {
             z-index: 600;
         }
@@ -1189,16 +1219,25 @@
     <div class="modal-overlay" id="settingsModal" style="display:none;">
         <div class="modal modal-fixed" style="max-width:1150px;width:96%;">
             <div class="modal-body-scroll">
-                <div class="submissions-modal-header">
-                    <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
-                    <button class="btn-sm btn-outline" id="newSenderBtn" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
+                <div class="tab-nav">
+                    <button type="button" class="tab-btn active" id="settingsTabBtn-senders" onclick="showSettingsTab('senders')" data-i18n="tabSenders">Senders</button>
+                    <button type="button" class="tab-btn" id="settingsTabBtn-accounts" style="display:none;" onclick="showSettingsTab('accounts')" data-i18n="tabAccounts">Accounts</button>
+                    <button type="button" class="tab-btn" id="settingsTabBtn-users" style="display:none;" onclick="showSettingsTab('users')" data-i18n="tabUsers">Users</button>
+                    <button type="button" class="tab-btn" id="settingsTabBtn-agentapi" onclick="showSettingsTab('agentapi')" data-i18n="tabAgentApi">Agent API</button>
                 </div>
-                <div id="sendersListContent" class="table-scroll">
-                    <div class="empty-state"><span class="spinner"></span> Loading...</div>
+
+                <div class="tab-panel active" id="settingsTab-senders">
+                    <div class="submissions-modal-header">
+                        <h3 data-i18n="senders">Senders (SMTP Relays)</h3>
+                        <button class="btn-sm btn-outline" id="newSenderBtn" onclick="openSenderEditor('')" data-i18n="newSender">+ New Sender</button>
+                    </div>
+                    <div id="sendersListContent" class="table-scroll">
+                        <div class="empty-state"><span class="spinner"></span> Loading...</div>
+                    </div>
                 </div>
 
                 <!-- Accounts (superadmin only) -->
-                <div id="accountsSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                <div class="tab-panel" id="settingsTab-accounts">
                     <div class="submissions-modal-header">
                         <h3 data-i18n="accounts">Accounts</h3>
                         <button class="btn-sm btn-outline" onclick="openAccountCreate()" data-i18n="newAccount">+ New Account</button>
@@ -1207,7 +1246,7 @@
                 </div>
 
                 <!-- Users (superadmin only) -->
-                <div id="usersSection" style="display:none;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                <div class="tab-panel" id="settingsTab-users">
                     <div class="submissions-modal-header">
                         <h3 data-i18n="users">Users</h3>
                         <button class="btn-sm btn-outline" onclick="openUserEditor('')" data-i18n="newUser">+ New User</button>
@@ -1215,7 +1254,7 @@
                     <div id="usersListContent" class="table-scroll"><div class="empty-state"><span class="spinner"></span></div></div>
                 </div>
 
-                <div id="agentApiSection" style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(128,128,128,0.3);">
+                <div class="tab-panel" id="settingsTab-agentapi">
                     <div class="submissions-modal-header">
                         <h3><span data-i18n="agentApi">Agent API</span> <span id="apiScopeLabel" style="font-size:0.7rem;font-weight:600;padding:0.1rem 0.4rem;border-radius:4px;background:var(--bg-tertiary);vertical-align:middle;"></span></h3>
                         <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;">
@@ -1228,6 +1267,10 @@
                         <input type="text" id="apiKeyDisplay" readonly style="flex:1;font-family:monospace;font-size:0.8rem;" />
                         <button type="button" class="btn-sm btn-outline" onclick="copyApiKey()" data-i18n="copyBtn">Copy</button>
                         <button type="button" class="btn-sm btn-outline" onclick="regenerateApiKey()" data-i18n="regenerateBtn">Regenerate</button>
+                    </div>
+                    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-top:0.6rem;">
+                        <button type="button" class="btn-sm btn-outline" onclick="copyIntegrationPrompt()" data-i18n="copyPromptBtn">Copy integration prompt</button>
+                        <span style="font-size:0.78rem;opacity:0.7;" data-i18n="copyPromptHint">Ready-to-paste instructions for an AI agent, including this URL and key.</span>
                     </div>
                 </div>
             </div>
@@ -1547,7 +1590,7 @@
                 helpAgentTitle: 'Integrate with an AI agent',
                 helpAgentIntro: 'Instead of configuring forms by hand, you can let an AI agent (Claude, ChatGPT, n8n, etc.) do it through the <strong>Agent API</strong> — a self-documented REST API: the agent reads <code>GET /api/v1</code> and learns every endpoint on its own.',
                 helpAgent1: 'Get the API key from <strong>Settings &gt; Agent API</strong>. Each account has its own key, limited to that account\'s data — an agent with your key can never see or touch other accounts. Superadmins also have a master key with full access.',
-                helpAgent2: 'Give the agent two things: this server\'s URL + <code>/api/v1</code>, and the API key (sent as <code>X-API-Key</code> header or <code>Authorization: Bearer</code>).',
+                helpAgent2: 'Give the agent two things: this server\'s URL + <code>/api/v1</code>, and the API key (sent as <code>X-API-Key</code> header or <code>Authorization: Bearer</code>). The <strong>Copy integration prompt</strong> button in that same section copies a ready-made instruction paragraph with both already filled in.',
                 helpAgent3: 'The agent can then create and configure forms, create senders (SMTP/SendGrid), create email templates, read received submissions, download attachments, and check the delivery log (outbox) to verify emails went out.',
                 helpAgent4: 'Example prompt for your agent: <em>"Read {server}/api/v1 with the key I gave you and create a contact form for my site example.com that sends submissions to info@example.com, then give me the HTML to embed."</em>',
                 helpRolesTitle: 'Accounts and roles',
@@ -1565,6 +1608,8 @@
                 senderName: 'Name / Alias', sender: 'Sender', senderAlias: 'Sender Alias (From name)', senderActive: 'Active',
                 senderType: 'Type', sendgridApiKey: 'SendGrid API Key', sendgridDomain: 'Sending Domain (verified in SendGrid)',
                 sendgridApiKeyRequired: 'SendGrid API Key is required', smtpHostPortRequired: 'Host and port are required for SMTP senders',
+                // Settings tabs
+                tabSenders: 'Senders', tabAccounts: 'Accounts', tabUsers: 'Users', tabAgentApi: 'Agent API',
                 // Agent API
                 agentApi: 'Agent API', apiEnabled: 'Enabled', copyBtn: 'Copy', regenerateBtn: 'Regenerate',
                 agentApiHint: 'REST API for AI agents to create forms and senders programmatically. Self-documented at GET /api/v1 — give the agent that URL and this key.',
@@ -1573,6 +1618,11 @@
                 apiKeyRegenerated: 'API key regenerated',
                 apiEnabledMsg: 'Agent API enabled', apiDisabledMsg: 'Agent API disabled',
                 apiScopeMaster: 'Master key (all accounts)', apiScopeAccount: 'Account key',
+                copyPromptBtn: 'Copy integration prompt',
+                copyPromptHint: 'Ready-to-paste instructions for an AI agent, including this URL and key.',
+                promptCopied: 'Integration prompt copied to clipboard',
+                agentPromptMaster: 'Integrate this website\'s forms with formPost, my form backend. The REST API is at {base} and authenticates with the header "X-API-Key: {key}" (or "Authorization: Bearer {key}"). Start with GET {base}: it is public and returns the full machine-readable spec — every endpoint, every field and the submit contract — so use only what it documents and do not invent endpoints or fields. Then GET {base}/accounts to check whether the account for this integration already exists; if it does not, create it with POST {base}/accounts sending {"id":"my-account","name":"My Account"} and store the apiKey it returns (it is shown only once). Next GET {base}/senders to confirm there is an active email sender for that account; if there is none, create one with POST {base}/senders and verify it with POST {base}/senders/<senderId>/test. Then create one form per form on the site with POST {base}/forms, sending at least {"id":"contact","to":"owner@example.com","accountId":"my-account"}, and build the HTML from the exampleHtml returned in the response: forms are submitted by POST to {origin}/submit with a hidden form_id field and a hidden, empty _hp_field honeypot input. Finally check GET {base}/forms/<formId>/submissions and GET {base}/forms/<formId>/outbox to confirm submissions arrive and emails are delivered.',
+                agentPromptAccount: 'Integrate this website\'s forms with formPost, my form backend. The REST API is at {base} and authenticates with the header "X-API-Key: {key}" (or "Authorization: Bearer {key}"). Start with GET {base}: it is public and returns the full machine-readable spec — every endpoint, every field and the submit contract — so use only what it documents and do not invent endpoints or fields. Then GET {base}/accounts to confirm which account this key belongs to: it is scoped to a single account and everything you create lands there, so do not try to create accounts (only the administrator\'s master key can). Next GET {base}/senders to confirm there is an active email sender; if there is none, create one with POST {base}/senders and verify it with POST {base}/senders/<senderId>/test. Then create one form per form on the site with POST {base}/forms, sending at least {"id":"contact","to":"owner@example.com"}, and build the HTML from the exampleHtml returned in the response: forms are submitted by POST to {origin}/submit with a hidden form_id field and a hidden, empty _hp_field honeypot input. Finally check GET {base}/forms/<formId>/submissions and GET {base}/forms/<formId>/outbox to confirm submissions arrive and emails are delivered.',
                 // Accounts & Users
                 accounts: 'Accounts', newAccount: '+ New Account', accountName: 'Name', account: 'Account',
                 allAccounts: 'All accounts', globalSender: 'Global', globalSenderHint: 'Global = available to every account',
@@ -1693,7 +1743,7 @@
                 helpAgentTitle: 'Integraci\u00f3n con un agente de IA',
                 helpAgentIntro: 'En lugar de configurar los formularios a mano, pod\u00e9s dejar que un agente de IA (Claude, ChatGPT, n8n, etc.) lo haga a trav\u00e9s de la <strong>API para Agentes</strong> \u2014 una API REST auto-documentada: el agente lee <code>GET /api/v1</code> y aprende solo todos los endpoints.',
                 helpAgent1: 'Obten\u00e9 la API key en <strong>Configuraci\u00f3n &gt; API para Agentes</strong>. Cada cuenta tiene su propia clave, limitada a los datos de esa cuenta \u2014 un agente con tu clave nunca puede ver ni tocar otras cuentas. Los superadmins tienen adem\u00e1s una clave maestra con acceso total.',
-                helpAgent2: 'Dale al agente dos cosas: la URL de este servidor + <code>/api/v1</code>, y la API key (se env\u00eda en el header <code>X-API-Key</code> o <code>Authorization: Bearer</code>).',
+                helpAgent2: 'Dale al agente dos cosas: la URL de este servidor + <code>/api/v1</code>, y la API key (se env\u00eda en el header <code>X-API-Key</code> o <code>Authorization: Bearer</code>). El bot\u00f3n <strong>Copiar prompt de integraci\u00f3n</strong> de esa misma secci\u00f3n copia un p\u00e1rrafo de instrucciones ya armado con ambos datos.',
                 helpAgent3: 'El agente puede entonces crear y configurar formularios, crear senders (SMTP/SendGrid), crear plantillas de email, leer los env\u00edos recibidos, descargar adjuntos y consultar la bandeja de salida para verificar que los mails salieron.',
                 helpAgent4: 'Ejemplo de prompt para tu agente: <em>"Le\u00e9 {server}/api/v1 con la clave que te di y cre\u00e1 un formulario de contacto para mi sitio ejemplo.com que env\u00ede los datos a info@ejemplo.com, despu\u00e9s dame el HTML para pegar."</em>',
                 helpRolesTitle: 'Cuentas y roles',
@@ -1711,6 +1761,8 @@
                 senderName: 'Nombre / Alias', sender: 'Sender', senderAlias: 'Alias del Sender (nombre del remitente)', senderActive: 'Activo',
                 senderType: 'Tipo', sendgridApiKey: 'API Key de SendGrid', sendgridDomain: 'Dominio de Envío (verificado en SendGrid)',
                 sendgridApiKeyRequired: 'La API Key de SendGrid es requerida', smtpHostPortRequired: 'Host y puerto son requeridos para senders SMTP',
+                // Settings tabs
+                tabSenders: 'Senders', tabAccounts: 'Cuentas', tabUsers: 'Usuarios', tabAgentApi: 'API para Agentes',
                 // Agent API
                 agentApi: 'API para Agentes', apiEnabled: 'Habilitada', copyBtn: 'Copiar', regenerateBtn: 'Regenerar',
                 agentApiHint: 'API REST para que agentes de IA creen formularios y senders programáticamente. Auto-documentada en GET /api/v1 — dale al agente esa URL y esta clave.',
@@ -1719,6 +1771,11 @@
                 apiKeyRegenerated: 'API key regenerada',
                 apiEnabledMsg: 'API para agentes habilitada', apiDisabledMsg: 'API para agentes deshabilitada',
                 apiScopeMaster: 'Clave maestra (todas las cuentas)', apiScopeAccount: 'Clave de la cuenta',
+                copyPromptBtn: 'Copiar prompt de integración',
+                copyPromptHint: 'Instrucciones listas para pegarle a un agente de IA, con esta URL y esta clave.',
+                promptCopied: 'Prompt de integración copiado al portapapeles',
+                agentPromptMaster: 'Integrá los formularios de este sitio con formPost, mi backend de formularios. La API REST está en {base} y se autentica con el header "X-API-Key: {key}" (o "Authorization: Bearer {key}"). Empezá con GET {base}: es pública y devuelve la especificación completa legible por máquina — todos los endpoints, todos los campos y el contrato de envío —, así que usá solamente lo que ahí se documenta y no inventes endpoints ni campos. Después hacé GET {base}/accounts para ver si ya existe la cuenta correspondiente a esta integración; si no existe, creala con POST {base}/accounts enviando {"id":"mi-cuenta","name":"Mi Cuenta"} y guardá la apiKey que devuelve (se muestra una sola vez). Luego hacé GET {base}/senders para confirmar que esa cuenta tiene un remitente de email activo; si no hay ninguno, creá uno con POST {base}/senders y verificalo con POST {base}/senders/<senderId>/test. Después creá un formulario por cada formulario del sitio con POST {base}/forms, enviando al menos {"id":"contacto","to":"destino@ejemplo.com","accountId":"mi-cuenta"}, y armá el HTML a partir del exampleHtml que viene en la respuesta: los formularios se envían por POST a {origin}/submit con un campo oculto form_id y un honeypot _hp_field oculto y vacío. Por último verificá con GET {base}/forms/<formId>/submissions y GET {base}/forms/<formId>/outbox que los envíos llegan y que los emails se entregan.',
+                agentPromptAccount: 'Integrá los formularios de este sitio con formPost, mi backend de formularios. La API REST está en {base} y se autentica con el header "X-API-Key: {key}" (o "Authorization: Bearer {key}"). Empezá con GET {base}: es pública y devuelve la especificación completa legible por máquina — todos los endpoints, todos los campos y el contrato de envío —, así que usá solamente lo que ahí se documenta y no inventes endpoints ni campos. Después hacé GET {base}/accounts para confirmar a qué cuenta pertenece esta clave: está limitada a una sola cuenta y todo lo que crees queda ahí, así que no intentes crear cuentas (solo la clave maestra del administrador puede). Luego hacé GET {base}/senders para confirmar que hay un remitente de email activo; si no hay ninguno, creá uno con POST {base}/senders y verificalo con POST {base}/senders/<senderId>/test. Después creá un formulario por cada formulario del sitio con POST {base}/forms, enviando al menos {"id":"contacto","to":"destino@ejemplo.com"}, y armá el HTML a partir del exampleHtml que viene en la respuesta: los formularios se envían por POST a {origin}/submit con un campo oculto form_id y un honeypot _hp_field oculto y vacío. Por último verificá con GET {base}/forms/<formId>/submissions y GET {base}/forms/<formId>/outbox que los envíos llegan y que los emails se entregan.',
                 // Accounts & Users
                 accounts: 'Cuentas', newAccount: '+ Nueva Cuenta', accountName: 'Nombre', account: 'Cuenta',
                 allAccounts: 'Todas las cuentas', globalSender: 'Global', globalSenderHint: 'Global = disponible para todas las cuentas',
@@ -2194,9 +2251,9 @@
             userInfoEl.style.display = 'inline-flex';
             // Role 'user': no settings (senders/API/backup), no form management
             document.getElementById('settingsBtn').style.display = isAdminOrAbove() ? '' : 'none';
-            // Settings modal sections
-            document.getElementById('accountsSection').style.display = isSuperadmin() ? '' : 'none';
-            document.getElementById('usersSection').style.display = isSuperadmin() ? '' : 'none';
+            // Settings modal tabs (accounts/users are superadmin-only)
+            document.getElementById('settingsTabBtn-accounts').style.display = isSuperadmin() ? '' : 'none';
+            document.getElementById('settingsTabBtn-users').style.display = isSuperadmin() ? '' : 'none';
             document.getElementById('backupRestoreGroup').style.display = isSuperadmin() ? '' : 'none';
             var scopeLabel = document.getElementById('apiScopeLabel');
             scopeLabel.textContent = isSuperadmin() ? L('apiScopeMaster') : L('apiScopeAccount');
@@ -3243,8 +3300,20 @@
             if (selectedValue) select.value = selectedValue;
         }
 
+        var settingsTabs = ['senders', 'accounts', 'users', 'agentapi'];
+
+        function showSettingsTab(tab) {
+            settingsTabs.forEach(function(name) {
+                var panel = document.getElementById('settingsTab-' + name);
+                var btn = document.getElementById('settingsTabBtn-' + name);
+                if (panel) panel.classList.toggle('active', name === tab);
+                if (btn) btn.classList.toggle('active', name === tab);
+            });
+        }
+
         function openSettingsModal() {
             document.getElementById('settingsModal').style.display = 'flex';
+            showSettingsTab('senders');
             loadSendersList();
             loadApiKey();
             if (isSuperadmin()) {
@@ -3489,6 +3558,8 @@
         }
 
         // ========== Agent API Key ==========
+        var apiKeyScope = 'master';
+
         async function loadApiKey() {
             try {
                 var res = await fetch('/admin/api/apikey', { headers: { Authorization: auth } });
@@ -3496,9 +3567,42 @@
                 document.getElementById('apiKeyDisplay').value = data.key || '';
                 document.getElementById('apiEnabledToggle').checked = !!data.enabled;
                 // Scope reported by the server is authoritative
+                apiKeyScope = data.scope === 'master' ? 'master' : 'account';
                 document.getElementById('apiScopeLabel').textContent =
-                    data.scope === 'master' ? L('apiScopeMaster') : L('apiScopeAccount');
+                    apiKeyScope === 'master' ? L('apiScopeMaster') : L('apiScopeAccount');
             } catch(e) {}
+        }
+
+        // Ready-to-paste prompt telling an AI agent how to integrate forms through /api/v1
+        function buildIntegrationPrompt() {
+            var origin = window.location.origin;
+            var key = document.getElementById('apiKeyDisplay').value || 'fp_xxx';
+            var text = L(apiKeyScope === 'master' ? 'agentPromptMaster' : 'agentPromptAccount');
+            return text.split('{base}').join(origin + '/api/v1')
+                       .split('{origin}').join(origin)
+                       .split('{key}').join(key);
+        }
+
+        function copyIntegrationPrompt() {
+            var prompt = buildIntegrationPrompt();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(prompt).then(function() {
+                    showToast(L('promptCopied'), 'success');
+                }).catch(function() { copyViaTextarea(prompt); });
+            } else {
+                copyViaTextarea(prompt);
+            }
+        }
+
+        function copyViaTextarea(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); showToast(L('promptCopied'), 'success'); } catch(e) {}
+            document.body.removeChild(ta);
         }
 
         function copyApiKey() {

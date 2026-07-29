@@ -43,7 +43,7 @@
 - **Soporte multi-formulario** - Formularios ilimitados, cada uno con su propia configuración
 - **Multi-sender de email** - Múltiples senders (relays SMTP o SendGrid API) con toggle activo/desactivado por sender
 - **Soporte SendGrid** - Envío vía la API HTTP v3 de SendGrid con solo una API key y un dominio de envío verificado (no requiere puertos SMTP)
-- **API para Agentes** - API REST auto-documentada (`/api/v1`) para que agentes de IA creen formularios, senders y plantillas programáticamente
+- **API para Agentes** - API REST auto-documentada (`/api/v1`) para que agentes de IA creen cuentas, formularios, senders y plantillas programáticamente
 - **Múltiples destinatarios** - Enviar a varias direcciones email por formulario (separados por coma, UI de chips)
 - **Notificaciones por email** - Plantillas HTML personalizadas con inyección dinámica de campos
 - **Archivos adjuntos** - Recibe archivos (máx 5, 10 MB cada uno) y los reenvía por email, Discord y Telegram
@@ -264,10 +264,14 @@ formPost es multi-cuenta. Los datos (formularios, senders, plantillas, bandejas,
 - Click en items del outbox abre modal con log paginado completo
 - Fecha, canal (Mail/Discord/Telegram), destino, asunto, estado (OK/Error/Omitido)
 
-### Senders
+### Configuración
+
+El modal de configuración está dividido en pestañas: **Senders**, **Cuentas** y **Usuarios** (solo superadmin) y **API para Agentes**.
+
 - CRUD de senders (SMTP o SendGrid) con toggle activo/desactivado
 - Test de conexión
 - Gestión de la clave de la API para agentes: ver, copiar, regenerar, habilitar/deshabilitar
+- Copiar prompt de integración: un párrafo listo para pegarle a un agente de IA para que integre los formularios del sitio vía `/api/v1`
 - Backup / Restore (exporta formularios, senders, plantillas)
 
 ## Plantillas de Email
@@ -313,10 +317,13 @@ formPost suele ser el backend de sitios construidos por agentes de IA. La **API 
 
 1. **URL base:** `https://tu-servidor.com/api/v1`
 2. **Auto-documentación:** `GET /api/v1` (sin auth) devuelve una especificación JSON legible por máquina de cada endpoint, cada campo y el contrato de `/submit`. Un agente puede arrancar desde esa única URL.
-3. **Autenticación:** enviar la clave en el header `X-API-Key` (o `Authorization: Bearer <clave>`). La clave se auto-genera en el primer arranque; el admin puede verla/copiarla/regenerarla en el panel bajo **Senders > API para Agentes**, o definirla con la variable de entorno `API_KEY`.
+3. **Autenticación:** enviar la clave en el header `X-API-Key` (o `Authorization: Bearer <clave>`). La clave se auto-genera en el primer arranque; el admin puede verla/copiarla/regenerarla en el panel bajo **Configuración > API para Agentes**, o definirla con la variable de entorno `API_KEY`.
+4. **Cuentas:** `GET /api/v1/accounts` le dice al agente si ya existe la cuenta de esa integración. Con la clave maestra puede crear una nueva con `POST /api/v1/accounts` y recibir la clave propia de esa cuenta; una clave de cuenta ya está atada a su cuenta y no puede crear otras.
 
 > Sugerencia de prompt para tu agente de IA:
 > *"Podés crear el backend de este formulario de contacto en mi instancia de formPost. Hacé un GET a `https://tu-servidor.com/api/v1` para aprender la API; autenticate con el header `X-API-Key: fp_xxx`. Creá un formulario y usá el `exampleHtml` de la respuesta en el sitio web."*
+
+El panel escribe ese prompt por vos: **Configuración > API para Agentes > Copiar prompt de integración** copia un párrafo completo de instrucciones con la URL de este servidor y tu clave ya incluidas, incluyendo la verificación de la cuenta y el paso de creación de cuenta.
 
 ### Endpoints
 
@@ -324,6 +331,8 @@ formPost suele ser el backend de sitios construidos por agentes de IA. La **API 
 |---|---|---|
 | `GET` | `/api/v1` | Especificación de la API (pública, sin auth, sin secretos) |
 | `GET` | `/api/v1/status` | Versión, formularios y senders configurados |
+| `GET` | `/api/v1/accounts` | Lista las cuentas visibles para la clave (una clave de cuenta solo ve la propia), con sus formularios y senders |
+| `POST` | `/api/v1/accounts` | Crea una cuenta — solo con la clave maestra. Body: `{ "id", "name" }`. Devuelve una única vez la `apiKey` de la nueva cuenta |
 | `GET` | `/api/v1/forms` | Lista todos los formularios con su configuración completa |
 | `POST` | `/api/v1/forms` | Crea un formulario. Body: `{ "id", ...formConfig }` |
 | `GET` | `/api/v1/forms/:id` | Obtiene un formulario |
@@ -355,6 +364,13 @@ KEY="fp_xxxxxxxxxxxxxxxx"
 
 # 0. Descubrir la API (sin auth)
 curl "$BASE/api/v1"
+
+# 0b. Verificar la cuenta de esta integración (con la clave maestra, crearla si no existe)
+curl -H "X-API-Key: $KEY" "$BASE/api/v1/accounts"
+curl -X POST "$BASE/api/v1/accounts" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{ "id": "acme", "name": "ACME Inc" }'
+# -> devuelve "apiKey": la clave propia de esa cuenta (se muestra una sola vez)
 
 # 1. Crear un sender SendGrid (u omitir si GET /api/v1/senders ya muestra uno)
 curl -X POST "$BASE/api/v1/senders" \
@@ -396,7 +412,7 @@ curl -H "X-API-Key: $KEY" "$BASE/api/v1/forms/contacto-landing/outbox"
 
 - API para agentes: 240 requests/minuto.
 - La clave otorga acceso de configuración a nivel admin — tratala como una contraseña. Regenerala cuando quieras desde el panel.
-- La API se puede deshabilitar por completo con el toggle **Habilitada** en **Senders > API para Agentes** (las requests reciben `503`).
+- La API se puede deshabilitar por completo con el toggle **Habilitada** en **Configuración > API para Agentes** (las requests reciben `503`).
 - Los secretos (`pass`, `apiKey`) son de solo escritura: nunca se devuelven en los `GET`.
 
 ## Seguridad
