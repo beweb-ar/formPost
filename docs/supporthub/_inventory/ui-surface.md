@@ -66,12 +66,12 @@ El panel es una sola ruta: no hay router de URLs, todo es un overlay/modal dentr
 | 14 | Modal: Detalle del Envío | click en una fila de Envíos | Ver todos los campos, descargar adjuntos, ver ID/IP y método de envío | ninguno | admin/index.html:1044-1052, admin/index.html:4113 |
 | 15 | Modal: Bandeja de Salida (log) | click en una entrada del Outbox | Historial paginado de mails/notificaciones con estado, error y datos del proveedor; borrar entradas | ninguno | admin/index.html:1203-1216, admin/index.html:2171 |
 | 16 | Modal: Configuración (4 pestañas) | botón *Configuración* (admin y superadmin) | Pestañas Senders / Cuentas / Usuarios / API para Agentes + Backup y Restaurar | ninguno | admin/index.html:1219-1286, admin/index.html:3305 |
-| 16a | Pestaña Senders | Configuración | Listar, crear, editar y eliminar remitentes | ninguno | admin/index.html:1229-1237, admin/index.html:3329 |
+| 16a | Pestaña Senders | Configuración | Listar, crear, editar y eliminar remitentes. Muestra la columna *Respaldo* y el estado de salud (etiqueta **CAÍDO** / **RECUPERANDO** con botón *Reintentar ahora*) | ninguno | admin/index.html:1229-1237, admin/index.html:3593 |
 | 16b | Pestaña Cuentas | Configuración (solo superadmin) | Crear/renombrar/eliminar cuentas, copiar y regenerar su API key, habilitarla | ninguno | admin/index.html:1240-1246, admin/index.html:3664 |
 | 16c | Pestaña Usuarios | Configuración (solo superadmin) | Crear, editar y eliminar usuarios con rol y cuenta | ninguno | admin/index.html:1249-1255, admin/index.html:3803 |
 | 16d | Pestaña API para Agentes | Configuración | Ver/copiar/regenerar la API key, habilitarla, copiar el prompt de integración | ninguno | admin/index.html:1257-1275, admin/index.html:3563 |
 | 17 | Backup / Restaurar | pie del modal Configuración (solo superadmin) | Descargar backup JSON, restaurar desde archivo | ninguno | admin/index.html:1277-1283, admin/index.html:3929 |
-| 18 | Modal: Editor de Sender | *+ Nuevo Sender* o *Editar* en la lista | SMTP o SendGrid, activo/inactivo, cuenta o Global, botón *Test* | ninguno | admin/index.html:1350-1424, admin/index.html:3393 |
+| 18 | Modal: Editor de Sender | *+ Nuevo Sender* o *Editar* en la lista | SMTP o SendGrid, activo/inactivo, cuenta o Global, **sender de respaldo**, botón *Test*. La casilla *Conexión Segura* se ajusta sola según el puerto | ninguno | admin/index.html:1411-1500, admin/index.html:3730 |
 | 19 | Modal: Nueva Cuenta | *+ Nueva Cuenta* | ID y nombre de la cuenta | ninguno | admin/index.html:1329-1347 |
 | 20 | Modal: Editor de Usuario | *+ Nuevo Usuario* o *Editar* | Usuario, **email** (identificador para Google/código), contraseña, rol, cuenta, nombre visible | ninguno | admin/index.html:1289-1326, admin/index.html:3842 |
 | 21 | Modal: Plantillas de Email | botón *Plantillas* del encabezado | Listar plantillas propias y compartidas, editar, eliminar, crear | ninguno | admin/index.html:1463-1476, admin/index.html:3003 |

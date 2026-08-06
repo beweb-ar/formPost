@@ -61,7 +61,20 @@ El token de sesión dura 12 h y se envía como `Authorization: Bearer <token>` [
 
 `GET /senders`, `POST /senders` (admin+), `PUT /senders/:id` (admin+, solo los de su cuenta), `DELETE /senders/:id` (admin+), `POST /senders/test` (config sin guardar), `POST /senders/:id/test` (merge sobre la config guardada) [evidencia: server.js:1680-1828].
 
+`POST /senders/:id/health/reset` (admin+) limpia el disyuntor del sender y lo vuelve a habilitar de inmediato.
+
 Los secretos vacíos o `••••` se descartan del patch para conservar los almacenados.
+
+`GET /senders` devuelve además, por sender:
+
+- `backupSenderId`: id del remitente de respaldo, o `''`.
+- `health`: `{ state }` con `up | degraded | down | recovering | unknown`; en `down` incluye `until`
+  (fin del enfriamiento) y `lastError`. Es estado en memoria del proceso, no se persiste.
+
+En cada escritura se valida `backupSenderId` (debe existir, no ser el mismo sender, y respetar el alcance:
+un sender global solo puede respaldarse en otro global; uno de cuenta, en un global o en uno de su misma
+cuenta) y se normaliza `secure` según el puerto. Los vínculos que dejan de ser válidos —por borrado del
+destino o cambio de cuenta— se limpian solos.
 
 ## Plantillas
 

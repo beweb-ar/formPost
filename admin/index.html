@@ -1433,8 +1433,13 @@
                 </div>
                 <div class="form-group" id="senderEditorAccountGroup" style="display:none;">
                     <label data-i18n="account">Account</label>
-                    <select id="senderEditorAccount"></select>
+                    <select id="senderEditorAccount" onchange="onSenderAccountChange()"></select>
                     <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="globalSenderHint">Global = available to every account</small>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="backupSender">Backup sender (optional)</label>
+                    <select id="senderEditorBackup"></select>
+                    <small style="color:var(--text-secondary);font-size:0.75rem;" data-i18n="backupSenderHint">Used when this sender fails for connection, TLS or credential reasons. Not used when the message itself is rejected.</small>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" id="senderEditorActive" checked />
@@ -1448,13 +1453,14 @@
                         </div>
                         <div class="form-group">
                             <label data-i18n="port">Port</label>
-                            <input type="number" id="senderEditorPort" placeholder="587" />
+                            <input type="number" id="senderEditorPort" placeholder="587" oninput="syncSenderSecureWithPort()" />
                         </div>
                     </div>
                     <div class="checkbox-group">
                         <input type="checkbox" id="senderEditorSecure" />
                         <label for="senderEditorSecure" data-i18n="secureConn">Secure Connection (TLS/SSL)</label>
                     </div>
+                    <small id="senderPortHint" style="display:block;color:var(--text-secondary);font-size:0.75rem;margin-top:0.25rem;" data-i18n="portTlsHint">Port 465 = implicit TLS (checked). Ports 587 / 2525 / 25 = STARTTLS (unchecked). Set automatically from the port.</small>
                     <div class="form-row" style="margin-top:0.75rem;">
                         <div class="form-group">
                             <label data-i18n="usernameOpt">Username (optional)</label>
@@ -1677,6 +1683,11 @@
                 senderName: 'Name / Alias', sender: 'Sender', senderAlias: 'Sender Alias (From name)', senderActive: 'Active',
                 senderType: 'Type', sendgridApiKey: 'SendGrid API Key', sendgridDomain: 'Sending Domain (verified in SendGrid)',
                 sendgridApiKeyRequired: 'SendGrid API Key is required', smtpHostPortRequired: 'Host and port are required for SMTP senders',
+                backupSender: 'Backup sender (optional)', backupShort: 'Backup', noBackupSender: 'No backup',
+                backupSenderHint: 'Used when this sender fails for connection, TLS or credential reasons. Not used when the message itself is rejected (unknown recipient, refused content).',
+                portTlsHint: 'Port 465 = implicit TLS (checked). Ports 587 / 2525 / 25 = STARTTLS (unchecked). Set automatically from the port.',
+                senderDown: 'DOWN', senderRecovering: 'RECOVERING', senderDegraded: 'FAILING',
+                senderDownUntil: 'using backup until', senderRetryNow: 'Retry now',
                 // Settings tabs
                 tabSenders: 'Senders', tabAccounts: 'Accounts', tabUsers: 'Users', tabAgentApi: 'Agent API',
                 // Agent API
@@ -1838,6 +1849,11 @@
                 senderName: 'Nombre / Alias', sender: 'Sender', senderAlias: 'Alias del Sender (nombre del remitente)', senderActive: 'Activo',
                 senderType: 'Tipo', sendgridApiKey: 'API Key de SendGrid', sendgridDomain: 'Dominio de Envío (verificado en SendGrid)',
                 sendgridApiKeyRequired: 'La API Key de SendGrid es requerida', smtpHostPortRequired: 'Host y puerto son requeridos para senders SMTP',
+                backupSender: 'Sender de respaldo (opcional)', backupShort: 'Respaldo', noBackupSender: 'Sin respaldo',
+                backupSenderHint: 'Se usa cuando este sender falla por conexión, TLS o credenciales. No se usa cuando el rechazo es del mensaje (destinatario inexistente, contenido rechazado).',
+                portTlsHint: 'Puerto 465 = TLS implícito (tildado). Puertos 587 / 2525 / 25 = STARTTLS (destildado). Se ajusta solo según el puerto.',
+                senderDown: 'CAÍDO', senderRecovering: 'RECUPERANDO', senderDegraded: 'CON FALLAS',
+                senderDownUntil: 'usando respaldo hasta', senderRetryNow: 'Reintentar ahora',
                 // Settings tabs
                 tabSenders: 'Senders', tabAccounts: 'Cuentas', tabUsers: 'Usuarios', tabAgentApi: 'API para Agentes',
                 // Agent API
@@ -1903,6 +1919,14 @@
             var div = document.createElement('div');
             div.textContent = String(str);
             return div.innerHTML;
+        }
+
+        // esc() is safe for element text but leaves quotes intact, so it cannot be
+        // used inside an attribute. Relay error messages land in title="..." and can
+        // contain anything the remote server sent back.
+        function escAttr(str) {
+            if (!str) return '';
+            return esc(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // ========== Toast Notifications ==========
@@ -3583,10 +3607,13 @@
                 container.innerHTML = '<div class="empty-state">No senders configured.</div>';
                 return;
             }
-            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>' + L('senderType') + '</th><th>' + L('fromEmail') + '</th><th>' + L('account') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
+            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>' + L('senderType') + '</th><th>' + L('fromEmail') + '</th><th>' + L('account') + '</th><th>' + L('backupShort') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
             ids.forEach(function(id) {
                 var s = sendersCache[id];
                 var isActive = s.active !== false;
+                var backupLabel = s.backupSenderId
+                    ? '<code>' + esc(s.backupSenderId) + '</code>'
+                    : '<span style="color:var(--text-secondary);">—</span>';
                 var typeLabel = s.type === 'sendgrid'
                     ? 'SendGrid' + (s.domain ? ' (' + esc(s.domain) + ')' : '')
                     : esc(s.host || '') + ':' + esc(String(s.port || ''));
@@ -3601,10 +3628,14 @@
                     '<td>' + typeLabel + '</td>' +
                     '<td>' + esc(s.from || '') + '</td>' +
                     '<td>' + acctLabel + '</td>' +
-                    '<td><span style="color:' + (isActive ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;font-size:0.8rem;">' + (isActive ? L('captchaOn') : L('captchaOff')) + '</span></td>' +
+                    '<td>' + backupLabel + '</td>' +
+                    '<td><span style="color:' + (isActive ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;font-size:0.8rem;">' + (isActive ? L('captchaOn') : L('captchaOff')) + '</span>' + senderHealthBadge(s.health) + '</td>' +
                     '<td style="text-align:right;white-space:nowrap;">' +
                         (canManageThis
-                            ? '<button class="btn-sm btn-outline" onclick="openSenderEditor(\'' + esc(id) + '\')">' + L('edit') + '</button> ' +
+                            ? (s.health && (s.health.state === 'down' || s.health.state === 'recovering')
+                                ? '<button class="btn-sm btn-outline" title="' + escAttr(s.health.lastError || '') + '" onclick="resetSenderHealth(\'' + esc(id) + '\')">' + L('senderRetryNow') + '</button> '
+                                : '') +
+                              '<button class="btn-sm btn-outline" onclick="openSenderEditor(\'' + esc(id) + '\')">' + L('edit') + '</button> ' +
                               '<button class="btn-sm btn-danger" onclick="deleteSender(\'' + esc(id) + '\')">' + L('delete') + '</button>'
                             : '') +
                     '</td>' +
@@ -3614,12 +3645,87 @@
             container.innerHTML = html;
         }
 
+        // Live circuit-breaker state, reported by the server per sender.
+        // 'down' = failing, traffic is going to the backup until the cooldown expires.
+        function senderHealthBadge(health) {
+            if (!health || health.state === 'up' || health.state === 'unknown') return '';
+            var styles = {
+                down: { bg: 'var(--danger)', label: L('senderDown') },
+                recovering: { bg: 'var(--warning, #b8860b)', label: L('senderRecovering') },
+                degraded: { bg: 'var(--warning, #b8860b)', label: L('senderDegraded') }
+            };
+            var st = styles[health.state];
+            if (!st) return '';
+            var tip = health.lastError || '';
+            if (health.until) tip += (tip ? ' — ' : '') + L('senderDownUntil') + ' ' + new Date(health.until).toLocaleTimeString();
+            return ' <span title="' + escAttr(tip) + '" style="font-size:0.65rem;font-weight:700;padding:0.1rem 0.45rem;border-radius:4px;background:' + st.bg + ';color:#fff;">' + st.label + '</span>';
+        }
+
+        async function resetSenderHealth(id) {
+            try {
+                var res = await fetch('/admin/api/senders/' + encodeURIComponent(id) + '/health/reset', {
+                    method: 'POST',
+                    headers: { Authorization: auth }
+                });
+                var result = await res.json();
+                showToast(res.ok ? (result.message || 'OK') : (result.error || L('failedSmtp')), res.ok ? 'success' : 'error');
+                if (res.ok) loadSendersList();
+            } catch(e) {
+                showToast(L('connError'), 'error');
+            }
+        }
+
         var senderEditorIsNew = false;
 
         function updateSenderTypeFields() {
             var isSendgrid = document.getElementById('senderEditorType').value === 'sendgrid';
             document.getElementById('senderSmtpFields').style.display = isSendgrid ? 'none' : '';
             document.getElementById('senderSendgridFields').style.display = isSendgrid ? '' : 'none';
+        }
+
+        // TLS mode is a property of the port, not a free choice: 465 is encrypted from
+        // the first byte, 587/2525/25 start in plaintext and upgrade with STARTTLS.
+        // Mixing them up is what produces "wrong version number". The server enforces
+        // this too; here we just keep the checkbox honest while typing.
+        var IMPLICIT_TLS_PORTS = [465];
+        var STARTTLS_PORTS = [587, 2525, 25];
+        function syncSenderSecureWithPort() {
+            var port = Number(document.getElementById('senderEditorPort').value);
+            var box = document.getElementById('senderEditorSecure');
+            if (IMPLICIT_TLS_PORTS.indexOf(port) !== -1) box.checked = true;
+            else if (STARTTLS_PORTS.indexOf(port) !== -1) box.checked = false;
+        }
+
+        // Eligible backups mirror the server rule: a global sender may only fall back to
+        // another global sender; an account sender may use a global one or a sibling of
+        // its own account. A client-owned sender can therefore have a backup but never be
+        // the backup of a shared one.
+        function populateSenderBackupSelect(selfId, ownerAccountId, selected) {
+            var select = document.getElementById('senderEditorBackup');
+            select.innerHTML = '<option value="">' + L('noBackupSender') + '</option>';
+            Object.keys(sendersCache).forEach(function(id) {
+                if (id === selfId) return;
+                var s = sendersCache[id];
+                if (!ownerAccountId) {
+                    if (s.accountId) return;               // global -> global only
+                } else if (s.accountId && s.accountId !== ownerAccountId) {
+                    return;                                 // other account's private sender
+                }
+                var opt = document.createElement('option');
+                opt.value = id;
+                var detail = s.type === 'sendgrid' ? 'SendGrid' : (s.host || '');
+                opt.textContent = (s.name || id) + (detail ? ' (' + detail + ')' : '') + (s.accountId ? '' : ' — ' + L('globalSender'));
+                select.appendChild(opt);
+            });
+            select.value = selected || '';
+            if (select.value !== (selected || '')) select.value = ''; // stored target no longer eligible
+        }
+
+        // Changing the account changes which senders may serve as backup
+        function onSenderAccountChange() {
+            var selfId = document.getElementById('senderEditorId').value;
+            var acct = document.getElementById('senderEditorAccount').value || '';
+            populateSenderBackupSelect(selfId, acct, document.getElementById('senderEditorBackup').value);
         }
 
         async function populateSenderAccountSelect(selected) {
@@ -3643,6 +3749,11 @@
             document.getElementById('senderEditorId').value = id || '';
             document.getElementById('senderEditorTitle').textContent = id ? 'Edit Sender: ' + id : L('newSender');
             populateSenderAccountSelect(id && sendersCache[id] ? (sendersCache[id].accountId || '') : '');
+            // Superadmins pick the account in this modal; scoped admins always work inside their own
+            var ownerAccount = isSuperadmin()
+                ? (id && sendersCache[id] ? (sendersCache[id].accountId || '') : '')
+                : ((currentUser && currentUser.accountId) || '');
+            populateSenderBackupSelect(id || '', ownerAccount, id && sendersCache[id] ? (sendersCache[id].backupSenderId || '') : '');
             if (id && sendersCache[id]) {
                 var s = sendersCache[id];
                 document.getElementById('senderEditorName').value = s.name || '';
@@ -3691,6 +3802,8 @@
                 // Empty value = global sender (no accountId)
                 payload.accountId = document.getElementById('senderEditorAccount').value || null;
             }
+            // '' clears the link on the server
+            payload.backupSenderId = document.getElementById('senderEditorBackup').value || '';
             if (senderType === 'sendgrid') {
                 payload.domain = document.getElementById('senderEditorDomain').value.trim();
                 var apiKey = document.getElementById('senderEditorApiKey').value.trim();

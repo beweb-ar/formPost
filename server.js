@@ -657,6 +657,28 @@ function normalizeSendResult(info) {
     };
 }
 
+// How a port speaks TLS is a property of the port, not a free-floating checkbox:
+//   465          -> implicit TLS: the socket is encrypted from byte zero (secure: true)
+//   587 / 2525   -> plaintext connect, then STARTTLS upgrade (secure: false)
+//   25           -> plaintext, STARTTLS only if the relay offers it (internal relays often don't)
+// Getting this backwards is the classic "wrong version number" failure: with
+// secure:true on 587 the client sends a TLS ClientHello and the relay answers
+// with a plaintext "220 ..." greeting, which the TLS parser reads as a bogus
+// record version. Ports outside this list keep whatever the operator configured.
+const IMPLICIT_TLS_PORTS = [465];
+const STARTTLS_PORTS = [587, 2525, 25];
+
+// Force `secure` to match the port. Applied both when saving a sender (so the UI
+// shows the truth) and when building the transport (so senders saved by older
+// versions are corrected without a re-save).
+function normalizeSenderTls(cfg) {
+    if (!cfg || (cfg.type || 'smtp') !== 'smtp') return cfg;
+    const port = Number(cfg.port);
+    if (IMPLICIT_TLS_PORTS.includes(port)) cfg.secure = true;
+    else if (STARTTLS_PORTS.includes(port)) cfg.secure = false;
+    return cfg;
+}
+
 // Configure transporters (one per sender). type: 'smtp' (default) | 'sendgrid'
 const transporters = {};
 function buildTransporter(smtpConfig) {
@@ -669,6 +691,19 @@ function buildTransporter(smtpConfig) {
     delete tc.apiKey;
     delete tc.domain;
     delete tc.accountId;
+    delete tc.active;
+    delete tc.backupSenderId;
+    normalizeSenderTls(tc);
+    // Nodemailer already upgrades with STARTTLS whenever the relay advertises it.
+    // requireTLS turns that into a hard requirement, which is what we want as soon
+    // as there is a password on the wire — but only then, so an unauthenticated
+    // internal relay with no TLS at all keeps working.
+    if ([587, 2525].includes(Number(tc.port)) && tc.user && tc.pass) tc.requireTLS = true;
+    // Nodemailer's defaults are minutes long. A dead relay must fail fast enough
+    // that the backup sender still gets its turn inside the request.
+    if (tc.connectionTimeout === undefined) tc.connectionTimeout = 10000;
+    if (tc.greetingTimeout === undefined) tc.greetingTimeout = 10000;
+    if (tc.socketTimeout === undefined) tc.socketTimeout = 30000;
     if (tc.user && tc.pass) {
         const plainPass = decryptSecret(tc.pass);
         if (plainPass) tc.auth = { type: 'LOGIN', user: tc.user, pass: plainPass };
@@ -698,7 +733,7 @@ function getTransporterForForm(recipientCfg) {
         const senderCfg = config.senders[senderId];
         if (senderCfg && senderUsableByAccount(senderCfg, acct)) {
             if (senderCfg.active === false) return { inactive: true, senderId };
-            return { transporter: transporters[senderId], senderCfg };
+            return { transporter: transporters[senderId], senderCfg, senderId, accountId: acct };
         }
     }
     // Fallback: first sender of the form's account, then first global sender
@@ -715,9 +750,281 @@ function getTransporterForForm(recipientCfg) {
     if (firstId) {
         const senderCfg = config.senders[firstId];
         if (senderCfg.active === false) return { inactive: true, senderId: firstId };
-        return { transporter: transporters[firstId], senderCfg };
+        return { transporter: transporters[firstId], senderCfg, senderId: firstId, accountId: acct };
     }
     return null;
+}
+
+// ============================================================================
+// Sender failover: backup senders + circuit breaker
+// ============================================================================
+// A sender may name another sender as its backup. When a send fails for a reason
+// that is the SENDER's fault (no connection, bad credentials, relay throttling)
+// the same message is retried through the backup. When the failure belongs to the
+// MESSAGE (mailbox does not exist, content refused, attachment too large) there is
+// no retry: the backup would be refused the exact same message.
+//
+// On top of that a circuit breaker keeps a downed sender out of the way. After
+// SENDER_FAIL_THRESHOLD consecutive sender-level failures the breaker opens and
+// every message goes straight to the backup for a cooldown period, instead of
+// paying the connection timeout again on each one. When the cooldown expires the
+// sender gets one trial send (half-open); a background probe also verifies open
+// senders once a minute so recovery is detected even with no traffic.
+
+const SENDER_FAIL_THRESHOLD = Math.max(1, parseInt(process.env.SENDER_FAIL_THRESHOLD || '3', 10) || 3);
+const SENDER_COOLDOWN_MS = Math.max(1, parseInt(process.env.SENDER_COOLDOWN_MINUTES || '5', 10) || 5) * 60000;
+const SENDER_COOLDOWN_MAX_MS = Math.max(1, parseInt(process.env.SENDER_COOLDOWN_MAX_MINUTES || '30', 10) || 30) * 60000;
+const SENDER_CHAIN_MAX = 3; // primary + 2 backups; deeper chains are almost always a config mistake
+
+// In-memory only: health is an observation about *this* process, not configuration.
+// A restart re-probes rather than inheriting a stale "down" verdict.
+const senderHealth = {}; // senderId -> { failures, openUntil, outages, lastError, lastErrorAt, lastOkAt }
+
+function healthOf(id) {
+    if (!senderHealth[id]) {
+        senderHealth[id] = { failures: 0, openUntil: 0, outages: 0, lastError: null, lastErrorAt: null, lastOkAt: null };
+    }
+    return senderHealth[id];
+}
+
+function isCircuitOpen(id, now) {
+    const h = senderHealth[id];
+    return !!(h && h.openUntil > (now || Date.now()));
+}
+
+function recordSenderSuccess(id) {
+    const h = healthOf(id);
+    const wasUnhealthy = h.openUntil > 0 || h.outages > 0 || h.failures > 0;
+    h.failures = 0;
+    h.openUntil = 0;
+    h.outages = 0;
+    h.lastError = null;
+    h.lastErrorAt = null;
+    h.lastOkAt = new Date().toISOString();
+    if (wasUnhealthy) log.info('Sender recovered', { senderId: id });
+}
+
+function recordSenderFailure(id, err) {
+    const h = healthOf(id);
+    h.failures += 1;
+    h.lastError = err && err.message ? err.message : String(err);
+    h.lastErrorAt = new Date().toISOString();
+    // A sender that has already been down once does not get three more chances:
+    // the first miss after a recovery attempt re-opens the breaker immediately.
+    const threshold = h.outages > 0 ? 1 : SENDER_FAIL_THRESHOLD;
+    if (h.failures >= threshold) {
+        h.outages += 1;
+        const cooldown = Math.min(SENDER_COOLDOWN_MS * Math.pow(2, h.outages - 1), SENDER_COOLDOWN_MAX_MS);
+        h.openUntil = Date.now() + cooldown;
+        h.failures = 0;
+        log.error('Sender marked down, routing to backup', {
+            senderId: id,
+            cooldownMinutes: Math.round(cooldown / 60000),
+            consecutiveOutages: h.outages,
+            error: h.lastError
+        });
+    }
+}
+
+// Decide what a send failure means. `retry` = worth trying the backup for THIS
+// message. `senderDown` = the failure says the sender itself is unhealthy and
+// should count toward the breaker.
+function classifySendError(err) {
+    const code = err && err.code;
+    const rc = Number((err && (err.responseCode || err.statusCode)) || 0);
+    const msg = String((err && err.message) || '');
+
+    if (err && err.provider === 'sendgrid') {
+        // 401 bad key, 403 key/sender not authorized, 429 throttled, 5xx provider down
+        if (rc === 401 || rc === 403 || rc === 429 || rc >= 500) return { retry: true, senderDown: true, reason: 'sendgrid-' + rc };
+        // 400 malformed payload / bad addresses, 413 too large: the backup gets the same answer
+        if (rc >= 400) return { retry: false, senderDown: false, reason: 'sendgrid-' + rc };
+        return { retry: true, senderDown: true, reason: 'sendgrid-network' }; // no HTTP status = never reached the API
+    }
+
+    // Never got a usable session with the relay
+    const CONNECTION_CODES = ['ECONNECTION', 'ETIMEDOUT', 'ESOCKET', 'ECONNREFUSED', 'ECONNRESET',
+        'EHOSTUNREACH', 'ENETUNREACH', 'ENOTFOUND', 'EDNS', 'EAI_AGAIN', 'EPROTOCOL', 'ETLS'];
+    if (CONNECTION_CODES.includes(code)) return { retry: true, senderDown: true, reason: 'connection' };
+    // Auth is checked before the generic 5xx rule: 535 is a 5xx but it is the sender's problem, not the message's
+    if (code === 'EAUTH' || rc === 530 || rc === 534 || rc === 535) return { retry: true, senderDown: true, reason: 'auth' };
+    if (/wrong version number|SSL routines|ERR_SSL|self.signed certificate|certificate has expired/i.test(msg)) {
+        return { retry: true, senderDown: true, reason: 'tls' };
+    }
+    // 421 = relay refusing service / too many connections: sender-side outage
+    if (rc === 421) return { retry: true, senderDown: true, reason: 'relay-unavailable' };
+    // Permanent and message-scoped: unknown mailbox, refused content, over quota, bad syntax
+    if (rc >= 500 && rc < 600) return { retry: false, senderDown: false, reason: 'message-rejected' };
+    // Other 4xx (greylisting, mailbox busy): temporary and usually recipient-side, so retry
+    // through the backup but do not blame the sender for it
+    if (rc >= 400 && rc < 500) return { retry: true, senderDown: false, reason: 'temporary' };
+    if (code === 'EENVELOPE' || code === 'EMESSAGE') return { retry: false, senderDown: false, reason: 'message-rejected' };
+    return { retry: true, senderDown: false, reason: 'unknown' };
+}
+
+// Turn the raw driver error into something an admin can act on
+function explainSendError(err, senderCfg) {
+    const msg = String((err && err.message) || '');
+    const cfg = senderCfg || {};
+    const port = Number(cfg.port);
+    if (/wrong version number|SSL routines|ERR_SSL/i.test(msg)) {
+        return msg + ` — TLS mode does not match port ${port || '?'}. Port 465 needs an implicit-TLS connection ` +
+            `("secure" on); ports 587/2525/25 start in plaintext and upgrade with STARTTLS ("secure" off).`;
+    }
+    if (err && (err.code === 'EAUTH' || err.responseCode === 535)) {
+        return msg + ' — the relay rejected the username/password for this sender.';
+    }
+    if (err && ['ETIMEDOUT', 'ECONNECTION', 'ECONNREFUSED'].includes(err.code)) {
+        return msg + ` — could not reach ${cfg.host || 'the relay'}:${port || '?'}. Check the host, the port and any outbound firewall.`;
+    }
+    return msg;
+}
+
+// Ordered list of senders to try for one message: the chosen sender, then its
+// backup, then the backup's backup. Inactive, unknown and out-of-scope senders
+// are skipped; cycles and repeats are dropped.
+function resolveSenderChain(startId, accountId) {
+    const chain = [];
+    const seen = new Set();
+    let id = startId;
+    while (id && !seen.has(id) && chain.length < SENDER_CHAIN_MAX) {
+        seen.add(id);
+        const cfg = (config.senders || {})[id];
+        if (!cfg) break;
+        const usable = cfg.active !== false && transporters[id] &&
+            (accountId == null || senderUsableByAccount(cfg, accountId));
+        if (usable) chain.push({ id, cfg, transporter: transporters[id] });
+        id = cfg.backupSenderId;
+    }
+    return chain;
+}
+
+// Skip senders whose breaker is open — but never drop a message: if every
+// candidate is open, try them all anyway in the original order.
+function orderByHealth(chain) {
+    const now = Date.now();
+    const up = chain.filter(c => !isCircuitOpen(c.id, now));
+    return up.length ? up : chain;
+}
+
+// Send one message through a chain, moving to the backup only on sender-level
+// failures. `buildMailOptions(senderCfg)` is called per attempt so that "from"
+// always belongs to the sender actually being used — a relay will refuse an
+// envelope sender it does not own.
+async function sendWithFailover(chain, buildMailOptions, context) {
+    const ctx = context || {};
+    const attempts = [];
+    const candidates = orderByHealth(chain);
+    if (!candidates.length) {
+        const e = new Error('No usable sender available');
+        e.attempts = attempts;
+        throw e;
+    }
+    let lastError = null;
+    for (const cand of candidates) {
+        try {
+            const meta = normalizeSendResult(await cand.transporter.sendMail(buildMailOptions(cand.cfg)));
+            recordSenderSuccess(cand.id);
+            if (attempts.length) {
+                log.info('Email delivered through backup sender', {
+                    ...ctx, senderId: cand.id, skipped: attempts.map(a => a.senderId)
+                });
+            }
+            return { meta, senderId: cand.id, senderCfg: cand.cfg, attempts, failedOver: attempts.length > 0 };
+        } catch (err) {
+            const cls = classifySendError(err);
+            attempts.push({ senderId: cand.id, reason: cls.reason, error: err.message });
+            if (cls.senderDown) recordSenderFailure(cand.id, err);
+            log.error('Send attempt failed', {
+                ...ctx,
+                senderId: cand.id,
+                reason: cls.reason,
+                willTryBackup: cls.retry,
+                provider: err.provider || 'smtp',
+                statusCode: err.statusCode || err.responseCode || null,
+                error: err.message
+            });
+            lastError = err;
+            if (!cls.retry) break; // message-level rejection: the backup would fail identically
+        }
+    }
+    lastError = lastError || new Error('No usable sender available');
+    lastError.attempts = attempts;
+    return Promise.reject(lastError);
+}
+
+// Background probe: an open sender is re-verified once its cooldown expires so a
+// recovery is noticed (and shown in the admin panel) even with no traffic.
+async function probeDownSenders() {
+    const now = Date.now();
+    for (const [id, h] of Object.entries(senderHealth)) {
+        if (h.outages === 0 || h.openUntil > now) continue;
+        const transporter = transporters[id];
+        if (!transporter || !transporter.verify) continue;
+        try {
+            await transporter.verify();
+            recordSenderSuccess(id);
+        } catch (e) {
+            recordSenderFailure(id, e);
+        }
+    }
+}
+const senderProbeTimer = setInterval(() => {
+    probeDownSenders().catch(e => log.error('Sender probe failed', { error: e.message }));
+}, 60000);
+if (senderProbeTimer.unref) senderProbeTimer.unref();
+
+function senderHealthForApi(id) {
+    const h = senderHealth[id];
+    if (!h) return { state: 'unknown' };
+    if (h.openUntil > Date.now()) {
+        return { state: 'down', until: new Date(h.openUntil).toISOString(), lastError: h.lastError, lastErrorAt: h.lastErrorAt };
+    }
+    if (h.outages > 0) return { state: 'recovering', lastError: h.lastError, lastErrorAt: h.lastErrorAt };
+    if (h.failures > 0) return { state: 'degraded', failures: h.failures, lastError: h.lastError, lastErrorAt: h.lastErrorAt };
+    return { state: h.lastOkAt ? 'up' : 'unknown', lastOkAt: h.lastOkAt };
+}
+
+// A sender may only fail over to one that every user of it could already use:
+//  - a GLOBAL sender (shared by all accounts) may only back up to another global
+//    sender; otherwise account A's mail would leave through account B's private relay.
+//  - an ACCOUNT sender may back up to a global sender or to one of its own account.
+// So a client-owned sender can HAVE a backup but can never BE the backup of a
+// shared sender, which is exactly the intended asymmetry.
+function validateBackupSenderId(backupId, selfId, ownerAccountId, sendersMap) {
+    if (backupId === undefined) return null; // field not being changed
+    if (!backupId) return null;              // explicitly cleared
+    if (typeof backupId !== 'string') return '"backupSenderId" must be a sender id or an empty value.';
+    if (backupId === selfId) return 'A sender cannot be its own backup.';
+    const senders = sendersMap || config.senders || {};
+    const backup = senders[backupId];
+    if (!backup) return `Backup sender "${backupId}" does not exist.`;
+    if (!ownerAccountId) {
+        if (backup.accountId) {
+            return `A global sender can only fall back to another global sender ("${backupId}" belongs to account "${backup.accountId}").`;
+        }
+    } else if (backup.accountId && backup.accountId !== ownerAccountId) {
+        return `Backup sender "${backupId}" belongs to another account.`;
+    }
+    // Loops are deliberately allowed: two senders naming each other as backup is
+    // the normal highly-available pair. resolveSenderChain() walks with a visited
+    // set and a depth cap, so a cycle can never make a send spin.
+    return null;
+}
+
+// Drop backup links that stopped being legal — the target was deleted, or a
+// superadmin moved a sender between accounts and left a global one pointing at a
+// private relay. Runs inside every sender write.
+function pruneInvalidBackupRefs(cfgObj) {
+    const senders = (cfgObj && cfgObj.senders) || {};
+    for (const [id, s] of Object.entries(senders)) {
+        if (!s.backupSenderId) continue;
+        const problem = validateBackupSenderId(s.backupSenderId, id, s.accountId || null, senders);
+        if (problem) {
+            log.info('Cleared invalid backup sender link', { senderId: id, backupSenderId: s.backupSenderId, reason: problem });
+            delete s.backupSenderId;
+        }
+    }
 }
 
 // HTML escape function to prevent XSS in email templates
@@ -1064,10 +1371,13 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
         const emailTimestamp = new Date().toISOString();
         let emailOk = false;
 
-        // Send email (only if sender exists and is active)
+        // Send email (only if sender exists and is active).
+        // The chain is the configured sender plus its backups; a sender-level
+        // failure moves the same message down the chain (see sendWithFailover).
+        const senderChain = skipEmail ? [] : resolveSenderChain(senderInfo.senderId, senderInfo.accountId);
         if (!skipEmail) {
-            const mailOptions = {
-                from: `"${escapeHtml(String(senderName))}" <${senderInfo.senderCfg.from}>`,
+            const buildMailOptions = (cfg) => ({
+                from: `"${escapeHtml(String(senderName))}" <${cfg.from}>`,
                 to: recipientConfig.to,
                 subject: emailSubject,
                 html: mailBody,
@@ -1076,14 +1386,17 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     filename: f.originalname,
                     path: f.path
                 }))
-            };
+            });
 
             try {
-                const sendMeta = normalizeSendResult(await senderInfo.transporter.sendMail(mailOptions));
+                const outcome = await sendWithFailover(senderChain, buildMailOptions, { formId, to: recipientConfig.to });
+                const sendMeta = outcome.meta;
                 // Detailed delivery log: provider, accept status code, message id (trace handle),
                 // and per-recipient accepted/rejected. For SendGrid, statusCode 202 = queued, not delivered.
                 log.info('Email sent', {
                     formId, to: recipientConfig.to,
+                    senderId: outcome.senderId,
+                    failedOver: outcome.failedOver,
                     provider: sendMeta.provider,
                     statusCode: sendMeta.statusCode,
                     messageId: sendMeta.messageId,
@@ -1100,11 +1413,16 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     to: recipientConfig.to,
                     subject: emailSubject,
                     status: 'ok',
+                    senderId: outcome.senderId,
                     provider: sendMeta.provider,
                     providerStatus: sendMeta.statusCode,
                     messageId: sendMeta.messageId,
                     response: sendMeta.response
                 };
+                if (outcome.failedOver) {
+                    mailEntry.failedOver = true;
+                    mailEntry.primarySenderId = senderChain[0] && senderChain[0].id;
+                }
                 saveOutboxEntry(formId, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
                 broadcastSSE({ type: 'outbox', websiteId: formId, ...mailEntry });
             } catch (error) {
@@ -1112,6 +1430,7 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     formId, to: recipientConfig.to,
                     provider: error.provider || 'smtp',
                     statusCode: error.statusCode || null,
+                    attempts: error.attempts || [],
                     error: error.message
                 });
 
@@ -1122,10 +1441,14 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                     to: recipientConfig.to,
                     subject: emailSubject,
                     status: 'error',
+                    senderId: senderInfo.senderId,
                     provider: error.provider || 'smtp',
                     providerStatus: error.statusCode || null,
                     error: error.message
                 };
+                if (error.attempts && error.attempts.length > 1) {
+                    mailFailEntry.triedSenders = error.attempts.map(a => a.senderId);
+                }
                 saveOutboxEntry(formId, mailFailEntry).catch(() => {});
                 broadcastSSE({ type: 'outbox', websiteId: formId, ...mailFailEntry });
 
@@ -1368,15 +1691,18 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         autoReplyBody = '<h2>Thank you for your submission</h2><p>We have received your message and will get back to you soon.</p>';
                     }
                     const arSubject = recipientConfig.autoReplySubject || 'Thank you for your submission';
-                    const arMeta = normalizeSendResult(await senderInfo.transporter.sendMail({
-                        from: `"${escapeHtml(String(senderAlias || senderInfo.senderCfg.name || 'No Reply'))}" <${senderInfo.senderCfg.from}>`,
+                    const arOutcome = await sendWithFailover(senderChain, (cfg) => ({
+                        from: `"${escapeHtml(String(senderAlias || cfg.name || 'No Reply'))}" <${cfg.from}>`,
                         to: senderEmail,
                         subject: arSubject,
                         html: autoReplyBody,
                         replyTo: recipientConfig.autoReplyReplyTo || undefined
-                    }));
+                    }), { formId, to: senderEmail, autoReply: true });
+                    const arMeta = arOutcome.meta;
                     log.info('Auto-reply sent', {
                         formId, to: senderEmail,
+                        senderId: arOutcome.senderId,
+                        failedOver: arOutcome.failedOver,
                         provider: arMeta.provider,
                         statusCode: arMeta.statusCode,
                         messageId: arMeta.messageId,
@@ -1391,6 +1717,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         subject: arSubject,
                         status: 'ok',
                         autoReply: true,
+                        senderId: arOutcome.senderId,
+                        failedOver: arOutcome.failedOver || undefined,
                         provider: arMeta.provider,
                         providerStatus: arMeta.statusCode,
                         messageId: arMeta.messageId,
@@ -1547,11 +1875,12 @@ function getTransporterForAccount(accountId) {
         return aOwn - bOwn;
     });
     const id = ids[0];
-    return id ? { transporter: transporters[id], senderCfg: config.senders[id] } : null;
+    return id ? { transporter: transporters[id], senderCfg: config.senders[id], senderId: id, accountId } : null;
 }
 
 async function sendLoginCodeEmail(user, email, code) {
-    const senderInfo = getTransporterForAccount(user.role === 'superadmin' ? null : (user.accountId || 'default'));
+    const accountId = user.role === 'superadmin' ? null : (user.accountId || 'default');
+    const senderInfo = getTransporterForAccount(accountId);
     if (!senderInfo) throw new Error('no-sender');
     const minutes = Math.round(OTP_TTL_MS / 60000);
     const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#212529;">
@@ -1561,12 +1890,15 @@ async function sendLoginCodeEmail(user, email, code) {
         <p>Vence en ${minutes} minutos y sirve una sola vez.</p>
         <p style="color:#6c757d;font-size:13px;">Si no pediste este código, ignorá este mensaje.</p>
     </div>`;
-    await senderInfo.transporter.sendMail({
-        from: `"formPost" <${senderInfo.senderCfg.from}>`,
+    // The login code is the one mail nobody can resend by hand, so it uses the
+    // backup chain too.
+    const chain = resolveSenderChain(senderInfo.senderId, accountId);
+    await sendWithFailover(chain, (cfg) => ({
+        from: `"formPost" <${cfg.from}>`,
         to: email,
         subject: t.otpSubject,
         html
-    });
+    }), { otp: true, to: email });
 }
 
 // ---- Google sign-in ----
@@ -1969,7 +2301,9 @@ adminRouter.get('/senders', (req, res) => {
             apiKey: cfg.apiKey ? '••••' : '',
             domain: cfg.domain || '',
             accountId: cfg.accountId || null,
-            global: !cfg.accountId
+            global: !cfg.accountId,
+            backupSenderId: cfg.backupSenderId || '',
+            health: senderHealthForApi(id)
         };
     }
     res.json(sanitized);
@@ -2000,10 +2334,15 @@ adminRouter.post('/senders', requireRole('superadmin', 'admin'), async (req, res
     } else {
         delete senderConfig.accountId; // global sender
     }
+    if (senderConfig.backupSenderId === '' || senderConfig.backupSenderId === null) delete senderConfig.backupSenderId;
+    const backupError = validateBackupSenderId(senderConfig.backupSenderId, id, senderConfig.accountId || null);
+    if (backupError) return res.status(400).json({ error: backupError });
+    normalizeSenderTls(senderConfig);
     try {
         await writeConfigSafe(cfg => {
             if (!cfg.senders) cfg.senders = {};
             cfg.senders[id] = senderConfig;
+            pruneInvalidBackupRefs(cfg);
         });
         rebuildAllTransporters();
         res.status(201).json({ message: 'Sender added' });
@@ -2026,12 +2365,22 @@ adminRouter.put('/senders/:id', requireRole('superadmin', 'admin'), async (req, 
             return res.status(400).json({ error: 'Unknown account: ' + update.accountId });
         }
     }
+    // The backup must be legal for the account this sender will belong to AFTER the update
+    const merged = { ...config.senders[id], ...update };
+    if (merged.accountId === null || merged.accountId === '') delete merged.accountId;
+    const backupError = validateBackupSenderId(update.backupSenderId, id, merged.accountId || null);
+    if (backupError) return res.status(400).json({ error: backupError });
     try {
         await writeConfigSafe(cfg => {
             cfg.senders[id] = { ...cfg.senders[id], ...update };
             if (update.accountId === null || update.accountId === '') delete cfg.senders[id].accountId;
+            if (update.backupSenderId === '' || update.backupSenderId === null) delete cfg.senders[id].backupSenderId;
+            normalizeSenderTls(cfg.senders[id]);
+            pruneInvalidBackupRefs(cfg);
         });
         rebuildAllTransporters();
+        // Config changed: give the sender a clean slate instead of inheriting the old breaker state
+        delete senderHealth[id];
         res.json({ message: t.smtpUpdated });
     } catch (e) {
         res.status(500).json({ error: t.failedSaveConfig });
@@ -2045,12 +2394,25 @@ adminRouter.delete('/senders/:id', requireRole('superadmin', 'admin'), async (re
     try {
         await writeConfigSafe(cfg => {
             delete cfg.senders[id];
+            pruneInvalidBackupRefs(cfg); // other senders may have used this one as backup
         });
         delete transporters[id];
+        delete senderHealth[id];
         res.json({ message: 'Sender removed' });
     } catch (e) {
         res.status(500).json({ error: t.failedSaveConfig });
     }
+});
+
+// Clear the circuit breaker so the next message tries this sender again,
+// without waiting for the cooldown.
+adminRouter.post('/senders/:id/health/reset', requireRole('superadmin', 'admin'), (req, res) => {
+    const { id } = req.params;
+    if (!config.senders || !config.senders[id]) return res.status(404).json({ error: 'Sender not found' });
+    if (!canAccessSender(req, id)) return res.status(403).json({ error: t.forbidden });
+    delete senderHealth[id];
+    log.info('Sender health reset', { senderId: id, by: req.user && req.user.username });
+    res.json({ message: 'Sender re-enabled', health: senderHealthForApi(id) });
 });
 
 // Run a sender connection test against an in-memory config (never persisted)
@@ -2058,6 +2420,7 @@ async function runSenderTest(res, senderCfg, testTo, label) {
     if (!testTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testTo)) {
         return res.status(400).json({ error: 'Invalid email address' });
     }
+    // A test must report the truth about THIS sender: no failover here, on purpose.
     try {
         const testTransporter = buildTransporter(senderCfg);
         await testTransporter.verify();
@@ -2076,8 +2439,8 @@ async function runSenderTest(res, senderCfg, testTo, label) {
             : (meta.response || 'sent');
         res.json({ message: 'Test email sent to ' + testTo + ' — ' + detail, provider: meta.provider, statusCode: meta.statusCode, messageId: meta.messageId, response: meta.response });
     } catch (e) {
-        log.error('Sender test failed', { sender: label, error: e.message });
-        res.status(500).json({ error: 'Connection failed: ' + e.message });
+        log.error('Sender test failed', { sender: label, code: e.code, responseCode: e.responseCode, error: e.message });
+        res.status(500).json({ error: 'Connection failed: ' + explainSendError(e, senderCfg) });
     }
 }
 
@@ -3284,9 +3647,12 @@ function validateFormConfig(body, isCreate, scope, targetAccountId) {
     return { cfg, errors, warnings };
 }
 
-const SENDER_CONFIG_FIELDS = ['name', 'type', 'host', 'port', 'secure', 'from', 'user', 'pass', 'apiKey', 'domain', 'active'];
+const SENDER_CONFIG_FIELDS = ['name', 'type', 'host', 'port', 'secure', 'from', 'user', 'pass', 'apiKey', 'domain', 'active', 'backupSenderId'];
 
-function validateSenderConfig(body, existing) {
+// `ownerAccountId` is the account the sender will belong to after this write
+// (null = global). It decides which backups are legal; pass it explicitly because
+// accountId is assigned by the caller from the API key scope, not from the body.
+function validateSenderConfig(body, existing, selfId, ownerAccountId) {
     const cfg = {};
     const errors = [];
     for (const f of SENDER_CONFIG_FIELDS) {
@@ -3313,6 +3679,20 @@ function validateSenderConfig(body, existing) {
     } else {
         if (!merged.host) errors.push('"host" is required for SMTP senders.');
         if (!merged.port) errors.push('"port" is required for SMTP senders.');
+        // Keep `secure` consistent with the port instead of letting a caller save
+        // a combination that can only produce a TLS handshake error.
+        if (cfg.port !== undefined || cfg.secure !== undefined) {
+            const probe = { type: 'smtp', port: merged.port, secure: merged.secure };
+            normalizeSenderTls(probe);
+            if (probe.secure !== !!merged.secure) cfg.secure = probe.secure;
+        }
+    }
+    if (cfg.backupSenderId === '' || cfg.backupSenderId === null) {
+        cfg.backupSenderId = '';
+    } else if (cfg.backupSenderId !== undefined) {
+        const ownerAccount = ownerAccountId !== undefined ? ownerAccountId : (merged.accountId || null);
+        const backupError = validateBackupSenderId(cfg.backupSenderId, selfId, ownerAccount);
+        if (backupError) errors.push(backupError);
     }
     return { cfg, errors };
 }
@@ -3331,6 +3711,8 @@ function sanitizeSenderForApi(id, cfg) {
         active: cfg.active !== false,
         accountId: cfg.accountId || null,
         global: !cfg.accountId,
+        backupSenderId: cfg.backupSenderId || '',
+        health: senderHealthForApi(id),
         hasPassword: !!cfg.pass,
         hasApiKey: !!cfg.apiKey
     };
@@ -3383,7 +3765,7 @@ function buildApiSpec(req) {
             { method: 'GET', path: '/api/v1/forms/:id/submissions?page=1&limit=50', auth: true, description: 'Read received submissions (newest first). Each submission may include an "attachments" array of stored files.' },
             { method: 'GET', path: '/api/v1/forms/:id/submissions/:entryId/attachments/:filename', auth: true, description: 'Download a stored submission attachment.' },
             { method: 'GET', path: '/api/v1/forms/:id/outbox?page=1&limit=20', auth: true, description: 'Delivery log: emails and notifications sent for this form, with ok/error status.' },
-            { method: 'GET', path: '/api/v1/senders', auth: true, description: 'List email senders (secrets masked).' },
+            { method: 'GET', path: '/api/v1/senders', auth: true, description: 'List email senders (secrets masked). Each entry includes "backupSenderId" and a live "health" object: state up | degraded | down | recovering | unknown.' },
             { method: 'POST', path: '/api/v1/senders', auth: true, description: 'Create a sender. Body: { id, ...senderConfig }.', requiredFields: ['id', 'from'] },
             { method: 'PUT', path: '/api/v1/senders/:id', auth: true, description: 'Update a sender. Omit "pass"/"apiKey" to keep the stored secret.' },
             { method: 'DELETE', path: '/api/v1/senders/:id', auth: true, description: 'Delete a sender.' },
@@ -3420,8 +3802,9 @@ function buildApiSpec(req) {
             from: 'string, required. Sender email address. For SendGrid it must belong to a verified sending domain.',
             active: 'boolean. Default true.',
             host: 'string. SMTP only: server host.',
-            port: 'number. SMTP only: 587 (STARTTLS) or 465 (TLS).',
-            secure: 'boolean. SMTP only: true for port 465.',
+            port: 'number. SMTP only: 587 (STARTTLS) or 465 (implicit TLS).',
+            secure: 'boolean. SMTP only: true for 465, false for 587/2525/25. Derived from the port automatically — a mismatched value is corrected on save.',
+            backupSenderId: 'string, optional. Sender to fall back to when this one fails for connectivity, TLS, credential or throttling reasons (never for a rejected recipient or refused message). A global sender may only point to another global sender; an account sender may point to a global one or to another sender of the same account. Send "" to clear it.',
             user: 'string. SMTP only: auth username.',
             pass: 'string. SMTP only: auth password (write-only, never returned).',
             apiKey: 'string. SendGrid only: API key with Mail Send permission (write-only, never returned).',
@@ -3702,22 +4085,27 @@ apiRouter.post('/senders', async (req, res) => {
     if (config.senders && config.senders[id]) {
         return res.status(409).json({ error: `Sender "${id}" already exists. Use PUT /api/v1/senders/${id} to update it.` });
     }
-    const { cfg, errors } = validateSenderConfig(body, null);
-    if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
-    if (cfg.type === undefined) cfg.type = 'smtp';
-    // Account keys create senders in their own account; master key may pass accountId (or omit = global)
+    // Account keys create senders in their own account; master key may pass accountId (or omit = global).
+    // Resolve the owner first: it decides which backup senders are legal.
+    let ownerAccountId = null;
     if (req.apiScope) {
-        cfg.accountId = req.apiScope;
+        ownerAccountId = req.apiScope;
     } else if (body.accountId) {
         if (!(config.accounts || {})[body.accountId]) {
             return res.status(400).json({ error: 'Unknown account: ' + body.accountId });
         }
-        cfg.accountId = body.accountId;
+        ownerAccountId = body.accountId;
     }
+    const { cfg, errors } = validateSenderConfig(body, null, id, ownerAccountId);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
+    if (cfg.type === undefined) cfg.type = 'smtp';
+    if (cfg.backupSenderId === '') delete cfg.backupSenderId;
+    if (ownerAccountId) cfg.accountId = ownerAccountId;
     try {
         await writeConfigSafe(c => {
             if (!c.senders) c.senders = {};
             c.senders[id] = cfg;
+            pruneInvalidBackupRefs(c);
         });
         rebuildAllTransporters();
         log.info('Sender created via Agent API', { senderId: id, type: cfg.type, accountId: cfg.accountId || 'global' });
@@ -3736,14 +4124,17 @@ apiRouter.put('/senders/:id', async (req, res) => {
     if (!apiCanAccessSender(req, id)) return res.status(404).json({ error: 'Sender not found' });
     if (!apiCanManageSender(req, id)) return res.status(403).json({ error: 'Global senders are managed by the administrator.' });
     const body = stripSenderSecretEchoes(req.body || {});
-    const { cfg, errors } = validateSenderConfig(body, config.senders[id]);
+    const { cfg, errors } = validateSenderConfig(body, config.senders[id], id, config.senders[id].accountId || null);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), errors });
     delete cfg.accountId;
     try {
         await writeConfigSafe(c => {
             c.senders[id] = { ...c.senders[id], ...cfg };
+            if (cfg.backupSenderId === '') delete c.senders[id].backupSenderId;
+            pruneInvalidBackupRefs(c);
         });
         rebuildAllTransporters();
+        delete senderHealth[id]; // config changed: re-evaluate health from scratch
         log.info('Sender updated via Agent API', { senderId: id });
         res.json({ message: 'Sender updated', sender: sanitizeSenderForApi(id, config.senders[id]) });
     } catch (e) {
@@ -3758,8 +4149,10 @@ apiRouter.delete('/senders/:id', async (req, res) => {
     try {
         await writeConfigSafe(c => {
             delete c.senders[id];
+            pruneInvalidBackupRefs(c);
         });
         delete transporters[id];
+        delete senderHealth[id];
         log.info('Sender deleted via Agent API', { senderId: id });
         res.json({ message: 'Sender removed' });
     } catch (e) {
@@ -3788,8 +4181,8 @@ apiRouter.post('/senders/:id/test', async (req, res) => {
         log.info('Sender test sent (Agent API)', { senderId: id, to: testTo, provider: meta.provider, statusCode: meta.statusCode, messageId: meta.messageId });
         res.json({ message: 'Test email sent to ' + testTo, provider: meta.provider, statusCode: meta.statusCode, messageId: meta.messageId, response: meta.response });
     } catch (e) {
-        log.error('Sender test failed (Agent API)', { senderId: id, error: e.message });
-        res.status(500).json({ error: 'Connection failed: ' + e.message });
+        log.error('Sender test failed (Agent API)', { senderId: id, code: e.code, responseCode: e.responseCode, error: e.message });
+        res.status(500).json({ error: 'Connection failed: ' + explainSendError(e, senderCfg) });
     }
 });
 

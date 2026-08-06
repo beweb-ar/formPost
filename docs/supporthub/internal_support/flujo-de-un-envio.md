@@ -30,8 +30,8 @@ Orden real de ejecución de `POST /submit` [evidencia: server.js:788-1329]. Sirv
 | 7 | Validación de campos: ≤30, nombre ≤100, valor ≤5000, email válido | `400` con el mensaje correspondiente |
 | 8 | Captcha: solo si `captchaEnabled !== false` **y** hay clave secreta guardada; `DEBUG=true` lo saltea | `400 completeCaptcha / captchaFailed`, `500 captchaError` |
 | 9 | Se arma el cuerpo del email con la plantilla (`{{fields}}`, `{{form_id}}`, `{{campo}}`) o uno genérico si no existe el archivo | `500 templateError` si el path sale del directorio de la app |
-| 10 | Se elige el sender: el del formulario; si no sirve, el primero de la cuenta; si no, uno global | Sin sender → se saltea el email (solo log). Sender inactivo → outbox `skipped` |
-| 11 | **Envío del email principal** | Outbox `error` + **`500 serverError` y se corta el flujo: el envío NO se guarda** |
+| 10 | Se elige el sender: el del formulario; si no sirve, el primero de la cuenta; si no, uno global. Se arma la **cadena** con sus respaldos (máx. 3) y se saltean los que tengan el disyuntor abierto | Sin sender → se saltea el email (solo log). Sender inactivo → outbox `skipped` |
+| 11 | **Envío del email principal**, recorriendo la cadena: una falla del sender pasa al respaldo; una del mensaje corta ahí | Outbox `error` + **`500 serverError` y se corta el flujo: el envío NO se guarda** |
 | 12 | Se guarda el envío en `data/submissions-<form>.json` (IP anonimizada, `submitMethod`), se persisten adjuntos y se emite el evento SSE de inbox | Solo log de error; el visitante ya recibió respuesta |
 | 13 | Estadísticas: `successfulSubmissions++`, `mailsSent++` si el mail salió | Solo log |
 | 14 | Discord (si hay webhook): mensaje + adjuntos → outbox | Outbox `error`; no corta |
@@ -51,8 +51,11 @@ Orden real de ejecución de `POST /submit` [evidencia: server.js:788-1329]. Sirv
 - `Honeypot triggered` — bot descartado.
 - `Origin rejected` — dominio no permitido.
 - `Captcha verification failed` / `No captcha token provided`.
-- `Email sent` — incluye `provider`, `statusCode`, `messageId`, `accepted`, `rejected`, `response`.
-- `Error sending email` — `provider`, `statusCode`, `error`.
+- `Email sent` — incluye `senderId`, `failedOver`, `provider`, `statusCode`, `messageId`, `accepted`, `rejected`, `response`.
+- `Send attempt failed` — un intento individual de la cadena: `senderId`, `reason` (`connection`, `auth`, `tls`, `relay-unavailable`, `temporary`, `message-rejected`, `sendgrid-<código>`) y `willTryBackup`, que dice si se pasa al respaldo.
+- `Email delivered through backup sender` — salió por el respaldo; `skipped` lista los que fallaron.
+- `Sender marked down, routing to backup` / `Sender recovered` — apertura y cierre del disyuntor.
+- `Error sending email` — `provider`, `statusCode`, `attempts`, `error`.
 - `Sender disabled, skipping email` / `No sender configured, skipping email`.
 - `Discord webhook failed`, `Telegram notification failed`, `Webhook failed`, `Auto-reply failed`.
 - `Error saving submission`, `Error persisting attachments`.

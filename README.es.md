@@ -42,6 +42,7 @@
 ### Core
 - **Soporte multi-formulario** - Formularios ilimitados, cada uno con su propia configuración
 - **Multi-sender de email** - Múltiples senders (relays SMTP o SendGrid API) con toggle activo/desactivado por sender
+- **Failover de senders** - Cada sender puede designar un respaldo; las fallas de conectividad o credenciales derivan a él automáticamente, y un disyuntor mantiene al relay caído fuera del camino hasta que se recupera
 - **Soporte SendGrid** - Envío vía la API HTTP v3 de SendGrid con solo una API key y un dominio de envío verificado (no requiere puertos SMTP)
 - **API para Agentes** - API REST auto-documentada (`/api/v1`) para que agentes de IA creen cuentas, formularios, senders y plantillas programáticamente
 - **Tres formas de ingresar** - Google, email + código de un solo uso (OTP) o email + contraseña. No hay auto-registro: el email tiene que pertenecer a un usuario existente
@@ -143,7 +144,8 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
             "active": true,
             "from": "noreply@ejemplo.com",
             "user": "usuario_smtp",
-            "pass": "contraseña_smtp"
+            "pass": "contraseña_smtp",
+            "backupSenderId": "sendgrid"
         },
         "sendgrid": {
             "name": "SendGrid",
@@ -201,13 +203,48 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | `from` | string | Dirección from |
 | `host` | string | Solo SMTP: servidor |
 | `port` | number | Solo SMTP: puerto (587, 465, etc.) |
-| `secure` | boolean | Solo SMTP: usar TLS/SSL |
+| `secure` | boolean | Solo SMTP: TLS implícito. Se deriva del puerto — ver abajo |
 | `user` | string | Solo SMTP: usuario |
 | `pass` | string | Solo SMTP: contraseña |
 | `apiKey` | string | Solo SendGrid: API key con permiso **Mail Send** |
 | `domain` | string | Solo SendGrid: dominio de envío verificado (el `from` debe pertenecer a él) |
+| `backupSenderId` | string | Opcional: sender de respaldo cuando este falla — ver [Failover de senders](#failover-de-senders) |
 
 > **SendGrid:** creá una API key en SendGrid > Settings > API Keys con permiso Mail Send, y verificá tu dominio de envío en Settings > Sender Authentication. Los senders SendGrid usan la API HTTP v3, por lo que funcionan incluso donde los puertos SMTP salientes están bloqueados.
+
+### El modo TLS se deriva del puerto
+
+`secure` no es una elección independiente: el 465 va cifrado desde el primer byte (TLS implícito),
+mientras que 587/2525/25 arrancan en texto plano y se cifran con STARTTLS. Combinarlos mal produce
+`SSL routines:...:wrong version number`. formPost fuerza `secure` según el puerto tanto al guardar
+como al construir el transporte, así que una config guardada con la combinación equivocada se corrige
+sin volver a guardarla. Los puertos no estándar mantienen lo que hayas configurado. Con credenciales
+en un puerto de submission (587/2525) se exige STARTTLS, de modo que la contraseña nunca viaja en claro.
+
+### Failover de senders
+
+Cualquier sender puede designar a otro como `backupSenderId`. Cuando un envío falla **por culpa del
+sender** — sin conexión, TLS mal negociado, credenciales rechazadas, throttling, 5xx del proveedor —
+el mismo mensaje se reintenta por el respaldo. Cuando la falla es **del mensaje** — destinatario
+inexistente (550), contenido rechazado, adjunto demasiado grande, 400/413 de SendGrid — no hay
+reintento: el respaldo lo rechazaría igual.
+
+Las reglas de alcance mantienen separadas a las cuentas:
+
+- Un sender **global** solo puede respaldarse en otro **global**. Dos globales que se nombran
+  mutuamente son el par recomendado de alta disponibilidad.
+- Un sender **de cuenta** puede respaldarse en uno global o en otro de la misma cuenta.
+- Por eso un sender de un cliente **puede tener** respaldo pero nunca **ser** el respaldo de un sender
+  compartido: si no, el correo de otra cuenta saldría por el relay privado de ese cliente.
+
+Un disyuntor (*circuit breaker*) mantiene fuera del camino a un sender caído en lugar de pagar su
+timeout de conexión en cada mensaje: tras `SENDER_FAIL_THRESHOLD` fallas consecutivas de nivel sender
+se lo marca como caído y todo el tráfico va directo al respaldo durante `SENDER_COOLDOWN_MINUTES`,
+duplicándose en cada recaída hasta `SENDER_COOLDOWN_MAX_MINUTES`. Una verificación en segundo plano
+prueba los senders caídos una vez por minuto, así la recuperación se detecta y el tráfico vuelve solo
+aunque no haya habido envíos. El estado es en memoria: reiniciar lo limpia. `GET /admin/api/senders`
+lo reporta por sender en `health.state` (`up | degraded | down | recovering | unknown`), la lista de
+Senders muestra una etiqueta **CAÍDO**, y `POST /admin/api/senders/:id/health/reset` lo limpia al instante.
 
 ## Variables de Entorno
 
@@ -219,6 +256,9 @@ Toda la configuración está en `config.json`. El panel admin puede modificar la
 | `ADMIN_USERNAME` | - | Crea/actualiza un usuario superadmin con este nombre |
 | `ADMIN_PASSWORD` | - | Contraseña del superadmin de `ADMIN_USERNAME` |
 | `API_KEY` | - | Sobreescribe la clave maestra de la API para agentes (`/api/v1`, sin restricción) |
+| `SENDER_FAIL_THRESHOLD` | `3` | Fallas consecutivas de nivel sender antes de marcarlo caído y derivar al respaldo |
+| `SENDER_COOLDOWN_MINUTES` | `5` | Cuánto se saltea un sender caído antes de darle un envío de prueba |
+| `SENDER_COOLDOWN_MAX_MINUTES` | `30` | Tope del enfriamiento, que se duplica en cada recaída |
 | `GOOGLE_CLIENT_ID` | (se guarda en `config.auth.googleClientId`) | Client id de Google OAuth para el botón "Acceder con Google" del panel |
 | `SUPPORTHUB_TOOLS_SECRET` | - | Secret HS256 con el que se firman los tokens de usuario que aceptan los endpoints de solo lectura `/agent-api` (herramientas del agente de SupportHub). Sin definir = `/agent-api` y el endpoint de token quedan deshabilitados |
 | `SUPPORTHUB_URL` | - | URL base de la plataforma SupportHub. Definida, el panel carga el widget de ayuda para los usuarios logueados; sin definir, no se carga nada |

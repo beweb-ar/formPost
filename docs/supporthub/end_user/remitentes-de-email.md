@@ -31,11 +31,27 @@ Todo esto está en **Configuración** (engranaje del encabezado) → pestaña **
 3. **Tipo**: dejá **SMTP**.
 4. **From Email**: la dirección desde la que salen los mails, por ejemplo `noreply@tuempresa.com`.
 5. **Host** y **Puerto**: los datos que te da tu proveedor de correo (típicamente `587` o `465`).
-6. **Conexión Segura (TLS/SSL)**: tildalo si usás el puerto 465.
+6. **Conexión Segura (TLS/SSL)**: se ajusta sola según el puerto, no hace falta tocarla (ver abajo).
 7. **Usuario** y **Contraseña**: las credenciales de la casilla.
-8. Tocá **Test** para probar antes de guardar (ver más abajo) y después **Save**.
+8. **Sender de respaldo** (opcional): a qué otro remitente pasar si este falla (ver más abajo).
+9. Tocá **Test** para probar antes de guardar (ver más abajo) y después **Save**.
 
 Host y puerto son obligatorios: si faltan, aparece `Host y puerto son requeridos para senders SMTP`.
+
+### Puerto y "Conexión Segura": no se eligen por separado
+
+El modo de cifrado lo define el puerto, y formPost lo ajusta solo al escribirlo:
+
+| Puerto | Modo | Casilla "Conexión Segura" |
+|---|---|---|
+| 465 | TLS implícito (cifrado desde el primer byte) | tildada |
+| 587 / 2525 | STARTTLS (arranca en texto plano y se cifra enseguida) | destildada |
+| 25 | Relay interno, STARTTLS si el servidor lo ofrece | destildada |
+
+Combinarlos al revés — por ejemplo puerto 587 con la casilla tildada — hacía que el envío fallara con
+`SSL routines:...:wrong version number`. Ahora la combinación se corrige al guardar y al enviar, así que
+ese error ya no debería aparecer con puertos estándar. Si usás un puerto no estándar, la casilla queda
+como la dejes.
 
 ## Cómo enviar con SendGrid (sin puertos SMTP)
 
@@ -81,13 +97,55 @@ Un sender **Global** lo provee el administrador de la plataforma y está disponi
 
 Si sos superadmin, en el editor aparece el campo **Cuenta**: dejarlo vacío crea un sender Global; elegir una cuenta lo asigna a esa cuenta [evidencia: admin/index.html:3377-3391, server.js:1716-1727].
 
+## Cómo configurar un remitente de respaldo (failover)
+
+Cada sender puede apuntar a otro como **respaldo**. Si el envío falla por un problema del remitente
+—no hay conexión, credenciales rechazadas, el proveedor está caído o limitando— formPost reintenta
+el mismo mensaje por el respaldo, sin que el visitante note nada.
+
+**No** se usa el respaldo cuando el rechazo es del mensaje en sí (destinatario inexistente, contenido
+o adjunto rechazado): el respaldo recibiría exactamente la misma negativa. En ese caso el envío queda
+en la Bandeja de Salida con estado *error*.
+
+### Qué respaldo puedo elegir
+
+- Un sender **Global** solo puede tener como respaldo a otro sender **Global**. Dos senders globales
+  pueden respaldarse mutuamente: es la configuración recomendada para alta disponibilidad.
+- Un sender **de una cuenta** puede respaldarse en uno Global o en otro de la misma cuenta.
+- Por lo tanto, un sender de un cliente **puede tener** respaldo, pero **nunca puede ser** el respaldo
+  de un sender compartido: si no fuera así, el correo de otras cuentas saldría por el relay privado de ese cliente.
+
+El desplegable ya muestra solamente las opciones válidas.
+
+### Qué pasa cuando un remitente se cae
+
+Para no pagar el timeout de conexión en cada mail, formPost recuerda el estado de cada remitente:
+
+1. Tras varios fallos seguidos de nivel remitente (3 por defecto) lo marca como **CAÍDO** y, durante
+   un período de enfriamiento (5 minutos por defecto), manda todo directo al respaldo sin siquiera intentarlo.
+2. Cumplido ese tiempo le da una oportunidad; si vuelve a fallar, el enfriamiento se duplica (hasta 30 minutos).
+3. En paralelo, una verificación en segundo plano prueba la conexión cada minuto, así la recuperación
+   se detecta aunque no haya tráfico. Cuando vuelve, el tráfico regresa solo al remitente principal.
+
+En la lista de Senders, un remitente caído muestra la etiqueta **CAÍDO** (con el motivo y hasta cuándo,
+al pasar el mouse) y un botón **Reintentar ahora** para volver a habilitarlo sin esperar.
+
+Este estado vive en memoria: al reiniciar el servidor, todos los remitentes arrancan sin marca.
+
+En la Bandeja de Salida, los mails que salieron por un respaldo quedan registrados con el sender que
+efectivamente los envió.
+
 ## Cómo elegir qué remitente usa cada formulario
 
 Se elige por formulario, en **Editar > Sender**. Si el elegido no está disponible, formPost usa el primero de la cuenta y, si no hay, uno Global [evidencia: server.js:600-628].
 
 ## Errores frecuentes
 
-- **"Connection failed: ..."** → el Test no pudo conectar. Revisá host, puerto, usuario y contraseña; si tu proveedor pide contraseña de aplicación, usá esa.
+- **"Connection failed: ..."** → el Test no pudo conectar. Revisá host, puerto, usuario y contraseña; si tu proveedor pide contraseña de aplicación, usá esa. El mensaje ahora incluye una pista según el tipo de falla (TLS mal configurado, credenciales rechazadas, servidor inalcanzable).
+- **"...wrong version number..."** → el modo TLS no coincide con el puerto. Con puertos estándar se corrige solo; si usás uno no estándar, probá tildar/destildar **Conexión Segura**.
+- **"A global sender can only fall back to another global sender"** → estás intentando poner como respaldo de un sender Global uno que pertenece a una cuenta. Usá otro Global.
+- **"Backup sender ... belongs to another account"** → el respaldo elegido es de otra cuenta.
+- **"A sender cannot be its own backup"** → elegiste el mismo sender como su propio respaldo.
 - **"SendGrid: invalid API key (401)"** → la API Key es inválida o el servidor tiene la IP bloqueada en *IP Access Management* de SendGrid.
 - **"SendGrid: stored API key cannot be decrypted…"** → la clave de cifrado del servidor cambió; volvé a cargar la API Key en el editor y guardá.
 - **"SendGrid: no API key configured for this sender."** → el sender es de tipo SendGrid pero le falta la clave.

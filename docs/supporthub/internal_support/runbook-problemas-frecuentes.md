@@ -31,6 +31,43 @@ Cada caso: qué preguntar, qué mirar y cuál es la causa probable.
    - **No** → o nunca llegó el envío, o **falló el email y por eso no se guardó** (ver [Flujo de un envío](flujo-de-un-envio.md), paso 11). Confirmar mirando si hay una entrada de outbox en rojo a esa hora.
 2. Si tampoco hay outbox: pedir que envíen el formulario mientras se mira la **Bandeja de Entrada** en vivo. Si no aparece nada, el envío no llega al servidor → revisar `form_id`, dominios permitidos y captcha.
 
+## "El Test del sender falla con wrong version number"
+
+`SSL routines:...:wrong version number` = el modo TLS no coincide con el puerto: se abrió una conexión
+cifrada de entrada (implícita) contra un puerto que arranca en texto plano, o al revés. El caso clásico
+es puerto **587 con "Conexión Segura" tildada**.
+
+Desde v1.9.0 formPost deriva el modo del puerto (465 → TLS implícito; 587/2525/25 → STARTTLS) tanto al
+guardar como al construir el transporte, así que las configuraciones viejas se corrigen solas sin
+volver a guardarlas. Si el error persiste, el sender usa un **puerto no estándar**: ahí manda el tilde,
+y hay que probar la otra opción.
+
+## "Un remitente está marcado CAÍDO en el panel"
+
+Es el disyuntor (*circuit breaker*): tras 3 fallos seguidos de nivel remitente, formPost deja de
+intentar con ese sender durante 5 minutos y manda todo a su respaldo. El enfriamiento se duplica con
+cada recaída, hasta 30 minutos.
+
+1. Pasar el mouse por la etiqueta **CAÍDO** para ver el último error y hasta cuándo dura el enfriamiento.
+2. Corregir la causa real (credenciales, firewall de salida, cuota del proveedor).
+3. **Reintentar ahora** borra el estado y vuelve a intentar en el próximo mail. No hace falta: una
+   verificación en segundo plano prueba la conexión cada minuto y lo reactiva sola cuando responde.
+4. El estado es en memoria: reiniciar el proceso también lo limpia.
+
+Umbrales configurables por entorno: `SENDER_FAIL_THRESHOLD` (3), `SENDER_COOLDOWN_MINUTES` (5),
+`SENDER_COOLDOWN_MAX_MINUTES` (30).
+
+## "Configuré un respaldo pero no se usó"
+
+El respaldo es solo para fallas **del remitente** (conexión, TLS, credenciales, throttling, 5xx del
+proveedor). Si el rechazo es **del mensaje** —destinatario inexistente (550), contenido o adjunto
+rechazado, payload inválido en SendGrid (400/413)— no se reintenta, porque el respaldo daría el mismo
+resultado. En el log del servidor, cada intento sale como `Send attempt failed` con `reason` y
+`willTryBackup`, que dice exactamente cuál de los dos casos fue.
+
+Otras razones para que no se use: el respaldo está **desactivado**, ya no existe (el vínculo se limpia
+solo al borrar un sender), o quedó fuera de alcance por un cambio de cuenta.
+
 ## "El formulario dice ID de formulario no válido"
 
 Causas por frecuencia: `form_id` mal escrito o de otro entorno; el formulario fue eliminado; se está usando el ID de otra cuenta. Verificar el ID exacto en la tarjeta del panel y en el HTML del sitio.

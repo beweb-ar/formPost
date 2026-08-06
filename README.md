@@ -43,6 +43,7 @@
 ### Core
 - **Multi-form support** - Handle unlimited forms, each with its own configuration
 - **Multi-sender email** - Configure multiple senders (SMTP relays or SendGrid API) with active/disabled toggle per sender
+- **Sender failover** - Each sender can name a backup; connectivity/credential failures roll over to it automatically, and a circuit breaker keeps a downed relay out of the path until it recovers
 - **SendGrid support** - Send via the SendGrid v3 HTTP API with just an API key and a verified sending domain (no SMTP ports needed)
 - **Agent API** - Self-documented REST API (`/api/v1`) so AI agents can create accounts, forms, senders and templates programmatically
 - **Three ways to sign in** - Google, email + one-time code (OTP), or email + password. Users are never self-registered: the email must already belong to a user
@@ -146,7 +147,8 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
             "active": true,
             "from": "noreply@example.com",
             "user": "smtp_user",
-            "pass": "smtp_pass"
+            "pass": "smtp_pass",
+            "backupSenderId": "sendgrid"
         },
         "sendgrid": {
             "name": "SendGrid",
@@ -206,13 +208,48 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `from` | string | From email address |
 | `host` | string | SMTP only: server hostname |
 | `port` | number | SMTP only: port (587, 465, etc.) |
-| `secure` | boolean | SMTP only: use TLS/SSL |
+| `secure` | boolean | SMTP only: implicit TLS. Derived from the port — see below |
 | `user` | string | SMTP only: username |
 | `pass` | string | SMTP only: password |
 | `apiKey` | string | SendGrid only: API key with **Mail Send** permission |
 | `domain` | string | SendGrid only: verified sending domain (the `from` address must belong to it) |
+| `backupSenderId` | string | Optional: sender to fall back to when this one fails — see [Sender failover](#sender-failover) |
 
 > **SendGrid:** create an API key at SendGrid > Settings > API Keys with Mail Send permission, and verify your sending domain under Settings > Sender Authentication. SendGrid senders use the v3 HTTP API, so they work even where outbound SMTP ports are blocked.
+
+### TLS mode is derived from the port
+
+`secure` is not an independent choice: 465 is encrypted from the first byte (implicit TLS) while
+587/2525/25 start in plaintext and upgrade with STARTTLS. Mixing them produces
+`SSL routines:...:wrong version number`. formPost forces `secure` to match the port both on save and
+when building the transport, so a config saved with the wrong combination is corrected without a
+re-save. Non-standard ports keep whatever you configured. With credentials on a submission port
+(587/2525) STARTTLS is required, so the password is never sent in the clear.
+
+### Sender failover
+
+Any sender can name another as its `backupSenderId`. When a send fails **because of the sender** —
+no connection, TLS mismatch, rejected credentials, throttling, provider 5xx — the same message is
+retried through the backup. When the failure belongs to the **message** — unknown recipient (550),
+refused content, oversized attachment, SendGrid 400/413 — there is no retry: the backup would refuse
+it identically.
+
+Scope rules keep tenants apart:
+
+- A **global** sender may only fall back to another **global** sender. Two global senders naming each
+  other is the recommended highly-available pair.
+- An **account** sender may fall back to a global sender or to another sender of the same account.
+- So a client-owned sender **can have** a backup but can never **be** the backup of a shared sender —
+  otherwise another account's mail would leave through that client's private relay.
+
+A circuit breaker keeps a downed sender out of the way instead of paying its connection timeout on
+every message: after `SENDER_FAIL_THRESHOLD` consecutive sender-level failures it is marked down and
+all traffic goes straight to the backup for `SENDER_COOLDOWN_MINUTES`, doubling on each relapse up to
+`SENDER_COOLDOWN_MAX_MINUTES`. A background probe verifies downed senders once a minute, so recovery
+is detected and traffic returns on its own even with no traffic in the meantime. The state is
+in-memory: a restart clears it. `GET /admin/api/senders` reports it per sender as `health.state`
+(`up | degraded | down | recovering | unknown`), the Senders list shows a **DOWN** badge, and
+`POST /admin/api/senders/:id/health/reset` clears it immediately.
 
 ## Environment Variables
 
@@ -224,6 +261,9 @@ All settings live in `config.json`. The admin UI can modify most of them at runt
 | `ADMIN_USERNAME` | - | Upsert a superadmin user with this username |
 | `ADMIN_PASSWORD` | - | Password for the `ADMIN_USERNAME` superadmin |
 | `API_KEY` | - | Override the master Agent API key (`/api/v1`, unrestricted) |
+| `SENDER_FAIL_THRESHOLD` | `3` | Consecutive sender-level failures before a sender is marked down and traffic moves to its backup |
+| `SENDER_COOLDOWN_MINUTES` | `5` | How long a downed sender is skipped before it gets a trial send |
+| `SENDER_COOLDOWN_MAX_MINUTES` | `30` | Cap for the cooldown, which doubles on each relapse |
 | `GOOGLE_CLIENT_ID` | (stored in `config.auth.googleClientId`) | Google OAuth client id for "Sign in with Google" on the admin panel |
 | `SUPPORTHUB_TOOLS_SECRET` | - | HS256 secret that signs the user tokens accepted by the read-only `/agent-api` endpoints (SupportHub agent tools). Unset = `/agent-api` and the token endpoint are disabled |
 | `SUPPORTHUB_URL` | - | Base URL of the SupportHub platform. Set it and the admin panel loads the help widget for signed-in users; unset, nothing is loaded |
@@ -366,6 +406,7 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 | `GET/POST/PUT/DELETE` | `/admin/api/websites[/:id]` | CRUD forms |
 | `GET/POST/PUT/DELETE` | `/admin/api/senders[/:id]` | CRUD senders |
 | `POST` | `/admin/api/senders/:id/test` | Test sender connection |
+| `POST` | `/admin/api/senders/:id/health/reset` | Clear a sender's circuit breaker and retry it immediately |
 | `POST` | `/admin/api/telegram/chats` | Fetch available Telegram chats for a bot token |
 | `GET/PUT/DELETE` | `/admin/api/templates[/:name]` | CRUD templates |
 | `GET` | `/admin/api/statistics[/:id]` | Stats (includes mails/notifications counts) |
