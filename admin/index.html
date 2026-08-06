@@ -1688,6 +1688,11 @@
                 portTlsHint: 'Port 465 = implicit TLS (checked). Ports 587 / 2525 / 25 = STARTTLS (unchecked). Set automatically from the port.',
                 senderDown: 'DOWN', senderRecovering: 'RECOVERING', senderDegraded: 'FAILING',
                 senderDownUntil: 'using backup until', senderRetryNow: 'Retry now',
+                formsCol: 'Forms', formsColHint: 'Forms whose email goes out through this sender',
+                sentViaBackup: 'Sent through the backup sender', insteadOf: 'instead of',
+                senderImplicitHint: 'Not chosen by this form — it falls back to this sender',
+                senderFallback: 'fallback', noSenderBadge: 'NO SENDER',
+                noSenderHint: 'This form has no usable sender: it will not send email',
                 // Settings tabs
                 tabSenders: 'Senders', tabAccounts: 'Accounts', tabUsers: 'Users', tabAgentApi: 'Agent API',
                 // Agent API
@@ -1854,6 +1859,11 @@
                 portTlsHint: 'Puerto 465 = TLS implícito (tildado). Puertos 587 / 2525 / 25 = STARTTLS (destildado). Se ajusta solo según el puerto.',
                 senderDown: 'CAÍDO', senderRecovering: 'RECUPERANDO', senderDegraded: 'CON FALLAS',
                 senderDownUntil: 'usando respaldo hasta', senderRetryNow: 'Reintentar ahora',
+                formsCol: 'Forms', formsColHint: 'Formularios cuyos emails salen por este sender',
+                sentViaBackup: 'Enviado por el sender de respaldo', insteadOf: 'en lugar de',
+                senderImplicitHint: 'No lo eligió este formulario: lo usa por descarte',
+                senderFallback: 'por descarte', noSenderBadge: 'SIN SENDER',
+                noSenderHint: 'Este formulario no tiene sender utilizable: no va a enviar emails',
                 // Settings tabs
                 tabSenders: 'Senders', tabAccounts: 'Cuentas', tabUsers: 'Usuarios', tabAgentApi: 'API para Agentes',
                 // Agent API
@@ -1927,6 +1937,34 @@
         function escAttr(str) {
             if (!str) return '';
             return esc(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // One pill for "which sender", shared by the form cards and both outbox views
+        // so the same sender always looks the same wherever it shows up.
+        // opts.implicit  -> the form does not name this sender, it falls back to it
+        // opts.failedOver-> the mail went out through the backup, not the intended sender
+        function senderPill(senderId, opts) {
+            if (!senderId) return '';
+            var o = opts || {};
+            var s = sendersCache[senderId];
+            var label = (s && s.name) || senderId;
+            var tip = senderId + (s && s.from ? ' · ' + s.from : '');
+            var bg = 'var(--bg-tertiary)', fg = 'var(--text-secondary)', border = 'var(--border-color)';
+            if (o.failedOver) {
+                bg = 'var(--warning)'; fg = '#fff'; border = 'var(--warning)';
+                label = '↳ ' + label;
+                tip = L('sentViaBackup') + ' — ' + tip;
+            } else if (o.implicit) {
+                tip = L('senderImplicitHint') + ' — ' + tip;
+                label = label + ' *';
+            }
+            if (s && s.health && s.health.state === 'down') {
+                border = 'var(--danger)';
+                tip += ' · ' + L('senderDown');
+            }
+            return '<span title="' + escAttr(tip) + '" style="display:inline-block;font-size:0.65rem;font-weight:600;' +
+                'padding:0.1rem 0.45rem;border-radius:4px;background:' + bg + ';border:1px solid ' + border + ';color:' + fg + ';' +
+                'white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;">' + esc(label) + '</span>';
         }
 
         // ========== Toast Notifications ==========
@@ -2389,12 +2427,16 @@
                 var statusText = entry.status === 'ok' ? '✓' : '✗';
                 var detail = entry.channel === 'email' ? (entry.to || '') : '';
                 var subject = entry.subject ? entry.subject.substring(0, 60) : '';
+                // Which relay carried it. Entries written before senders were tracked have none.
+                var pill = entry.channel === 'email' && entry.senderId
+                    ? ' ' + senderPill(entry.senderId, { failedOver: entry.failedOver })
+                    : '';
                 return '<div class="inbox-entry" onclick="openOutboxModal(\'' + esc(entry.websiteId) + '\')" style="cursor:pointer;">' +
                     '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
                     '<span class="outbox-channel ' + channelClass + '">' + channelLabel + '</span>' +
                     '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
                     '<div class="inbox-entry-content">' +
-                        '<div class="inbox-entry-sender">' + esc(detail) + ' <span class="' + statusClass + '">' + statusText + '</span></div>' +
+                        '<div class="inbox-entry-sender">' + esc(detail) + ' <span class="' + statusClass + '">' + statusText + '</span>' + pill + '</div>' +
                         (subject ? '<div class="inbox-entry-preview">' + esc(subject) + '</div>' : '') +
                         (entry.error ? '<div class="inbox-entry-preview" style="color:var(--danger);">' + esc(entry.error) + '</div>' : '') +
                     '</div>' +
@@ -2451,7 +2493,7 @@
                     document.getElementById('outboxModalPagination').innerHTML = '';
                     return;
                 }
-                var html = '<table class="submissions-table"><thead><tr><th>' + L('date') + '</th><th>Channel</th><th>To / ' + L('statStatus') + '</th><th>' + L('subject') + '</th><th>' + L('statStatus') + '</th><th style="width:40px;"></th></tr></thead><tbody>';
+                var html = '<table class="submissions-table"><thead><tr><th>' + L('date') + '</th><th>Channel</th><th>To / ' + L('statStatus') + '</th><th>' + L('sender') + '</th><th>' + L('subject') + '</th><th>' + L('statStatus') + '</th><th style="width:40px;"></th></tr></thead><tbody>';
                 data.entries.forEach(function(entry) {
                     var time = new Date(entry.timestamp).toLocaleString();
                     var channelLabel = entry.channel === 'email' ? 'Mail' : entry.channel === 'telegram' ? 'Telegram' : 'Discord';
@@ -2469,10 +2511,21 @@
                         var tip = (entry.response || '') + (entry.messageId ? '\nmessage-id: ' + entry.messageId : '');
                         providerInfo = '<div style="font-size:0.7rem;color:var(--text-secondary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(tip) + '">' + esc(bits.join(' · ')) + '</div>';
                     }
+                    // Sender that carried this message. `failedOver` means the form's own
+                    // sender failed and the backup took over.
+                    var senderCell = '<span style="color:var(--text-secondary);">—</span>';
+                    if (entry.channel === 'email' && entry.senderId) {
+                        senderCell = senderPill(entry.senderId, { failedOver: entry.failedOver });
+                        if (entry.failedOver && entry.primarySenderId) {
+                            senderCell += '<div style="font-size:0.65rem;color:var(--text-secondary);white-space:nowrap;">' +
+                                esc(L('insteadOf') + ' ' + ((sendersCache[entry.primarySenderId] || {}).name || entry.primarySenderId)) + '</div>';
+                        }
+                    }
                     html += '<tr>' +
                         '<td style="white-space:nowrap;font-size:0.8rem;">' + esc(time) + '</td>' +
                         '<td><span class="outbox-channel ' + channelClass + '">' + channelLabel + '</span></td>' +
                         '<td>' + esc(entry.to || '-') + '</td>' +
+                        '<td>' + senderCell + '</td>' +
                         '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(entry.subject || '-') + '</td>' +
                         '<td><span style="color:' + statusColor + ';font-weight:600;">' + statusText + '</span>' +
                             (entry.error ? '<div style="font-size:0.75rem;color:var(--danger);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(entry.error) + '">' + esc(entry.error) + '</div>' : '') +
@@ -2771,11 +2824,17 @@
                 if (cfg.allowedDomains && cfg.allowedDomains.length > 0) {
                     domains = ci(L('allowedDomains'), cfg.allowedDomains.map(function(d) { return esc(d); }).join(', '));
                 }
+                // Detail row mirrors the header pill: show the sender that really carries
+                // this form's mail, and say so when it is a fallback rather than the choice.
                 var senderLabel = '';
-                if (cfg.senderId && sendersCache[cfg.senderId]) {
-                    senderLabel = ci(L('sender'), esc(sendersCache[cfg.senderId].name || cfg.senderId));
-                } else if (cfg.senderId) {
-                    senderLabel = ci(L('sender'), esc(cfg.senderId));
+                if (cfg.effectiveSenderId) {
+                    var effName = (sendersCache[cfg.effectiveSenderId] || {}).name || cfg.effectiveSenderId;
+                    senderLabel = ci(L('sender'), esc(effName) +
+                        (cfg.senderId !== cfg.effectiveSenderId
+                            ? ' <span style="color:var(--text-secondary);font-size:0.75rem;">(' + L('senderFallback') + ')</span>'
+                            : ''));
+                } else {
+                    senderLabel = ci(L('sender'), '<span style="color:var(--danger);">' + L('noSenderBadge') + '</span>');
                 }
                 var discord = cfg.discordWebhook ? ci('Discord', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
                 var telegram = (cfg.telegramBotToken && cfg.telegramChatId) ? ci('Telegram', '<span style="color:var(--success)">' + L('captchaOn') + '</span>') : '';
@@ -2788,13 +2847,21 @@
                     accountBadge = '<span style="font-size:0.65rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:4px;background:var(--bg-tertiary);border:1px solid var(--border-color);color:var(--text-secondary);white-space:nowrap;">' + esc(acctName) + '</span>';
                 }
 
+                // Sender this form actually sends through. The server resolves it, so a form
+                // that names a deleted sender shows the fallback it really uses, marked with
+                // an asterisk. No sender at all means this form sends no email.
+                var effSender = cfg.effectiveSenderId || '';
+                var senderBadge = effSender
+                    ? senderPill(effSender, { implicit: cfg.senderId !== effSender })
+                    : '<span title="' + escAttr(L('noSenderHint')) + '" style="font-size:0.65rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:4px;background:var(--danger);color:#fff;white-space:nowrap;">' + L('noSenderBadge') + '</span>';
+
                 return '<div class="website-card">' +
-                    '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-                        '<div style="display:flex;align-items:center;gap:0.4rem;">' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;gap:0.4rem;">' +
+                        '<div style="display:flex;align-items:center;gap:0.4rem;min-width:0;">' +
                             '<button class="card-toggle collapsed" onclick="toggleCardDetails(this)" title="Expand">&#9660;</button>' +
                             '<h4>' + esc(id) + '</h4>' +
                         '</div>' +
-                        accountBadge +
+                        '<div style="display:flex;align-items:center;gap:0.3rem;flex-shrink:0;">' + senderBadge + accountBadge + '</div>' +
                     '</div>' +
                     '<div class="card-details collapsed">' +
                         ci(L('to'), esc(cfg.to)) +
@@ -3607,13 +3674,22 @@
                 container.innerHTML = '<div class="empty-state">No senders configured.</div>';
                 return;
             }
-            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>' + L('senderType') + '</th><th>' + L('fromEmail') + '</th><th>' + L('account') + '</th><th>' + L('backupShort') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
+            var html = '<table class="submissions-table"><thead><tr><th>ID</th><th>' + L('senderName') + '</th><th>' + L('senderType') + '</th><th>' + L('fromEmail') + '</th><th>' + L('account') + '</th><th title="' + escAttr(L('formsColHint')) + '">' + L('formsCol') + '</th><th>' + L('backupShort') + '</th><th>' + L('statStatus') + '</th><th></th></tr></thead><tbody>';
             ids.forEach(function(id) {
                 var s = sendersCache[id];
                 var isActive = s.active !== false;
                 var backupLabel = s.backupSenderId
                     ? '<code>' + esc(s.backupSenderId) + '</code>'
                     : '<span style="color:var(--text-secondary);">—</span>';
+                // Forms whose mail actually leaves through this sender (includes the ones
+                // that fall back to it without naming it). Hovering lists them.
+                var formCount = s.formCount || 0;
+                var formsTip = formCount
+                    ? L('formsColHint') + ':\n' + (s.formIds || []).join('\n') + (formCount > (s.formIds || []).length ? '\n…' : '')
+                    : L('formsColHint');
+                var formsLabel = formCount
+                    ? '<span title="' + escAttr(formsTip) + '" style="font-weight:600;">' + formCount + '</span>'
+                    : '<span title="' + escAttr(formsTip) + '" style="color:var(--text-secondary);">0</span>';
                 var typeLabel = s.type === 'sendgrid'
                     ? 'SendGrid' + (s.domain ? ' (' + esc(s.domain) + ')' : '')
                     : esc(s.host || '') + ':' + esc(String(s.port || ''));
@@ -3628,6 +3704,7 @@
                     '<td>' + typeLabel + '</td>' +
                     '<td>' + esc(s.from || '') + '</td>' +
                     '<td>' + acctLabel + '</td>' +
+                    '<td>' + formsLabel + '</td>' +
                     '<td>' + backupLabel + '</td>' +
                     '<td><span style="color:' + (isActive ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;font-size:0.8rem;">' + (isActive ? L('captchaOn') : L('captchaOff')) + '</span>' + senderHealthBadge(s.health) + '</td>' +
                     '<td style="text-align:right;white-space:nowrap;">' +

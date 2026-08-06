@@ -725,18 +725,18 @@ function senderUsableByAccount(senderCfg, accountId) {
     return !senderCfg.accountId || senderCfg.accountId === accountId;
 }
 
-// Get transporter for a form (by senderId, fallback scoped to the form's account + global senders)
-function getTransporterForForm(recipientCfg) {
-    const acct = recipientCfg.accountId || 'default';
-    const senderId = recipientCfg.senderId || 'default';
+// Which sender a form actually sends through: the one it names, or — when that is
+// missing, unknown or out of the form's account — the first usable one (own account
+// before global). Returns null when the form has no sender at all.
+// Single source of truth for both the mailer and the "FORMS" count in the panel,
+// so the number shown can never drift from what really happens at send time.
+function effectiveSenderIdForForm(recipientCfg) {
+    const acct = (recipientCfg && recipientCfg.accountId) || 'default';
+    const senderId = (recipientCfg && recipientCfg.senderId) || 'default';
     if (transporters[senderId]) {
         const senderCfg = config.senders[senderId];
-        if (senderCfg && senderUsableByAccount(senderCfg, acct)) {
-            if (senderCfg.active === false) return { inactive: true, senderId };
-            return { transporter: transporters[senderId], senderCfg, senderId, accountId: acct };
-        }
+        if (senderCfg && senderUsableByAccount(senderCfg, acct)) return senderId;
     }
-    // Fallback: first sender of the form's account, then first global sender
     const candidates = Object.keys(transporters).filter(id => {
         const s = config.senders[id];
         return s && senderUsableByAccount(s, acct);
@@ -746,13 +746,31 @@ function getTransporterForForm(recipientCfg) {
         const bOwn = (config.senders[b].accountId === acct) ? 0 : 1;
         return aOwn - bOwn;
     });
-    const firstId = candidates[0];
-    if (firstId) {
-        const senderCfg = config.senders[firstId];
-        if (senderCfg.active === false) return { inactive: true, senderId: firstId };
-        return { transporter: transporters[firstId], senderCfg, senderId: firstId, accountId: acct };
+    return candidates[0] || null;
+}
+
+// Get transporter for a form (by senderId, fallback scoped to the form's account + global senders)
+function getTransporterForForm(recipientCfg) {
+    const acct = recipientCfg.accountId || 'default';
+    const senderId = effectiveSenderIdForForm(recipientCfg);
+    if (!senderId) return null;
+    const senderCfg = config.senders[senderId];
+    if (senderCfg.active === false) return { inactive: true, senderId };
+    return { transporter: transporters[senderId], senderCfg, senderId, accountId: acct };
+}
+
+// How many forms send through each sender, restricted to the forms this caller can see.
+// Keyed by sender id; forms that fall back to a sender count for it, because that is
+// where their mail really goes.
+function formCountsBySender(scope) {
+    const counts = {};
+    for (const [formId, cfg] of Object.entries(formsForScope(scope))) {
+        const id = effectiveSenderIdForForm(cfg);
+        if (!id) continue;
+        if (!counts[id]) counts[id] = [];
+        counts[id].push(formId);
     }
-    return null;
+    return counts;
 }
 
 // ============================================================================
@@ -1359,7 +1377,8 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                 channel: 'email',
                 to: recipientConfig.to,
                 subject: `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`,
-                status: 'skipped'
+                status: 'skipped',
+                senderId: senderInfo.senderId
             };
             saveOutboxEntry(formId, skipEntry).catch(() => {});
             broadcastSSE({ type: 'outbox', websiteId: formId, ...skipEntry });
@@ -2165,6 +2184,10 @@ adminRouter.get('/websites', (req, res) => {
     const out = {};
     for (const [id, cfg] of Object.entries(formsForScope(getAccountScope(req)))) {
         out[id] = sanitizeRecipientForApi(id, cfg);
+        // Read-only, computed: the sender this form really sends through, which is not
+        // always the one it names (missing, deleted or out of account -> fallback).
+        // Kept out of sanitizeRecipientForApi so it can never reach a write path.
+        out[id].effectiveSenderId = effectiveSenderIdForForm(cfg);
     }
     res.json(out);
 });
@@ -2286,6 +2309,7 @@ adminRouter.delete('/websites/:id', requireRole('superadmin', 'admin'), async (r
 // Senders (SMTP relays) CRUD routes. Senders without accountId are global (superadmin-managed).
 adminRouter.get('/senders', (req, res) => {
     const scope = getAccountScope(req);
+    const formsBySender = formCountsBySender(scope);
     const sanitized = {};
     for (const [id, cfg] of Object.entries(sendersForScope(scope))) {
         sanitized[id] = {
@@ -2303,7 +2327,10 @@ adminRouter.get('/senders', (req, res) => {
             accountId: cfg.accountId || null,
             global: !cfg.accountId,
             backupSenderId: cfg.backupSenderId || '',
-            health: senderHealthForApi(id)
+            health: senderHealthForApi(id),
+            // Forms whose mail actually goes out through this sender, within this caller's scope
+            formCount: (formsBySender[id] || []).length,
+            formIds: (formsBySender[id] || []).slice(0, 25)
         };
     }
     res.json(sanitized);

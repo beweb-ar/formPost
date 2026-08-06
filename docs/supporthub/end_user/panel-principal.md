@@ -58,6 +58,11 @@ De arriba hacia abajo:
 
 Cada tarjeta muestra el ID del formulario y cuatro números: **Envíos**, **Mails**, **Notificaciones** y **Último Envío**.
 
+- Arriba a la derecha, una **etiqueta con el sender** por el que realmente salen los mails de ese
+  formulario. Si el formulario no eligió ninguno (o el que eligió ya no existe) formPost usa uno por
+  descarte y la etiqueta lo marca con un **\***; pasando el mouse ves cuál y por qué. Si no hay
+  ningún sender utilizable, la etiqueta dice **SIN SENDER** en rojo: ese formulario no envía emails.
+  Si el sender está caído, la etiqueta se muestra con borde rojo.
 - Tocá la **flechita** a la izquierda del nombre para desplegar el detalle: destino, asunto, redirección, captcha, dominios permitidos, sender, notificaciones activas, auto-respuesta y plantilla.
 - Los botones de abajo: **Envíos** (ver lo recibido), **Editar**, el ícono de copiar (**Clonar**) y el tacho (**Eliminar**).
 

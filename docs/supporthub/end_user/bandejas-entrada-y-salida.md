@@ -40,12 +40,19 @@ El panel **Bandeja de Salida** muestra, también en vivo, cada email y cada noti
 
 - Una etiqueta de color por canal: **Mail**, **Discord** o **Telegram**.
 - Un **✓** verde si salió bien o una **✗** roja si falló, con el motivo del error debajo.
+- En los emails, una **etiqueta con el sender** que efectivamente lo entregó. Si salió por el
+  remitente de respaldo, la etiqueta aparece en naranja con una flecha (**↳**).
 
 Hacé click en cualquier entrada para abrir el **historial completo** de ese formulario.
 
 ## Cómo ver el historial de mails enviados de un formulario
 
-Al hacer click en una entrada de la Bandeja de Salida se abre una tabla paginada (**20 por página**) con: fecha, canal, destinatario, asunto y estado.
+Al hacer click en una entrada de la Bandeja de Salida se abre una tabla paginada (**20 por página**) con: fecha, canal, destinatario, **sender**, asunto y estado.
+
+La columna **Sender** dice por qué remitente salió cada mail. Cuando el remitente del formulario
+falló y actuó el respaldo, se ve la etiqueta naranja **↳ <respaldo>** y debajo *en lugar de
+&lt;remitente original&gt;* — así se sabe de un vistazo qué envíos se salvaron por el failover.
+Las notificaciones de Discord y Telegram no usan sender y muestran un guion.
 
 Los tres estados posibles:
 

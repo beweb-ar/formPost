@@ -91,6 +91,21 @@ Botón **Delete** en su fila, y confirmá `Delete sender "X"? This cannot be und
 
 Antes de borrarlo, revisá qué formularios lo usan: si un formulario se queda sin su remitente, formPost usa automáticamente el primero disponible de la cuenta (o uno Global) [evidencia: server.js:611-627].
 
+## Cuántos formularios usa cada remitente (columna Forms)
+
+La columna **Forms** de la lista cuenta los formularios cuyos emails salen realmente por ese
+remitente. Pasando el mouse se listan los IDs.
+
+Incluye tanto los formularios que lo eligieron explícitamente como los que caen en él por descarte
+(no eligieron ninguno, o el que eligieron ya no existe). Por eso un remitente puede mostrar más
+formularios de los que lo tienen seleccionado: el número refleja por dónde sale el correo, no la
+configuración nominal.
+
+El conteo respeta tu alcance: si administrás una cuenta, solo cuenta tus formularios, aunque el
+remitente sea Global y otras cuentas también lo usen.
+
+Un **0** es la señal para revisar antes de borrar un remitente: nadie lo está usando.
+
 ## Qué significa la etiqueta "Global" en la lista
 
 Un sender **Global** lo provee el administrador de la plataforma y está disponible para todas las cuentas. Podés seleccionarlo en tus formularios, pero no editarlo ni borrarlo: los botones no aparecen [evidencia: admin/index.html:3346-3361, server.js:1743].

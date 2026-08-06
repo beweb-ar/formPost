@@ -70,6 +70,18 @@ Los secretos vacíos o `••••` se descartan del patch para conservar los 
 - `backupSenderId`: id del remitente de respaldo, o `''`.
 - `health`: `{ state }` con `up | degraded | down | recovering | unknown`; en `down` incluye `until`
   (fin del enfriamiento) y `lastError`. Es estado en memoria del proceso, no se persiste.
+- `formCount` / `formIds`: formularios cuyos emails salen por ese sender, dentro del alcance del
+  llamador (los primeros 25 ids, para el tooltip). Se calcula con la misma resolución que usa el
+  envío real, así que incluye los formularios que caen en ese sender por descarte.
+
+`GET /websites` agrega a cada formulario `effectiveSenderId`: el sender por el que realmente salen
+sus mails, que no siempre es `senderId` (puede estar vacío, apuntar a un sender borrado o a uno de
+otra cuenta). Es un campo calculado de solo lectura, fuera de `sanitizeRecipientForApi` para que no
+pueda colarse en un path de escritura.
+
+Las entradas de outbox de canal `email` guardan `senderId` (quién entregó) y, cuando actuó el
+respaldo, `failedOver: true` y `primarySenderId` (a quién le tocaba). Las entradas anteriores a esta
+versión no tienen estos campos.
 
 En cada escritura se valida `backupSenderId` (debe existir, no ser el mismo sender, y respetar el alcance:
 un sender global solo puede respaldarse en otro global; uno de cuenta, en un global o en uno de su misma
