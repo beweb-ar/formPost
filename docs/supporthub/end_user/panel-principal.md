@@ -58,6 +58,12 @@ De arriba hacia abajo:
 
 Cada tarjeta muestra el ID del formulario y cuatro números: **Envíos**, **Mails**, **Notificaciones** y **Último Envío**.
 
+**Envíos** cuenta los mensajes recibidos y guardados; **Mails** cuenta los que además salieron por email.
+Si ves *Envíos* alto y *Mails* en 0, el formulario está recibiendo pero no está entregando: mirá la
+bandeja de salida y el indicador rojo de la tarjeta.
+
+- Si al formulario le falta algo para funcionar, la tarjeta aparece con **borde rojo** y un círculo
+  rojo con **!** junto al nombre. El detalle del problema está en el tooltip y al desplegar la tarjeta.
 - Arriba a la derecha, una **etiqueta con el sender** por el que realmente salen los mails de ese
   formulario. Si el formulario no eligió ninguno (o el que eligió ya no existe) formPost usa uno por
   descarte y la etiqueta lo marca con un **\***; pasando el mouse ves cuál y por qué. Si no hay
@@ -76,7 +82,13 @@ Ojo: eso cambia solo el idioma **del panel**. Los mensajes que ve el visitante c
 
 ## Cómo filtrar por cuenta (solo superadmin)
 
-Si administrás varias cuentas de cliente, arriba de las tarjetas aparece un desplegable **Cuenta** para mostrar solo los formularios de una. Si solo hay una cuenta, el filtro no se muestra [evidencia: admin/index.html:2431-2443].
+Si administrás varias cuentas de cliente, arriba de las bandejas aparece **Mostrando cuenta**, un
+desplegable que acota **todo el tablero a esa cuenta**: las tarjetas de formularios, la bandeja de
+entrada, la bandeja de salida y también las vistas completas que se abren con *Ver todo* (que aclaran
+la cuenta en el título). Los envíos que llegan en vivo por otra cuenta no se cuelan en los paneles
+mientras el filtro está puesto.
+
+Si solo hay una cuenta, el filtro no se muestra.
 
 ## Cómo cerrar sesión
 

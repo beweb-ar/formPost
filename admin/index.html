@@ -690,6 +690,22 @@
             font-weight: 600;
             font-size: 0.9rem;
         }
+        .inbox-viewall {
+            background: none;
+            border: none;
+            padding: 0.1rem 0.35rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            white-space: nowrap;
+        }
+        .inbox-viewall:hover { background: var(--bg-tertiary); text-decoration: underline; }
+        /* Rows in the full inbox/outbox views are clickable through to the detail */
+        .row-clickable { cursor: pointer; }
+        .row-clickable:hover { background: var(--bg-tertiary); }
+
         .inbox-status {
             font-size: 0.75rem;
             padding: 0.15rem 0.5rem;
@@ -910,6 +926,13 @@
             </div>
         </div>
 
+        <!-- Account filter (superadmin only). Sits above the panels because it scopes
+             everything below it: inbox, outbox and the form cards. -->
+        <div id="accountFilterBar" style="display:none;margin-bottom:0.75rem;align-items:center;justify-content:flex-end;gap:0.4rem;">
+            <label style="font-size:0.8rem;color:var(--text-secondary);" data-i18n="accountFilterLabel">Showing account</label>
+            <select id="accountFilter" onchange="onAccountFilterChange()" style="width:auto;min-width:180px;font-size:0.8rem;padding:0.25rem 0.5rem;border-radius:var(--radius-sm);border:1px solid var(--border-color);background:var(--bg-solid);"></select>
+        </div>
+
         <!-- Inbox + Outbox Grid -->
         <div class="inbox-outbox-grid">
             <!-- Inbox Panel -->
@@ -921,7 +944,10 @@
                         <span class="live-dot" id="inboxLiveDot" style="display:none;"></span>
                         <span class="inbox-badge" id="inboxBadge" style="display:none;">0</span>
                     </div>
-                    <span class="inbox-status disconnected" id="inboxStatus" data-i18n="inboxDisconnected">Disconnected</span>
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <button class="inbox-viewall" onclick="event.stopPropagation();openInboxAllModal()" data-i18n="viewAll">View all</button>
+                        <span class="inbox-status disconnected" id="inboxStatus" data-i18n="inboxDisconnected">Disconnected</span>
+                    </div>
                 </div>
                 <div class="inbox-body-wrap">
                     <div class="inbox-body" id="inboxBody">
@@ -939,6 +965,7 @@
                         <span class="live-dot" id="outboxLiveDot" style="display:none;"></span>
                         <span class="inbox-badge" id="outboxBadge" style="display:none;">0</span>
                     </div>
+                    <button class="inbox-viewall" onclick="event.stopPropagation();openOutboxAllModal()" data-i18n="viewAll">View all</button>
                 </div>
                 <div class="inbox-body-wrap">
                     <div class="inbox-body" id="outboxBody">
@@ -946,12 +973,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Account filter (superadmin only) -->
-        <div id="accountFilterBar" style="display:none;margin-bottom:0.75rem;text-align:right;">
-            <label style="font-size:0.8rem;color:var(--text-secondary);margin-right:0.4rem;" data-i18n="account">Account</label>
-            <select id="accountFilter" onchange="loadWebsitesWithStats()" style="width:auto;min-width:180px;font-size:0.8rem;padding:0.25rem 0.5rem;border-radius:var(--radius-sm);border:1px solid var(--border-color);background:var(--bg-solid);"></select>
         </div>
 
         <!-- Website Cards Grid -->
@@ -1408,6 +1429,52 @@
         </div>
     </div>
 
+    <!-- Full Inbox Modal: every submission in view, newest first -->
+    <div class="modal-overlay" id="inboxAllModal" style="display:none;">
+        <div class="modal modal-wide modal-fixed">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-shrink:0;">
+                <h3 style="margin:0;"><span data-i18n="inboxAllTitle">All submissions</span> <span id="inboxAllScope" style="font-size:0.8rem;font-weight:400;color:var(--text-secondary);"></span></h3>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <input type="text" id="inboxAllSearch" placeholder="Buscar..." style="width:180px;font-size:0.8rem;padding:0.25rem 0.5rem;" />
+                    <button type="button" class="btn-outline" onclick="document.getElementById('inboxAllModal').style.display='none'" data-i18n="close">Close</button>
+                </div>
+            </div>
+            <div id="inboxAllContent" class="modal-body-scroll"></div>
+            <div id="inboxAllPagination" style="display:flex;justify-content:space-between;align-items:center;padding-top:0.75rem;font-size:0.85rem;flex-shrink:0;"></div>
+        </div>
+    </div>
+
+    <!-- Full Outbox Modal: every delivery attempt in view, newest first -->
+    <div class="modal-overlay" id="outboxAllModal" style="display:none;">
+        <div class="modal modal-wide modal-fixed">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-shrink:0;">
+                <h3 style="margin:0;"><span data-i18n="outboxAllTitle">Full outbox</span> <span id="outboxAllScope" style="font-size:0.8rem;font-weight:400;color:var(--text-secondary);"></span></h3>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <select id="outboxAllStatus" onchange="outboxAllPage=1;loadOutboxAllPage()" style="width:auto;font-size:0.8rem;padding:0.25rem 0.5rem;">
+                        <option value="" data-i18n="allStatuses">All statuses</option>
+                        <option value="error" data-i18n="onlyErrors">Errors only</option>
+                        <option value="ok">OK</option>
+                        <option value="skipped">Skipped</option>
+                    </select>
+                    <button type="button" class="btn-outline" onclick="document.getElementById('outboxAllModal').style.display='none'" data-i18n="close">Close</button>
+                </div>
+            </div>
+            <div id="outboxAllContent" class="modal-body-scroll"></div>
+            <div id="outboxAllPagination" style="display:flex;justify-content:space-between;align-items:center;padding-top:0.75rem;font-size:0.85rem;flex-shrink:0;"></div>
+        </div>
+    </div>
+
+    <!-- One outbox entry, in full -->
+    <div class="modal-overlay" id="outboxEntryModal" style="display:none;z-index:600;">
+        <div class="modal modal-fixed" style="max-width:720px;">
+            <h3 style="flex-shrink:0;" data-i18n="outboxEntryTitle">Delivery detail</h3>
+            <div id="outboxEntryContent" class="modal-body-scroll"></div>
+            <div class="modal-actions">
+                <button type="button" onclick="document.getElementById('outboxEntryModal').style.display='none'" data-i18n="close">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sender Editor Modal -->
     <div class="modal-overlay" id="senderEditorModal" style="display:none; z-index:600;">
         <div class="modal" style="max-width:480px;">
@@ -1688,6 +1755,24 @@
                 portTlsHint: 'Port 465 = implicit TLS (checked). Ports 587 / 2525 / 25 = STARTTLS (unchecked). Set automatically from the port.',
                 senderDown: 'DOWN', senderRecovering: 'RECOVERING', senderDegraded: 'FAILING',
                 senderDownUntil: 'using backup until', senderRetryNow: 'Retry now',
+                // Full inbox / outbox views
+                viewAll: 'View all', inboxAllTitle: 'All submissions', outboxAllTitle: 'Full outbox',
+                outboxEntryTitle: 'Delivery detail', accountFilterLabel: 'Showing account',
+                allStatuses: 'All statuses', onlyErrors: 'Errors only', errorsWord: 'errors',
+                searchPlaceholder: 'Search name, email or form...', form: 'Form', preview: 'Preview',
+                viewFormSubmissions: 'See all submissions of this form',
+                viewFormOutbox: 'See this form\u2019s full outbox',
+                intendedSender: 'Intended sender', triedSenders: 'Senders tried',
+                serverResponse: 'Server response', errorWord: 'Error', autoReplyWord: 'Auto-reply',
+                failedLoadSubmission: 'Could not load the submission',
+                // Form health
+                formBrokenTitle: 'This form cannot send email',
+                formWarnTitle: 'This form has warnings',
+                issue_noRecipients: 'No destination address set',
+                issue_invalidRecipients: 'Invalid destination address',
+                issue_noSender: 'No usable sender',
+                issue_senderInactive: 'Its sender is disabled',
+                issue_invalidAutoReplyTo: 'Invalid auto-reply Reply-To',
                 formsCol: 'Forms', formsColHint: 'Forms whose email goes out through this sender',
                 sentViaBackup: 'Sent through the backup sender', insteadOf: 'instead of',
                 senderImplicitHint: 'Not chosen by this form — it falls back to this sender',
@@ -1859,6 +1944,24 @@
                 portTlsHint: 'Puerto 465 = TLS implícito (tildado). Puertos 587 / 2525 / 25 = STARTTLS (destildado). Se ajusta solo según el puerto.',
                 senderDown: 'CAÍDO', senderRecovering: 'RECUPERANDO', senderDegraded: 'CON FALLAS',
                 senderDownUntil: 'usando respaldo hasta', senderRetryNow: 'Reintentar ahora',
+                // Vistas completas de bandejas
+                viewAll: 'Ver todo', inboxAllTitle: 'Todos los env\u00edos', outboxAllTitle: 'Bandeja de salida completa',
+                outboxEntryTitle: 'Detalle del env\u00edo', accountFilterLabel: 'Mostrando cuenta',
+                allStatuses: 'Todos los estados', onlyErrors: 'Solo errores', errorsWord: 'errores',
+                searchPlaceholder: 'Buscar nombre, email o formulario...', form: 'Formulario', preview: 'Vista previa',
+                viewFormSubmissions: 'Ver todos los env\u00edos de este formulario',
+                viewFormOutbox: 'Ver la bandeja de salida de este formulario',
+                intendedSender: 'Sender previsto', triedSenders: 'Senders probados',
+                serverResponse: 'Respuesta del servidor', errorWord: 'Error', autoReplyWord: 'Auto-respuesta',
+                failedLoadSubmission: 'No se pudo cargar el env\u00edo',
+                // Salud del formulario
+                formBrokenTitle: 'Este formulario no puede enviar emails',
+                formWarnTitle: 'Este formulario tiene advertencias',
+                issue_noRecipients: 'No tiene direcci\u00f3n de destino cargada',
+                issue_invalidRecipients: 'Direcci\u00f3n de destino inv\u00e1lida',
+                issue_noSender: 'No tiene un sender utilizable',
+                issue_senderInactive: 'Su sender est\u00e1 desactivado',
+                issue_invalidAutoReplyTo: 'El Responder-a de la auto-respuesta es inv\u00e1lido',
                 formsCol: 'Forms', formsColHint: 'Formularios cuyos emails salen por este sender',
                 sentViaBackup: 'Enviado por el sender de respaldo', insteadOf: 'en lugar de',
                 senderImplicitHint: 'No lo eligió este formulario: lo usa por descarte',
@@ -2295,7 +2398,7 @@
                 var preview = previewParts.join(' | ');
                 var methodLabel = entry.submitMethod === 'js' ? 'JS' : 'POST';
                 var methodClass = entry.submitMethod === 'js' ? 'js' : 'html';
-                return '<div class="inbox-entry" onclick="openSubmissionsModal(\'' + esc(entry.websiteId) + '\')">' +
+                return '<div class="inbox-entry" onclick="openSubmissionDetailById(&quot;' + escAttr(entry.websiteId) + '&quot;,&quot;' + escAttr(entry.id) + '&quot;)" style="cursor:pointer;">' +
                     '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
                     '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
                     '<span class="submit-method-badge ' + methodClass + '">' + methodLabel + '</span>' +
@@ -2308,7 +2411,15 @@
             body.innerHTML = html;
         }
 
+        function entryPassesAccountFilter(websiteId) {
+            var a = currentAccountFilter();
+            if (!a) return true;
+            var cfg = websitesCache[websiteId];
+            return !!cfg && (cfg.accountId || 'default') === a;
+        }
+
         function addInboxEntry(entry) {
+            if (!entryPassesAccountFilter(entry.websiteId)) return;
             inboxEntries.unshift(entry);
             if (inboxEntries.length > INBOX_MAX) inboxEntries = inboxEntries.slice(0, INBOX_MAX);
             var panel = document.getElementById('inboxPanel');
@@ -2324,7 +2435,7 @@
         async function loadRecentInbox() {
             if (!auth) return;
             try {
-                var res = await fetch('/admin/api/inbox/recent?limit=4', { headers: { Authorization: auth } });
+                var res = await fetch('/admin/api/inbox/recent?limit=4' + accountFilterQuery('&'), { headers: { Authorization: auth } });
                 if (!res.ok) return;
                 var entries = await res.json();
                 // Only load if inbox is empty (don't overwrite live entries)
@@ -2431,7 +2542,8 @@
                 var pill = entry.channel === 'email' && entry.senderId
                     ? ' ' + senderPill(entry.senderId, { failedOver: entry.failedOver })
                     : '';
-                return '<div class="inbox-entry" onclick="openOutboxModal(\'' + esc(entry.websiteId) + '\')" style="cursor:pointer;">' +
+                outboxAllCache[entry.websiteId + '|' + entry.id] = entry;
+                return '<div class="inbox-entry" onclick="showOutboxEntry(&quot;' + escAttr(entry.websiteId) + '&quot;,&quot;' + escAttr(entry.id) + '&quot;)" style="cursor:pointer;">' +
                     '<span class="inbox-entry-time">' + esc(timeStr) + '</span>' +
                     '<span class="outbox-channel ' + channelClass + '">' + channelLabel + '</span>' +
                     '<span class="inbox-entry-website">' + esc(entry.websiteId) + '</span>' +
@@ -2446,6 +2558,7 @@
         }
 
         function addOutboxEntry(entry) {
+            if (!entryPassesAccountFilter(entry.websiteId)) return;
             outboxEntries.unshift(entry);
             if (outboxEntries.length > OUTBOX_MAX) outboxEntries = outboxEntries.slice(0, OUTBOX_MAX);
             var panel = document.getElementById('outboxPanel');
@@ -2461,7 +2574,7 @@
         async function loadRecentOutbox() {
             if (!auth) return;
             try {
-                var res = await fetch('/admin/api/outbox/recent?limit=4', { headers: { Authorization: auth } });
+                var res = await fetch('/admin/api/outbox/recent?limit=4' + accountFilterQuery('&'), { headers: { Authorization: auth } });
                 if (!res.ok) return;
                 var entries = await res.json();
                 if (outboxEntries.length === 0 && entries.length > 0) {
@@ -2469,6 +2582,222 @@
                     renderOutboxEntries();
                 }
             } catch(e) {}
+        }
+
+        // ===== Account filter =====
+        // The filter governs the whole dashboard, not just the cards: inbox and outbox
+        // reload with the same accountId so what is on screen is one consistent slice.
+        function currentAccountFilter() {
+            var el = document.getElementById('accountFilter');
+            return (isSuperadmin() && el) ? (el.value || '') : '';
+        }
+
+        function accountFilterQuery(prefix) {
+            var a = currentAccountFilter();
+            return a ? (prefix || '&') + 'accountId=' + encodeURIComponent(a) : '';
+        }
+
+        function currentAccountLabel() {
+            var a = currentAccountFilter();
+            if (!a) return '';
+            return (accountsCache[a] && accountsCache[a].name) || a;
+        }
+
+        function onAccountFilterChange() {
+            loadWebsitesWithStats();
+            // The live panels are scoped too, so the dashboard never mixes accounts
+            inboxEntries = [];
+            outboxEntries = [];
+            renderInboxEntries();
+            renderOutboxEntries();
+            loadRecentInbox();
+            loadRecentOutbox();
+        }
+
+        // Shared pager for both full views
+        function pagerHtml(data, pageVar, loader) {
+            if (!data.pages || data.pages <= 1) {
+                return '<span style="color:var(--text-secondary);">' + data.total + ' ' + L('total') + '</span>';
+            }
+            return '<button class="btn-sm btn-outline" onclick="' + pageVar + '--;' + loader + '()" ' + (data.page <= 1 ? 'disabled' : '') + '>' + L('previous') + '</button>' +
+                '<span>' + L('page') + ' ' + data.page + ' ' + L('of') + ' ' + data.pages + ' (' + data.total + ' ' + L('total') + ')</span>' +
+                '<button class="btn-sm btn-outline" onclick="' + pageVar + '++;' + loader + '()" ' + (data.page >= data.pages ? 'disabled' : '') + '>' + L('next') + '</button>';
+        }
+
+        // ===== Full inbox =====
+        var inboxAllPage = 1;
+        var inboxAllSearch = '';
+        var inboxAllSearchTimer = null;
+
+        function openInboxAllModal() {
+            inboxAllPage = 1;
+            inboxAllSearch = '';
+            var box = document.getElementById('inboxAllSearch');
+            box.value = '';
+            box.placeholder = L('searchPlaceholder');
+            document.getElementById('inboxAllScope').textContent = currentAccountLabel() ? '— ' + currentAccountLabel() : '';
+            document.getElementById('inboxAllModal').style.display = 'flex';
+            loadInboxAllPage();
+        }
+
+        async function loadInboxAllPage() {
+            var container = document.getElementById('inboxAllContent');
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
+            try {
+                var url = '/admin/api/inbox/all?page=' + inboxAllPage + '&limit=25' +
+                    accountFilterQuery('&') + (inboxAllSearch ? '&q=' + encodeURIComponent(inboxAllSearch) : '');
+                var res = await fetch(url, { headers: { Authorization: auth } });
+                var data = await res.json();
+                if (!res.ok || !data.entries || data.entries.length === 0) {
+                    container.innerHTML = '<div class="empty-state">' + L('inboxEmpty') + '</div>';
+                    document.getElementById('inboxAllPagination').innerHTML = '';
+                    return;
+                }
+                var html = '<table class="submissions-table"><thead><tr>' +
+                    '<th>' + L('date') + '</th><th>' + L('form') + '</th><th>' + L('name') + '</th>' +
+                    '<th>' + L('email') + '</th><th>' + L('preview') + '</th></tr></thead><tbody>';
+                data.entries.forEach(function(e) {
+                    var prev = (e.preview || []).map(function(p) { return p.label + ': ' + p.value; }).join(' · ');
+                    if (e.attachments) prev = '\u{1F4CE}' + e.attachments + (prev ? ' · ' + prev : '');
+                    html += '<tr class="row-clickable" onclick="openSubmissionDetailById(&quot;' + escAttr(e.websiteId) + '&quot;,&quot;' + escAttr(e.id) + '&quot;)">' +
+                        '<td style="white-space:nowrap;font-size:0.8rem;">' + esc(new Date(e.timestamp).toLocaleString()) + '</td>' +
+                        '<td><code>' + esc(e.websiteId) + '</code></td>' +
+                        '<td>' + esc(e.name || '-') + '</td>' +
+                        '<td>' + esc(e.email || '-') + '</td>' +
+                        '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary);font-size:0.8rem;">' + esc(prev) + '</td>' +
+                    '</tr>';
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+                document.getElementById('inboxAllPagination').innerHTML = pagerHtml(data, 'inboxAllPage', 'loadInboxAllPage');
+            } catch (e) {
+                container.innerHTML = '<div class="empty-state">' + L('connError') + '</div>';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var box = document.getElementById('inboxAllSearch');
+            if (!box) return;
+            box.addEventListener('input', function() {
+                clearTimeout(inboxAllSearchTimer);
+                inboxAllSearchTimer = setTimeout(function() {
+                    inboxAllSearch = box.value.trim();
+                    inboxAllPage = 1;
+                    loadInboxAllPage();
+                }, 300);
+            });
+        });
+
+        // ===== Full outbox =====
+        var outboxAllPage = 1;
+        // Rows are cached by form+id so the detail view renders without another round trip
+        var outboxAllCache = {};
+
+        function openOutboxAllModal() {
+            outboxAllPage = 1;
+            document.getElementById('outboxAllStatus').value = '';
+            document.getElementById('outboxAllModal').style.display = 'flex';
+            loadOutboxAllPage();
+        }
+
+        async function loadOutboxAllPage() {
+            var container = document.getElementById('outboxAllContent');
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
+            try {
+                var status = document.getElementById('outboxAllStatus').value;
+                var url = '/admin/api/outbox/all?page=' + outboxAllPage + '&limit=25' +
+                    accountFilterQuery('&') + (status ? '&status=' + encodeURIComponent(status) : '');
+                var res = await fetch(url, { headers: { Authorization: auth } });
+                var data = await res.json();
+                var acct = currentAccountLabel();
+                if (data.counts) {
+                    document.getElementById('outboxAllScope').textContent = (acct ? '— ' + acct + ' ' : '') +
+                        '(' + data.counts.ok + ' OK · ' + data.counts.error + ' ' + L('errorsWord') + ' · ' + data.counts.skipped + ' Skipped)';
+                } else {
+                    document.getElementById('outboxAllScope').textContent = acct ? '— ' + acct : '';
+                }
+                if (!res.ok || !data.entries || data.entries.length === 0) {
+                    container.innerHTML = '<div class="empty-state">' + L('outboxEmpty') + '</div>';
+                    document.getElementById('outboxAllPagination').innerHTML = '';
+                    return;
+                }
+                var html = '<table class="submissions-table"><thead><tr>' +
+                    '<th>' + L('date') + '</th><th>' + L('form') + '</th><th>Channel</th><th>' + L('to') + '</th>' +
+                    '<th>' + L('sender') + '</th><th>' + L('subject') + '</th><th>' + L('statStatus') + '</th></tr></thead><tbody>';
+                data.entries.forEach(function(e) {
+                    outboxAllCache[e.websiteId + '|' + e.id] = e;
+                    var channelLabel = e.channel === 'email' ? 'Mail' : e.channel === 'telegram' ? 'Telegram' : 'Discord';
+                    var statusColor = e.status === 'ok' ? 'var(--success)' : e.status === 'skipped' ? 'var(--warning)' : 'var(--danger)';
+                    var statusText = e.status === 'ok' ? 'OK' : e.status === 'skipped' ? 'Skipped' : 'Error';
+                    var senderCell = (e.channel === 'email' && e.senderId)
+                        ? senderPill(e.senderId, { failedOver: e.failedOver })
+                        : '<span style="color:var(--text-secondary);">—</span>';
+                    html += '<tr class="row-clickable" onclick="showOutboxEntry(&quot;' + escAttr(e.websiteId) + '&quot;,&quot;' + escAttr(e.id) + '&quot;)">' +
+                        '<td style="white-space:nowrap;font-size:0.8rem;">' + esc(new Date(e.timestamp).toLocaleString()) + '</td>' +
+                        '<td><code>' + esc(e.websiteId) + '</code></td>' +
+                        '<td><span class="outbox-channel ' + e.channel + '">' + channelLabel + '</span></td>' +
+                        '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e.to || '-') + '</td>' +
+                        '<td>' + senderCell + '</td>' +
+                        '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e.subject || '-') + '</td>' +
+                        '<td><span style="color:' + statusColor + ';font-weight:600;">' + statusText + '</span>' +
+                            (e.error ? '<div style="font-size:0.72rem;color:var(--danger);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e.error) + '</div>' : '') +
+                        '</td>' +
+                    '</tr>';
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+                document.getElementById('outboxAllPagination').innerHTML = pagerHtml(data, 'outboxAllPage', 'loadOutboxAllPage');
+            } catch (e) {
+                container.innerHTML = '<div class="empty-state">' + L('connError') + '</div>';
+            }
+        }
+
+        function showOutboxEntry(websiteId, entryId) {
+            var e = outboxAllCache[websiteId + '|' + entryId];
+            if (!e) return;
+            var row = function(label, value) {
+                if (value === undefined || value === null || value === '') return '';
+                return '<tr><td style="white-space:nowrap;vertical-align:top;font-weight:600;width:32%;">' + esc(label) + '</td>' +
+                    '<td style="white-space:pre-wrap;word-break:break-word;">' + value + '</td></tr>';
+            };
+            var statusColor = e.status === 'ok' ? 'var(--success)' : e.status === 'skipped' ? 'var(--warning)' : 'var(--danger)';
+            var statusText = e.status === 'ok' ? 'OK' : e.status === 'skipped' ? 'Skipped' : 'Error';
+            var html = '<table class="submissions-table" style="width:100%;"><tbody>';
+            html += row(L('date'), esc(new Date(e.timestamp).toLocaleString()));
+            html += row(L('form'), '<code>' + esc(e.websiteId) + '</code>');
+            html += row('Channel', esc(e.channel || ''));
+            html += row(L('statStatus'), '<span style="color:' + statusColor + ';font-weight:600;">' + statusText + '</span>');
+            html += row(L('to'), esc(e.to || ''));
+            html += row(L('subject'), esc(e.subject || ''));
+            if (e.senderId) html += row(L('sender'), senderPill(e.senderId, { failedOver: e.failedOver }));
+            if (e.failedOver && e.primarySenderId) html += row(L('intendedSender'), senderPill(e.primarySenderId, {}));
+            if (e.triedSenders) html += row(L('triedSenders'), esc(e.triedSenders.join(' \u2192 ')));
+            if (e.provider) html += row('Provider', esc(String(e.provider).toUpperCase()) + (e.providerStatus ? ' ' + esc(String(e.providerStatus)) : ''));
+            if (e.messageId) html += row('Message-ID', '<code style="font-size:0.75rem;">' + esc(e.messageId) + '</code>');
+            if (e.response) html += row(L('serverResponse'), esc(e.response));
+            if (e.error) html += row(L('errorWord'), '<span style="color:var(--danger);">' + esc(e.error) + '</span>');
+            if (e.autoReply) html += row(L('autoReplyWord'), L('captchaOn'));
+            html += '</tbody></table>';
+            html += '<div style="border-top:1px solid var(--border-color);margin-top:0.75rem;padding-top:0.6rem;">' +
+                '<button class="btn-sm btn-outline" onclick="document.getElementById(&quot;outboxEntryModal&quot;).style.display=&quot;none&quot;;openOutboxModal(&quot;' + escAttr(e.websiteId) + '&quot;)">' + L('viewFormOutbox') + '</button>' +
+                '</div>';
+            document.getElementById('outboxEntryContent').innerHTML = html;
+            document.getElementById('outboxEntryModal').style.display = 'flex';
+        }
+
+        // ===== Submission detail, fetched by id =====
+        // Used by the live inbox and the full inbox, where the per-form submissions modal
+        // has never been opened and its cache is therefore empty.
+        async function openSubmissionDetailById(websiteId, entryId) {
+            try {
+                var res = await fetch('/admin/api/submissions/' + encodeURIComponent(websiteId) + '/entry/' + encodeURIComponent(entryId),
+                    { headers: { Authorization: auth } });
+                if (!res.ok) { showToast(L('failedLoadSubmission'), 'error'); return; }
+                var data = await res.json();
+                renderSubmissionDetail(data.submission, websiteId);
+            } catch (e) {
+                showToast(L('connError'), 'error');
+            }
         }
 
         var outboxModalPage = 1;
@@ -2764,7 +3093,7 @@
             });
             select.innerHTML = html;
             if (current) select.value = current;
-            bar.style.display = Object.keys(accountsCache).length > 1 ? '' : 'none';
+            bar.style.display = Object.keys(accountsCache).length > 1 ? 'flex' : 'none';
         }
 
         async function loadWebsitesWithStats() {
@@ -2855,16 +3184,28 @@
                     ? senderPill(effSender, { implicit: cfg.senderId !== effSender })
                     : '<span title="' + escAttr(L('noSenderHint')) + '" style="font-size:0.65rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:4px;background:var(--danger);color:#fff;white-space:nowrap;">' + L('noSenderBadge') + '</span>';
 
-                return '<div class="website-card">' +
+                var issues = cfg.issues || [];
+                var hasError = issues.some(function(i) { return i.severity === 'error'; });
+
+                return '<div class="website-card"' + (hasError ? ' style="border-color:var(--danger);"' : '') + '>' +
                     '<div style="display:flex;align-items:center;justify-content:space-between;gap:0.4rem;">' +
                         '<div style="display:flex;align-items:center;gap:0.4rem;min-width:0;">' +
                             '<button class="card-toggle collapsed" onclick="toggleCardDetails(this)" title="Expand">&#9660;</button>' +
+                            formIssuesBadge(issues) +
                             '<h4>' + esc(id) + '</h4>' +
                         '</div>' +
                         '<div style="display:flex;align-items:center;gap:0.3rem;flex-shrink:0;">' + senderBadge + accountBadge + '</div>' +
                     '</div>' +
                     '<div class="card-details collapsed">' +
-                        ci(L('to'), esc(cfg.to)) +
+                        (issues.length
+                            ? '<div style="border-left:3px solid ' + (hasError ? 'var(--danger)' : 'var(--warning)') + ';padding:0.35rem 0.5rem;margin-bottom:0.5rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:0.78rem;">' +
+                              '<strong>' + (hasError ? L('formBrokenTitle') : L('formWarnTitle')) + '</strong>' +
+                              issues.map(function(i) {
+                                  return '<div>• ' + esc(L('issue_' + i.code)) + (i.detail ? ' (' + esc(i.detail) + ')' : '') + '</div>';
+                              }).join('') +
+                              '</div>'
+                            : '') +
+                        ci(L('to'), cfg.to ? esc(cfg.to) : '<span style="color:var(--danger);font-weight:600;">' + L('issue_noRecipients') + '</span>') +
                         ci(L('subject'), esc(cfg.subjectPrefix)) +
                         redirect + captchaInfo + domains + senderLabel + discord + telegram + webhook + autoReply +
                         ci(L('template'), esc(cfg.templatePath)) +
@@ -3276,6 +3617,11 @@
             payload.telegramBotToken = document.getElementById('editTelegramBotToken').value.trim() || '';
             payload.telegramChatId = document.getElementById('editTelegramChatId').value.trim() || '';
             payload.webhookUrl = document.getElementById('editWebhookUrl').value.trim() || '';
+            if (!String(payload.to || '').trim()) {
+                showToast(L('issue_noRecipients'), 'error');
+                setLoading(btn, false);
+                return;
+            }
             payload.autoReplyEnabled = document.getElementById('editAutoReplyEnabled').checked;
             payload.autoReplySubject = document.getElementById('editAutoReplySubject').value.trim() || '';
             payload.autoReplyTemplate = document.getElementById('editAutoReplyTemplate').value || '';
@@ -3750,6 +4096,22 @@
             } catch(e) {
                 showToast(L('connError'), 'error');
             }
+        }
+
+        // A form that cannot deliver should say so on the dashboard instead of failing
+        // silently on the next submission. The server computes the issues; this renders
+        // them as one red (or amber) marker with the reasons in the tooltip.
+        function formIssuesBadge(issues) {
+            if (!issues || !issues.length) return '';
+            var hasError = issues.some(function(i) { return i.severity === 'error'; });
+            var lines = issues.map(function(i) {
+                return '• ' + L('issue_' + i.code) + (i.detail ? ' (' + i.detail + ')' : '');
+            });
+            var tip = (hasError ? L('formBrokenTitle') : L('formWarnTitle')) + ':\n' + lines.join('\n');
+            var color = hasError ? 'var(--danger)' : 'var(--warning)';
+            return '<span title="' + escAttr(tip) + '" style="display:inline-flex;align-items:center;justify-content:center;' +
+                'width:18px;height:18px;border-radius:50%;background:' + color + ';color:#fff;font-size:0.7rem;' +
+                'font-weight:800;flex-shrink:0;cursor:help;">!</span>';
         }
 
         var senderEditorIsNew = false;
@@ -4441,7 +4803,10 @@
             }, 300);
         }
 
+        var currentModalWebsiteId = '';
+
         function openSubmissionsModal(websiteId) {
+            currentModalWebsiteId = websiteId;
             submissionsModalWebsiteId = websiteId;
             submissionsModalPage = 1;
             document.getElementById('submissionsModalTitle').textContent = websiteId;
@@ -4554,6 +4919,12 @@
         function showSubmissionDetail(entryId) {
             var s = currentModalSubmissions.find(function(x) { return x.id === entryId; });
             if (!s) return;
+            renderSubmissionDetail(s, currentModalWebsiteId);
+        }
+
+        // Renders one stored submission with every field. `websiteId` is optional and only
+        // used for the "see all submissions of this form" shortcut.
+        function renderSubmissionDetail(s, websiteId) {
             var content = '';
             // Header: date + submit method badge
             var methodLabel = s.submitMethod === 'js' ? 'JS' : 'POST';
@@ -4590,7 +4961,13 @@
             // Metadata footer
             content += '<div style="border-top:1px solid var(--border-color);margin-top:0.75rem;padding-top:0.5rem;color:var(--text-secondary);font-size:0.78rem;">' +
                 L('metadata') + ': ID ' + esc(s.id || '') + (s.ip ? ' · IP ' + esc(s.ip) : '') +
+                (websiteId ? ' · ' + L('form') + ' ' + esc(websiteId) : '') +
             '</div>';
+            if (websiteId) {
+                content += '<div style="margin-top:0.6rem;">' +
+                    '<button class="btn-sm btn-outline" onclick="document.getElementById(&quot;detailModal&quot;).style.display=&quot;none&quot;;openSubmissionsModal(&quot;' + escAttr(websiteId) + '&quot;)">' +
+                    L('viewFormSubmissions') + '</button></div>';
+            }
             document.getElementById('detailContent').innerHTML = content;
             document.getElementById('detailModal').style.display = 'flex';
         }
@@ -4742,7 +5119,7 @@
         document.getElementById('changePasswordBtn').addEventListener('click', openPasswordModal);
 
         // ========== Close modals on overlay click ==========
-        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal', 'senderEditorModal', 'helpModal', 'outboxModal', 'userEditorModal', 'accountCreateModal'].forEach(function(id) {
+        ['editModal', 'detailModal', 'createModal', 'submissionsModal', 'passwordModal', 'settingsModal', 'templateEditorModal', 'templateManagerModal', 'senderEditorModal', 'helpModal', 'outboxModal', 'userEditorModal', 'accountCreateModal', 'inboxAllModal', 'outboxAllModal', 'outboxEntryModal'].forEach(function(id) {
             document.getElementById(id).addEventListener('click', function(e) {
                 if (e.target === this) this.style.display = 'none';
             });

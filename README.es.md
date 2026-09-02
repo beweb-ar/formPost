@@ -43,6 +43,8 @@
 - **Soporte multi-formulario** - Formularios ilimitados, cada uno con su propia configuración
 - **Multi-sender de email** - Múltiples senders (relays SMTP o SendGrid API) con toggle activo/desactivado por sender
 - **Failover de senders** - Cada sender puede designar un respaldo; las fallas de conectividad o credenciales derivan a él automáticamente, y un disyuntor mantiene al relay caído fuera del camino hasta que se recupera
+- **Los envíos sobreviven a las fallas de entrega** - el envío se guarda antes de intentar el email, así que un relay rebotado o mal configurado nunca cuesta el mensaje del visitante
+- **Chequeo de salud de formularios** - los formularios sin destinatarios o sin un sender utilizable se marcan en el tablero, y no se puede guardar un destino vacío
 - **Soporte SendGrid** - Envío vía la API HTTP v3 de SendGrid con solo una API key y un dominio de envío verificado (no requiere puertos SMTP)
 - **API para Agentes** - API REST auto-documentada (`/api/v1`) para que agentes de IA creen cuentas, formularios, senders y plantillas programáticamente
 - **Tres formas de ingresar** - Google, email + código de un solo uso (OTP) o email + contraseña. No hay auto-registro: el email tiene que pertenecer a un usuario existente

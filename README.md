@@ -44,6 +44,8 @@
 - **Multi-form support** - Handle unlimited forms, each with its own configuration
 - **Multi-sender email** - Configure multiple senders (SMTP relays or SendGrid API) with active/disabled toggle per sender
 - **Sender failover** - Each sender can name a backup; connectivity/credential failures roll over to it automatically, and a circuit breaker keeps a downed relay out of the path until it recovers
+- **Submissions survive delivery failures** - the submission is stored before the email is attempted, so a bounced or misconfigured relay never costs you the visitor's message
+- **Form health checks** - forms missing recipients or a usable sender are flagged on the dashboard, and an empty destination cannot be saved
 - **SendGrid support** - Send via the SendGrid v3 HTTP API with just an API key and a verified sending domain (no SMTP ports needed)
 - **Agent API** - Self-documented REST API (`/api/v1`) so AI agents can create accounts, forms, senders and templates programmatically
 - **Three ways to sign in** - Google, email + one-time code (OTP), or email + password. Users are never self-registered: the email must already belong to a user
@@ -407,6 +409,9 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 | `GET/POST/PUT/DELETE` | `/admin/api/senders[/:id]` | CRUD senders |
 | `POST` | `/admin/api/senders/:id/test` | Test sender connection |
 | `POST` | `/admin/api/senders/:id/health/reset` | Clear a sender's circuit breaker and retry it immediately |
+| `GET` | `/admin/api/inbox/all` | Full inbox across all forms in scope (`?page=&limit=&accountId=&formId=&q=`) |
+| `GET` | `/admin/api/outbox/all` | Full outbox across all forms in scope (`?page=&limit=&accountId=&formId=&status=`) |
+| `GET` | `/admin/api/submissions/:id/entry/:entryId` | One stored submission with every field |
 | `POST` | `/admin/api/telegram/chats` | Fetch available Telegram chats for a bot token |
 | `GET/PUT/DELETE` | `/admin/api/templates[/:name]` | CRUD templates |
 | `GET` | `/admin/api/statistics[/:id]` | Stats (includes mails/notifications counts) |

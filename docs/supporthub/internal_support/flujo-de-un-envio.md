@@ -30,21 +30,22 @@ Orden real de ejecución de `POST /submit` [evidencia: server.js:788-1329]. Sirv
 | 7 | Validación de campos: ≤30, nombre ≤100, valor ≤5000, email válido | `400` con el mensaje correspondiente |
 | 8 | Captcha: solo si `captchaEnabled !== false` **y** hay clave secreta guardada; `DEBUG=true` lo saltea | `400 completeCaptcha / captchaFailed`, `500 captchaError` |
 | 9 | Se arma el cuerpo del email con la plantilla (`{{fields}}`, `{{form_id}}`, `{{campo}}`) o uno genérico si no existe el archivo | `500 templateError` si el path sale del directorio de la app |
-| 10 | Se elige el sender: el del formulario; si no sirve, el primero de la cuenta; si no, uno global. Se arma la **cadena** con sus respaldos (máx. 3) y se saltean los que tengan el disyuntor abierto | Sin sender → se saltea el email (solo log). Sender inactivo → outbox `skipped` |
-| 11 | **Envío del email principal**, recorriendo la cadena: una falla del sender pasa al respaldo; una del mensaje corta ahí | Outbox `error` + **`500 serverError` y se corta el flujo: el envío NO se guarda** |
-| 12 | Se guarda el envío en `data/submissions-<form>.json` (IP anonimizada, `submitMethod`), se persisten adjuntos y se emite el evento SSE de inbox | Solo log de error; el visitante ya recibió respuesta |
-| 13 | Estadísticas: `successfulSubmissions++`, `mailsSent++` si el mail salió | Solo log |
+| 10 | **Se guarda el envío** en `data/submissions-<form>.json` (IP anonimizada, `submitMethod`), se persisten adjuntos y se emite el evento SSE de inbox | Solo log de error; el flujo sigue |
+| 11 | Estadísticas: `successfulSubmissions++` y `lastSubmission` | Solo log |
+| 12 | Se elige el sender: el del formulario; si no sirve, el primero de la cuenta; si no, uno global. Se arma la **cadena** con sus respaldos (máx. 3) y se saltean los que tengan el disyuntor abierto | Sin sender → se saltea el email (solo log). Sender inactivo → outbox `skipped` |
+| 13 | **Envío del email principal**, recorriendo la cadena: una falla del sender pasa al respaldo; una del mensaje corta ahí. Si sale, `mailsSent++` | Outbox `error` + `500 serverError`; **el envío ya quedó guardado en el paso 10** |
 | 14 | Discord (si hay webhook): mensaje + adjuntos → outbox | Outbox `error`; no corta |
 | 15 | Telegram (si hay token **y** chat id): mensaje + documentos → outbox | Outbox `error`; no corta |
 | 16 | Webhook genérico (si hay URL): `POST {formId, timestamp, fields}`, timeout 5 s | **Solo log, no deja outbox** |
 | 17 | Auto-respuesta (si está activa, hay email del visitante y el sender no fue salteado) → outbox | Solo log; no corta |
 | 18 | Respuesta: `302` al `redirectUrl` o `200 {success:true}` | — |
 
-## Las tres consecuencias que más confunden a soporte
+## Las consecuencias que más confunden a soporte
 
-1. **Si el email principal falla, el envío se pierde**: el flujo responde 500 en el paso 11 y nunca llega al paso 12. En el panel se ve una entrada de salida en rojo sin envío asociado [evidencia: verificado a c73bdc5 — server.js:1039 retorna antes de server.js:1043].
-2. **Si el sender está inactivo o no hay ninguno, el envío sí se guarda**: el paso 11 se saltea (outbox `skipped` o nada) y el flujo sigue normal.
-3. **El webhook genérico es invisible en la UI**: no genera entrada de outbox ni cuenta como notificación; solo aparece en los logs del servidor.
+1. **Si el email falla, el envío igual se guarda** (desde v1.9.2). El visitante ve `500` y el panel muestra la salida en rojo, pero el mensaje queda en **Envíos** y cuenta en el total de la tarjeta. Antes de v1.9.2 el `return 500` estaba delante del guardado, así que esos envíos se perdían: la bandeja de salida mostraba los intentos fallidos y **Envíos** aparecía vacío. Ese síntoma —salidas en rojo sin envíos— identifica datos perdidos por la versión vieja, y esos ya no se pueden recuperar.
+2. **El visitante sigue viendo un error si el mail no salió.** Es deliberado: el 500 avisa que la notificación no llegó a destino. Lo que cambió es que su mensaje ya no se pierde por eso.
+3. **Si el sender está inactivo o no hay ninguno, el envío también se guarda**: el paso 13 se saltea (outbox `skipped` o nada) y el flujo sigue normal.
+4. **El webhook genérico es invisible en la UI**: no genera entrada de outbox ni cuenta como notificación; solo aparece en los logs del servidor.
 
 ## Qué mirar en los logs (JSON en stdout)
 

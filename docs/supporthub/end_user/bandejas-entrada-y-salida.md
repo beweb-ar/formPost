@@ -43,7 +43,21 @@ El panel **Bandeja de Salida** muestra, también en vivo, cada email y cada noti
 - En los emails, una **etiqueta con el sender** que efectivamente lo entregó. Si salió por el
   remitente de respaldo, la etiqueta aparece en naranja con una flecha (**↳**).
 
-Hacé click en cualquier entrada para abrir el **historial completo** de ese formulario.
+Hacé click en cualquier entrada para abrir **ese registro completo**: en la bandeja de entrada, todos
+los campos del envío (incluido el mensaje) con sus adjuntos; en la de salida, todo el detalle de la
+entrega (sender usado, respuesta del servidor, message-id y el error si lo hubo).
+
+## Cómo ver la bandeja completa (no solo los últimos registros)
+
+Los paneles del dashboard muestran únicamente los últimos movimientos. El link **Ver todo**, arriba a
+la derecha de cada panel, abre la bandeja completa de **todos** los formularios juntos, ordenada de
+más nueva a más vieja y paginada:
+
+- **Ver todo** en Bandeja de Entrada: buscador por nombre, email o formulario. Cada fila abre el envío completo.
+- **Ver todo** en Bandeja de Salida: filtro por estado (todos / solo errores / OK / Skipped) y un
+  resumen `X OK · Y errores · Z Skipped` en el título. Cada fila abre el detalle de la entrega.
+
+Si estás filtrando por cuenta, las dos vistas respetan ese filtro y lo aclaran en el título.
 
 ## Cómo ver el historial de mails enviados de un formulario
 

@@ -163,6 +163,8 @@ const serverMessages = {
         formExists: 'Form ID already exists',
         formAdded: 'Form added',
         formNotFound: 'Form not found',
+        toRequired: 'At least one destination email is required: without it the form cannot send anything.',
+        toInvalid: 'These destination addresses are not valid emails:',
         formUpdated: 'Form updated',
         formRemoved: 'Form removed',
         invalidSmtp: 'Invalid SMTP config',
@@ -220,6 +222,8 @@ const serverMessages = {
         formExists: 'El ID del formulario ya existe',
         formAdded: 'Formulario agregado',
         formNotFound: 'Formulario no encontrado',
+        toRequired: 'Se requiere al menos un email de destino: sin eso el formulario no puede enviar nada.',
+        toInvalid: 'Estas direcciones de destino no son emails válidos:',
         formUpdated: 'Formulario actualizado',
         formRemoved: 'Formulario eliminado',
         invalidSmtp: 'Configuraci\u00f3n SMTP no v\u00e1lida',
@@ -757,6 +761,50 @@ function getTransporterForForm(recipientCfg) {
     const senderCfg = config.senders[senderId];
     if (senderCfg.active === false) return { inactive: true, senderId };
     return { transporter: transporters[senderId], senderCfg, senderId, accountId: acct };
+}
+
+// Split a form's "to" into individual addresses. Same parsing nodemailer will do,
+// so what the panel validates is what the relay will actually receive.
+function parseRecipients(to) {
+    return String(to || '').split(/[,;]/).map(a => a.trim()).filter(Boolean);
+}
+
+// Everything a form needs before it can deliver anything. Returned by GET /websites so
+// the dashboard can flag a broken form instead of letting it fail silently on the next
+// submission -- which is exactly how a form left without recipients kept accepting posts
+// and failing with "No recipients defined".
+// severity 'error' = this form cannot send email at all; 'warn' = it will not send right now.
+function formIssues(cfg) {
+    const issues = [];
+    const recipients = parseRecipients(cfg.to);
+    if (!recipients.length) {
+        issues.push({ code: 'noRecipients', severity: 'error' });
+    } else {
+        const bad = recipients.filter(a => !isValidEmail(a));
+        if (bad.length) issues.push({ code: 'invalidRecipients', severity: 'error', detail: bad.join(', ') });
+    }
+    const senderId = effectiveSenderIdForForm(cfg);
+    if (!senderId) {
+        issues.push({ code: 'noSender', severity: 'error' });
+    } else if (config.senders[senderId].active === false) {
+        issues.push({ code: 'senderInactive', severity: 'warn', detail: senderId });
+    }
+    if (cfg.autoReplyEnabled && cfg.autoReplyReplyTo && !isValidEmail(cfg.autoReplyReplyTo)) {
+        issues.push({ code: 'invalidAutoReplyTo', severity: 'warn', detail: cfg.autoReplyReplyTo });
+    }
+    return issues;
+}
+
+// Reject a write that would leave a form unable to deliver. Only checks what the patch
+// actually sets: editing an unrelated field on an already-broken form still saves, so a
+// pre-existing problem is surfaced by the dashboard flag rather than by blocking the fix.
+function validateRecipientsPatch(patch) {
+    if (patch.to === undefined) return null;
+    const recipients = parseRecipients(patch.to);
+    if (!recipients.length) return t.toRequired;
+    const bad = recipients.filter(a => !isValidEmail(a));
+    if (bad.length) return t.toInvalid + ' ' + bad.join(', ');
+    return null;
 }
 
 // How many forms send through each sender, restricted to the forms this caller can see.
@@ -1388,94 +1436,12 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
 
         const emailSubject = `${recipientConfig.subjectPrefix} ${escapeHtml(String(senderName))}`;
         const emailTimestamp = new Date().toISOString();
-        let emailOk = false;
 
-        // Send email (only if sender exists and is active).
-        // The chain is the configured sender plus its backups; a sender-level
-        // failure moves the same message down the chain (see sendWithFailover).
-        const senderChain = skipEmail ? [] : resolveSenderChain(senderInfo.senderId, senderInfo.accountId);
-        if (!skipEmail) {
-            const buildMailOptions = (cfg) => ({
-                from: `"${escapeHtml(String(senderName))}" <${cfg.from}>`,
-                to: recipientConfig.to,
-                subject: emailSubject,
-                html: mailBody,
-                replyTo: senderEmail || undefined,
-                attachments: uploadedFiles.map(f => ({
-                    filename: f.originalname,
-                    path: f.path
-                }))
-            });
-
-            try {
-                const outcome = await sendWithFailover(senderChain, buildMailOptions, { formId, to: recipientConfig.to });
-                const sendMeta = outcome.meta;
-                // Detailed delivery log: provider, accept status code, message id (trace handle),
-                // and per-recipient accepted/rejected. For SendGrid, statusCode 202 = queued, not delivered.
-                log.info('Email sent', {
-                    formId, to: recipientConfig.to,
-                    senderId: outcome.senderId,
-                    failedOver: outcome.failedOver,
-                    provider: sendMeta.provider,
-                    statusCode: sendMeta.statusCode,
-                    messageId: sendMeta.messageId,
-                    accepted: sendMeta.accepted,
-                    rejected: sendMeta.rejected,
-                    response: sendMeta.response
-                });
-                emailOk = true;
-
-                const mailEntry = {
-                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                    timestamp: emailTimestamp,
-                    channel: 'email',
-                    to: recipientConfig.to,
-                    subject: emailSubject,
-                    status: 'ok',
-                    senderId: outcome.senderId,
-                    provider: sendMeta.provider,
-                    providerStatus: sendMeta.statusCode,
-                    messageId: sendMeta.messageId,
-                    response: sendMeta.response
-                };
-                if (outcome.failedOver) {
-                    mailEntry.failedOver = true;
-                    mailEntry.primarySenderId = senderChain[0] && senderChain[0].id;
-                }
-                saveOutboxEntry(formId, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
-                broadcastSSE({ type: 'outbox', websiteId: formId, ...mailEntry });
-            } catch (error) {
-                log.error('Error sending email', {
-                    formId, to: recipientConfig.to,
-                    provider: error.provider || 'smtp',
-                    statusCode: error.statusCode || null,
-                    attempts: error.attempts || [],
-                    error: error.message
-                });
-
-                const mailFailEntry = {
-                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                    timestamp: emailTimestamp,
-                    channel: 'email',
-                    to: recipientConfig.to,
-                    subject: emailSubject,
-                    status: 'error',
-                    senderId: senderInfo.senderId,
-                    provider: error.provider || 'smtp',
-                    providerStatus: error.statusCode || null,
-                    error: error.message
-                };
-                if (error.attempts && error.attempts.length > 1) {
-                    mailFailEntry.triedSenders = error.attempts.map(a => a.senderId);
-                }
-                saveOutboxEntry(formId, mailFailEntry).catch(() => {});
-                broadcastSSE({ type: 'outbox', websiteId: formId, ...mailFailEntry });
-
-                return res.status(500).send(t.serverError);
-            }
-        }
-
-            // Save submission to storage
+            // Save submission to storage.
+            // MUST stay ahead of the email: the submission is the irreplaceable data,
+            // the email is only a notification of it. This used to run after sending, so
+            // any delivery failure hit the `return 500` below and the visitor's message
+            // was never stored -- outbox showed the error, "Submissions" showed nothing.
             try {
                 const ip = req.ip || '';
                 // Anonymize: IPv4 last octet, IPv6 last 80 bits
@@ -1521,7 +1487,9 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                 log.error('Error saving submission', { formId, error: storageError.message });
             }
 
-            // Update statistics
+            // Count the submission as soon as it is stored. Sitting after the send made the
+            // card read 0 for a form whose mail was failing, while the same submissions were
+            // plainly visible in the inbox.
             try {
                 await writeConfigSafe(cfg => {
                     if (!cfg.statistics) cfg.statistics = {};
@@ -1529,12 +1497,104 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         cfg.statistics[formId] = { successfulSubmissions: 0, lastSubmission: null, mailsSent: 0, notificationsSent: 0 };
                     }
                     cfg.statistics[formId].successfulSubmissions++;
-                    if (emailOk) cfg.statistics[formId].mailsSent = (cfg.statistics[formId].mailsSent || 0) + 1;
                     cfg.statistics[formId].lastSubmission = new Date().toISOString();
                 });
             } catch (statsError) {
                 log.error('Error updating statistics', { formId, error: statsError.message });
             }
+
+        // Send email (only if sender exists and is active).
+        // The chain is the configured sender plus its backups; a sender-level
+        // failure moves the same message down the chain (see sendWithFailover).
+        const senderChain = skipEmail ? [] : resolveSenderChain(senderInfo.senderId, senderInfo.accountId);
+        if (!skipEmail) {
+            const buildMailOptions = (cfg) => ({
+                from: `"${escapeHtml(String(senderName))}" <${cfg.from}>`,
+                to: recipientConfig.to,
+                subject: emailSubject,
+                html: mailBody,
+                replyTo: senderEmail || undefined,
+                attachments: uploadedFiles.map(f => ({
+                    filename: f.originalname,
+                    path: f.path
+                }))
+            });
+
+            try {
+                const outcome = await sendWithFailover(senderChain, buildMailOptions, { formId, to: recipientConfig.to });
+                const sendMeta = outcome.meta;
+                // Detailed delivery log: provider, accept status code, message id (trace handle),
+                // and per-recipient accepted/rejected. For SendGrid, statusCode 202 = queued, not delivered.
+                log.info('Email sent', {
+                    formId, to: recipientConfig.to,
+                    senderId: outcome.senderId,
+                    failedOver: outcome.failedOver,
+                    provider: sendMeta.provider,
+                    statusCode: sendMeta.statusCode,
+                    messageId: sendMeta.messageId,
+                    accepted: sendMeta.accepted,
+                    rejected: sendMeta.rejected,
+                    response: sendMeta.response
+                });
+
+                const mailEntry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                    timestamp: emailTimestamp,
+                    channel: 'email',
+                    to: recipientConfig.to,
+                    subject: emailSubject,
+                    status: 'ok',
+                    senderId: outcome.senderId,
+                    provider: sendMeta.provider,
+                    providerStatus: sendMeta.statusCode,
+                    messageId: sendMeta.messageId,
+                    response: sendMeta.response
+                };
+                if (outcome.failedOver) {
+                    mailEntry.failedOver = true;
+                    mailEntry.primarySenderId = senderChain[0] && senderChain[0].id;
+                }
+                saveOutboxEntry(formId, mailEntry).catch(e => log.error('Error saving outbox entry', { error: e.message }));
+                broadcastSSE({ type: 'outbox', websiteId: formId, ...mailEntry });
+
+                writeConfigSafe(cfg => {
+                    if (cfg.statistics && cfg.statistics[formId]) {
+                        cfg.statistics[formId].mailsSent = (cfg.statistics[formId].mailsSent || 0) + 1;
+                    }
+                }).catch(() => {});
+            } catch (error) {
+                // The submission itself is already stored, so this is a delivery failure only.
+                log.error('Error sending email', {
+                    formId, to: recipientConfig.to,
+                    provider: error.provider || 'smtp',
+                    statusCode: error.statusCode || null,
+                    attempts: error.attempts || [],
+                    error: error.message
+                });
+
+                const mailFailEntry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                    timestamp: emailTimestamp,
+                    channel: 'email',
+                    to: recipientConfig.to,
+                    subject: emailSubject,
+                    status: 'error',
+                    senderId: senderInfo.senderId,
+                    provider: error.provider || 'smtp',
+                    providerStatus: error.statusCode || null,
+                    error: error.message
+                };
+                if (error.attempts && error.attempts.length > 1) {
+                    mailFailEntry.triedSenders = error.attempts.map(a => a.senderId);
+                }
+                saveOutboxEntry(formId, mailFailEntry).catch(() => {});
+                broadcastSSE({ type: 'outbox', websiteId: formId, ...mailFailEntry });
+
+                return res.status(500).send(t.serverError);
+            }
+        }
+
+
 
             // Send Discord webhook notification if configured
             if (recipientConfig.discordWebhook) {
@@ -2188,6 +2248,7 @@ adminRouter.get('/websites', (req, res) => {
         // always the one it names (missing, deleted or out of account -> fallback).
         // Kept out of sanitizeRecipientForApi so it can never reach a write path.
         out[id].effectiveSenderId = effectiveSenderIdForForm(cfg);
+        out[id].issues = formIssues(cfg);
     }
     res.json(out);
 });
@@ -2209,6 +2270,8 @@ adminRouter.post('/websites', requireRole('superadmin', 'admin'), async (req, re
     if (!(config.accounts || {})[accountId]) {
         return res.status(400).json({ error: 'Unknown account: ' + accountId });
     }
+    const recipientError = validateRecipientsPatch(siteConfig);
+    if (recipientError) return res.status(400).json({ error: recipientError });
     stripSecretEchoes(siteConfig);
     siteConfig.accountId = accountId;
     if (siteConfig.senderId) {
@@ -2243,6 +2306,8 @@ adminRouter.put('/websites/:id', requireRole('superadmin', 'admin'), async (req,
         return res.status(404).json({ error: t.formNotFound });
     }
     const scope = getAccountScope(req);
+    const recipientError = validateRecipientsPatch(siteConfig);
+    if (recipientError) return res.status(400).json({ error: recipientError });
     stripSecretEchoes(siteConfig);
     // Only superadmin may move a form between accounts
     if (scope !== null) delete siteConfig.accountId;
@@ -2944,21 +3009,108 @@ adminRouter.put('/admin/reset-password', async (req, res) => {
 });
 
 // Recent inbox entries (last N submissions across all forms)
+// Forms this caller may see, narrowed further by the dashboard's account filter
+// (?accountId=) and, where useful, by a single form (?formId=). The role scope always
+// wins: the query params can only ever restrict, never widen.
+function formsForRequest(req) {
+    const forms = formsForScope(getAccountScope(req));
+    const accountId = String(req.query.accountId || '').trim();
+    const formId = String(req.query.formId || '').trim();
+    const out = {};
+    for (const [id, cfg] of Object.entries(forms)) {
+        if (accountId && (cfg.accountId || 'default') !== accountId) continue;
+        if (formId && id !== formId) continue;
+        out[id] = cfg;
+    }
+    return out;
+}
+
+// Compact row for the live panel and the full inbox view
+function inboxRow(formId, sub) {
+    const skip = ['id', 'timestamp', 'ip', 'submitMethod', 'attachments'];
+    const hidden = ['name', 'nombre', 'full_name', 'email', 'correo', 'e_mail', 'form_id',
+        'website_id', 'cf-turnstile-response', 'h-captcha-response', 'g-recaptcha-response'];
+    const fields = Object.entries(sub).filter(([k]) => !skip.includes(k));
+    return {
+        websiteId: formId,
+        id: sub.id,
+        timestamp: sub.timestamp,
+        submitMethod: sub.submitMethod || 'html',
+        name: sub.name || sub.nombre || sub.full_name || '',
+        email: sub.email || sub.correo || sub.e_mail || '',
+        attachments: (sub.attachments || []).length,
+        preview: fields
+            .filter(([k]) => !hidden.includes(k))
+            .slice(0, 2)
+            .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }))
+    };
+}
+
+// Full inbox across every form in view, newest first. Backs the "see all" modal, so it
+// paginates over the merged list instead of taking the first N of each form the way
+// /inbox/recent does.
+adminRouter.get('/inbox/all', async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const all = [];
+    for (const formId of Object.keys(formsForRequest(req))) {
+        for (const sub of await loadSubmissions(formId)) all.push(inboxRow(formId, sub));
+    }
+    all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const filtered = q
+        ? all.filter(r => (r.name + ' ' + r.email + ' ' + r.websiteId).toLowerCase().includes(q))
+        : all;
+    const start = (page - 1) * limit;
+    res.json({
+        entries: filtered.slice(start, start + limit),
+        total: filtered.length,
+        page,
+        pages: Math.max(1, Math.ceil(filtered.length / limit))
+    });
+});
+
+// One stored submission with every field, for the detail view opened from either inbox
+adminRouter.get('/submissions/:websiteId/entry/:entryId', async (req, res) => {
+    const { websiteId, entryId } = req.params;
+    if (!canAccessForm(req, websiteId)) return res.status(404).json({ error: t.formNotFound });
+    const subs = await loadSubmissions(websiteId);
+    const found = subs.find(x => x.id === entryId);
+    if (!found) return res.status(404).json({ error: t.entryNotFound });
+    res.json({ websiteId, submission: found });
+});
+
+// Full outbox across every form in view, newest first
+adminRouter.get('/outbox/all', async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
+    const status = String(req.query.status || '').trim();
+    const all = [];
+    for (const formId of Object.keys(formsForRequest(req))) {
+        for (const entry of await loadOutboxEntries(formId)) all.push({ websiteId: formId, ...entry });
+    }
+    all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const filtered = status ? all.filter(e => (e.status || '') === status) : all;
+    const start = (page - 1) * limit;
+    res.json({
+        entries: filtered.slice(start, start + limit),
+        total: filtered.length,
+        page,
+        pages: Math.max(1, Math.ceil(filtered.length / limit)),
+        counts: {
+            ok: all.filter(e => e.status === 'ok').length,
+            error: all.filter(e => e.status === 'error').length,
+            skipped: all.filter(e => e.status === 'skipped').length
+        }
+    });
+});
+
 adminRouter.get('/inbox/recent', async (req, res) => {
     const limit = Math.min(10, Math.max(1, parseInt(req.query.limit) || 4));
     const all = [];
-    for (const formId of Object.keys(formsForScope(getAccountScope(req)))) {
+    for (const formId of Object.keys(formsForRequest(req))) {
         const subs = await loadSubmissions(formId);
-        for (const sub of subs.slice(0, limit)) {
-            const fields = Object.entries(sub).filter(([k]) => !['id','timestamp','ip','submitMethod'].includes(k));
-            const name = sub.name || sub.nombre || sub.full_name || '';
-            const email = sub.email || sub.correo || sub.e_mail || '';
-            const preview = fields
-                .filter(([k]) => !['name','nombre','full_name','email','correo','e_mail','form_id','website_id','cf-turnstile-response','h-captcha-response','g-recaptcha-response'].includes(k))
-                .slice(0, 2)
-                .map(([k, v]) => ({ label: fieldToLabel(k), value: String(v || '').substring(0, 100) }));
-            all.push({ websiteId: formId, id: sub.id, timestamp: sub.timestamp, submitMethod: sub.submitMethod || 'html', name, email, preview });
-        }
+        for (const sub of subs.slice(0, limit)) all.push(inboxRow(formId, sub));
     }
     all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     res.json(all.slice(0, limit));
@@ -2968,7 +3120,7 @@ adminRouter.get('/inbox/recent', async (req, res) => {
 adminRouter.get('/outbox/recent', async (req, res) => {
     const limit = Math.min(10, Math.max(1, parseInt(req.query.limit) || 4));
     const all = [];
-    for (const formId of Object.keys(formsForScope(getAccountScope(req)))) {
+    for (const formId of Object.keys(formsForRequest(req))) {
         const entries = await loadOutboxEntries(formId);
         for (const entry of entries.slice(0, limit)) {
             all.push({ websiteId: formId, ...entry });

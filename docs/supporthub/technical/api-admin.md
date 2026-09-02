@@ -74,6 +74,22 @@ Los secretos vacíos o `••••` se descartan del patch para conservar los 
   llamador (los primeros 25 ids, para el tooltip). Se calcula con la misma resolución que usa el
   envío real, así que incluye los formularios que caen en ese sender por descarte.
 
+`GET /inbox/all` y `GET /outbox/all` devuelven la bandeja completa de **todos** los formularios en
+alcance, ordenada de más nueva a más vieja y paginada (`?page=&limit=`, límite máximo 100). Aceptan
+`?accountId=` y `?formId=` para acotar (nunca para ampliar: el alcance del rol siempre manda),
+`GET /inbox/all` acepta `?q=` (nombre, email o formulario) y `GET /outbox/all` acepta `?status=` más
+un objeto `counts` con los totales ok/error/skipped. `GET /inbox/recent` y `GET /outbox/recent`
+aceptan el mismo `?accountId=`.
+
+`GET /submissions/:websiteId/entry/:entryId` devuelve un envío guardado con todos sus campos, para el
+detalle que se abre desde cualquiera de las dos bandejas.
+
+`GET /websites` agrega a cada formulario `issues`: lista de problemas que le impiden funcionar
+(`noRecipients`, `invalidRecipients`, `noSender`, `senderInactive`, `invalidAutoReplyTo`), cada uno con
+`severity` `error` o `warn`. `POST` y `PUT /websites` rechazan un `to` vacío o con direcciones
+inválidas; solo se valida lo que el patch trae, así que un formulario ya roto se puede seguir editando
+para arreglarlo.
+
 `GET /websites` agrega a cada formulario `effectiveSenderId`: el sender por el que realmente salen
 sus mails, que no siempre es `senderId` (puede estar vacío, apuntar a un sender borrado o a uno de
 otra cuenta). Es un campo calculado de solo lectura, fuera de `sanitizeRecipientForApi` para que no

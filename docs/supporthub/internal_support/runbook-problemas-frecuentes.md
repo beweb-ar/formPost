@@ -28,8 +28,25 @@ Cada caso: qué preguntar, qué mirar y cuál es la causa probable.
      - `Error` → leer el motivo (credenciales, dominio no verificado, destinatario inválido).
      - `Skipped` → el sender está **desactivado**.
      - Sin entrada → el formulario no tiene sender disponible.
-   - **No** → o nunca llegó el envío, o **falló el email y por eso no se guardó** (ver [Flujo de un envío](flujo-de-un-envio.md), paso 11). Confirmar mirando si hay una entrada de outbox en rojo a esa hora.
+   - **No** → nunca llegó el envío al servidor (revisar `form_id`, dominios permitidos y captcha). Ojo: en instalaciones **anteriores a v1.9.2** un email fallido descartaba el envío, así que salidas en rojo sin envío asociado a la misma hora son datos perdidos por ese bug; desde v1.9.2 el envío se guarda siempre.
 2. Si tampoco hay outbox: pedir que envíen el formulario mientras se mira la **Bandeja de Entrada** en vivo. Si no aparece nada, el envío no llega al servidor → revisar `form_id`, dominios permitidos y captcha.
+
+## "Un formulario dejó de enviar y nadie se dio cuenta"
+
+Desde v1.9.2 la tarjeta del formulario muestra un **círculo rojo con `!`** y borde rojo cuando le falta
+algo para funcionar. Pasando el mouse (o desplegando la tarjeta) se lee el motivo:
+
+| Problema | Severidad | Qué hacer |
+|---|---|---|
+| No tiene dirección de destino cargada | error | Cargar el destino en *Editar*. Es el caso que dejaba `No recipients defined` en la salida |
+| Dirección de destino inválida | error | Corregir la dirección |
+| No tiene un sender utilizable | error | Asignarle un sender, o crear uno para esa cuenta |
+| Su sender está desactivado | advertencia | Reactivar el sender en Configuración > Senders |
+| Responder-a de la auto-respuesta inválido | advertencia | Corregir o vaciar el campo |
+
+Además, guardar un formulario **sin destino o con un destino inválido** ahora se rechaza, tanto en el
+panel como por la API. Un formulario que ya estaba roto igual se puede editar (si no, no habría forma
+de arreglarlo): lo que se bloquea es dejarlo roto en esa misma edición.
 
 ## "El Test del sender falla con wrong version number"
 
