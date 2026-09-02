@@ -2658,15 +2658,19 @@ adminRouter.get('/statistics/chart', async (req, res) => {
 });
 
 // Statistics routes
-adminRouter.get('/statistics', (req, res) => {
+adminRouter.get('/statistics', async (req, res) => {
     const stats = config.statistics || {};
     const enhancedStats = {};
     for (const [websiteId, websiteConfig] of Object.entries(formsForScope(getAccountScope(req)))) {
         const websiteStats = stats[websiteId] || { successfulSubmissions: 0, lastSubmission: null };
+        const outbox = await loadOutboxEntries(websiteId);
         enhancedStats[websiteId] = {
             ...websiteStats,
             name: websiteConfig.subjectPrefix || websiteId,
-            email: websiteConfig.to
+            email: websiteConfig.to,
+            // Failed deliveries still on record, so the card can flag a form that is
+            // receiving fine but not delivering.
+            mailErrors: outbox.filter(e => e.status === 'error').length
         };
     }
     res.json(enhancedStats);

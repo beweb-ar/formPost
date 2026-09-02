@@ -412,6 +412,7 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 | `GET` | `/admin/api/inbox/all` | Full inbox across all forms in scope (`?page=&limit=&accountId=&formId=&q=`) |
 | `GET` | `/admin/api/outbox/all` | Full outbox across all forms in scope (`?page=&limit=&accountId=&formId=&status=`) |
 | `GET` | `/admin/api/submissions/:id/entry/:entryId` | One stored submission with every field |
+| `GET` | `/admin/api/outbox/:id` | Paginated outbox for one form (reachable from the card's **Outbox** button) |
 | `POST` | `/admin/api/telegram/chats` | Fetch available Telegram chats for a bot token |
 | `GET/PUT/DELETE` | `/admin/api/templates[/:name]` | CRUD templates |
 | `GET` | `/admin/api/statistics[/:id]` | Stats (includes mails/notifications counts) |

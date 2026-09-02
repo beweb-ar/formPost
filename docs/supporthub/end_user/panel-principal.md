@@ -70,7 +70,10 @@ bandeja de salida y el indicador rojo de la tarjeta.
   ningún sender utilizable, la etiqueta dice **SIN SENDER** en rojo: ese formulario no envía emails.
   Si el sender está caído, la etiqueta se muestra con borde rojo.
 - Tocá la **flechita** a la izquierda del nombre para desplegar el detalle: destino, asunto, redirección, captcha, dominios permitidos, sender, notificaciones activas, auto-respuesta y plantilla.
-- Los botones de abajo: **Envíos** (ver lo recibido), **Editar**, el ícono de copiar (**Clonar**) y el tacho (**Eliminar**).
+- Los botones de abajo: **Envíos** (lo que entró), **Salida** (lo que salió: mails y notificaciones de
+  ese formulario), **Editar**, el ícono de copiar (**Clonar**) y el tacho (**Eliminar**). Si el botón
+  **Salida** muestra un número rojo, esa es la cantidad de entregas fallidas que quedan registradas:
+  el formulario está recibiendo pero algo no está saliendo.
 
 Si tu rol es *Usuario*, solo vas a ver el botón **Envíos**: crear, editar, clonar y eliminar están reservados a los administradores [evidencia: admin/index.html:2539-2554].
 

@@ -47,6 +47,13 @@ Hacé click en cualquier entrada para abrir **ese registro completo**: en la ban
 los campos del envío (incluido el mensaje) con sus adjuntos; en la de salida, todo el detalle de la
 entrega (sender usado, respuesta del servidor, message-id y el error si lo hubo).
 
+## Cómo ver la salida de un formulario puntual
+
+En la tarjeta del formulario, el botón **Salida** abre la bandeja de salida **de ese formulario solo**,
+paginada, sin mezclarla con la del resto. El número rojo sobre el botón cuenta las entregas fallidas
+que quedan registradas, así que sirve para detectar de un vistazo un formulario que recibe pero no
+entrega. Cada fila abre el detalle completo de la entrega.
+
 ## Cómo ver la bandeja completa (no solo los últimos registros)
 
 Los paneles del dashboard muestran únicamente los últimos movimientos. El link **Ver todo**, arriba a

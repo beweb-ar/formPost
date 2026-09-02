@@ -84,6 +84,10 @@ aceptan el mismo `?accountId=`.
 `GET /submissions/:websiteId/entry/:entryId` devuelve un envío guardado con todos sus campos, para el
 detalle que se abre desde cualquiera de las dos bandejas.
 
+`GET /statistics` agrega `mailErrors` por formulario: entregas con estado `error` que quedan en su
+outbox. Se cuenta leyendo el outbox (tope 500 por formulario), no con un contador incremental, para que
+un formulario que ya venía fallando muestre el número desde el primer arranque de esta versión.
+
 `GET /websites` agrega a cada formulario `issues`: lista de problemas que le impiden funcionar
 (`noRecipients`, `invalidRecipients`, `noSender`, `senderInactive`, `invalidAutoReplyTo`), cada uno con
 `severity` `error` o `warn`. `POST` y `PUT /websites` rechazan un `to` vacío o con direcciones
