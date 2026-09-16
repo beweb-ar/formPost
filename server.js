@@ -1251,6 +1251,89 @@ function fieldToLabel(fieldName) {
         .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
 }
 
+// Placeholder names are matched loosely: {{correo_electronico}}, {{correoElectronico}}
+// and {{Correo Electronico}} all resolve to the same field.
+function normalizeVarName(name) {
+    return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// A form written in Spanish and a template written in English should still meet.
+// Within a group, a name that has no field of its own borrows the value of one
+// that does; a real field always wins over its alias.
+const FIELD_ALIASES = [
+    ['nombre', 'name', 'firstname', 'nombrecompleto', 'fullname'],
+    ['apellido', 'lastname', 'surname'],
+    ['email', 'correo', 'correoelectronico', 'mail'],
+    ['telefono', 'phone', 'tel', 'celular', 'whatsapp'],
+    ['empresa', 'company', 'organizacion', 'organization'],
+    ['mensaje', 'message', 'consulta', 'comentarios', 'comments'],
+    ['asunto', 'subject'],
+    ['ciudad', 'city'],
+    ['pais', 'country'],
+    ['sitio', 'sitioweb', 'website', 'web', 'url']
+];
+
+// Absolute public URL of this instance, used to resolve {{base_url}} in templates
+// and to hand the admin panel a usable link for an uploaded image. PUBLIC_URL wins;
+// otherwise it is derived from the request (x-forwarded-* because we sit behind a proxy).
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '');
+function publicBaseUrl(req) {
+    if (PUBLIC_URL) return PUBLIC_URL;
+    if (!req) return '';
+    const first = v => String(v || '').split(',')[0].trim();
+    const proto = first(req.headers['x-forwarded-proto']) || req.protocol || 'https';
+    const host = first(req.headers['x-forwarded-host']) || first(req.get('host'));
+    return host ? `${proto}://${host}` : '';
+}
+
+// Render the {{...}} placeholders of a mail template or subject line.
+//   {{form_id}} / {{website_id}}  the form id
+//   {{fields}}                    the pre-built list of submitted fields (HTML)
+//   {{base_url}}                  this instance's public URL (for /assets/... images)
+//   {{any_field}}                 that field's value
+//   {{any_field|texto}}           ...with a fallback when the field is empty or missing
+// `escape` off for plain-text contexts: the subject line is not HTML and must not
+// carry line breaks (header injection).
+function renderTemplateVars(content, opts) {
+    const o = opts || {};
+    const fieldEntries = o.fieldEntries || [];
+    const doEscape = o.escape !== false;
+    const clean = (v) => {
+        const s = String(v == null ? '' : v);
+        return doEscape ? escapeHtml(s) : s.replace(/[\r\n]+/g, ' ').trim();
+    };
+    // First key wins, so two fields that normalize alike keep the declared order
+    const values = new Map();
+    for (const [key, value] of fieldEntries) {
+        const n = normalizeVarName(key);
+        if (!values.has(n)) values.set(n, value);
+    }
+    for (const group of FIELD_ALIASES) {
+        const filled = group.find(n => values.has(n) && String(values.get(n) || '').trim());
+        if (!filled) continue;
+        for (const n of group) {
+            if (!values.has(n)) values.set(n, values.get(filled));
+        }
+    }
+    // Values are substituted, never re-scanned, so a visitor cannot smuggle a
+    // placeholder of their own through a field value. The leading space is part of
+    // the match so an empty value does not leave "Hola !" behind.
+    const text = String(content);
+    return text.replace(/( ?)\{\{\s*([\w.\- ]+?)\s*(?:\|([^}]*))?\}\}/g, (match, space, rawName, rawDefault, offset) => {
+        const name = normalizeVarName(rawName);
+        const fallback = rawDefault !== undefined ? rawDefault : (o.fallback || '');
+        let value;
+        if (name === 'formid' || name === 'websiteid') value = clean(o.formId) || 'Unknown';
+        else if (name === 'fields') value = o.fieldsHtml == null ? fallback : o.fieldsHtml;
+        else if (name === 'baseurl') value = o.baseUrl || '';
+        else if (values.has(name)) value = clean(values.get(name)) || fallback;
+        else value = fallback;
+        // "Hola {{nombre}}!" with no name reads "Hola!", not "Hola !"
+        if (value === '' && space && /[!?,.;:)]/.test(text.charAt(offset + match.length))) return '';
+        return space + value;
+    });
+}
+
 app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async (req, res) => {
     const { form_id, website_id, 'cf-turnstile-response': turnstileToken, 'h-captcha-response': hcaptchaToken, 'g-recaptcha-response': gRecaptchaToken, _hp_field: honeypot, ...formFields } = req.body;
     const formId = form_id || website_id; // backward compat
@@ -1378,25 +1461,20 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
             templateContent = null;
         }
 
-        if (templateContent && templateContent.includes('{{fields}}')) {
-            // Dynamic template: replace {{fields}} with generated field rows
+        if (templateContent) {
+            // One pass handles both styles: {{fields}} for the whole list and
+            // {{field}} for a single value, in the same template if it wants both.
             let fieldsHtml = '';
             for (const [key, value] of fieldEntries) {
                 if (value) {
                     fieldsHtml += `<li><strong>${escapeHtml(fieldToLabel(key))}:</strong> ${escapeHtml(String(value))}</li>\n`;
                 }
             }
-            mailBody = templateContent
-                .replace(/{{form_id}}|{{website_id}}/g, escapeHtml(formId) || 'Unknown')
-                .replace(/{{fields}}/g, fieldsHtml);
-        } else if (templateContent) {
-            // Legacy template: replace individual {{field}} placeholders
-            mailBody = templateContent.replace(/{{form_id}}|{{website_id}}/g, escapeHtml(formId) || 'Unknown');
-            for (const [key, value] of fieldEntries) {
-                // Use string split+join to avoid regex injection from user-supplied keys
-                const placeholder = `{{${key}}}`;
-                mailBody = mailBody.split(placeholder).join(escapeHtml(String(value || '')) || 'Not specified');
-            }
+            mailBody = renderTemplateVars(templateContent, {
+                formId, fieldEntries, fieldsHtml,
+                fallback: 'Not specified',
+                baseUrl: publicBaseUrl(req)
+            });
         } else {
             // No template: generate a simple email
             let fieldsHtml = '';
@@ -1763,13 +1841,21 @@ app.post('/submit', submitLimiter, upload.array('attachments', MAX_FILES), async
                         for (const [key, value] of fieldEntries) {
                             if (value) arFields += `<li><strong>${escapeHtml(fieldToLabel(key))}:</strong> ${escapeHtml(String(value))}</li>\n`;
                         }
-                        autoReplyBody = arTemplate
-                            .replace(/{{form_id}}|{{website_id}}/g, escapeHtml(formId))
-                            .replace(/{{fields}}/g, arFields);
+                        autoReplyBody = renderTemplateVars(arTemplate, {
+                            formId, fieldEntries, fieldsHtml: arFields,
+                            baseUrl: publicBaseUrl(req)
+                        });
                     } catch (e) {
                         autoReplyBody = '<h2>Thank you for your submission</h2><p>We have received your message and will get back to you soon.</p>';
                     }
-                    const arSubject = recipientConfig.autoReplySubject || 'Thank you for your submission';
+                    // The subject takes the same variables. Empty fields collapse to
+                    // nothing here (no "Not specified" in front of the visitor), so a
+                    // subject left blank by its variables falls back to the default.
+                    const arSubjectRaw = recipientConfig.autoReplySubject || 'Thank you for your submission';
+                    const arSubject = renderTemplateVars(arSubjectRaw, {
+                        formId, fieldEntries, fieldsHtml: '', escape: false,
+                        baseUrl: publicBaseUrl(req)
+                    }).trim() || 'Thank you for your submission';
                     const arOutcome = await sendWithFailover(senderChain, (cfg) => ({
                         from: `"${escapeHtml(String(senderAlias || cfg.name || 'No Reply'))}" <${cfg.from}>`,
                         to: senderEmail,
@@ -2981,6 +3067,229 @@ adminRouter.delete('/templates/:name', requireRole('superadmin', 'admin'), async
     }
 });
 
+// ===== Image assets for email templates =====
+// Emails cannot carry local files: every <img> needs a public URL. Uploads land in
+// data/assets/{scope}/ (a mounted volume, so they survive redeploys) and are served
+// unauthenticated at /assets/{scope}/{file} — that is the whole point, the recipient's
+// mail client fetches them with no session. Same scoping as templates: superadmin
+// writes the shared set, everyone else writes their own account folder.
+const ASSETS_DIR = path.join(__dirname, 'data', 'assets');
+const ASSETS_SEED_DIR = path.join(__dirname, 'assets');
+const SHARED_ASSET_SCOPE = 'shared';
+const ASSET_MAX_SIZE = 5 * 1024 * 1024;
+const ASSET_SCOPE_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+const ASSET_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
+const ASSET_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+
+const fsConstants = require('fs').constants;
+
+// Ship the built-in brand images into the volume on first boot so a fresh deploy
+// has them. Existing files are never overwritten: the volume is the source of truth.
+async function seedSharedAssets() {
+    const dest = path.join(ASSETS_DIR, SHARED_ASSET_SCOPE);
+    try { await fs.mkdir(dest, { recursive: true }); } catch (e) {}
+    let seeds = [];
+    try { seeds = await fs.readdir(ASSETS_SEED_DIR); } catch (e) { return; }
+    for (const name of seeds) {
+        if (!ASSET_MIME[path.extname(name).toLowerCase()]) continue;
+        try {
+            await fs.copyFile(path.join(ASSETS_SEED_DIR, name), path.join(dest, name), fsConstants.COPYFILE_EXCL);
+            log.info('Seeded shared email asset', { name });
+        } catch (e) { /* already there */ }
+    }
+}
+seedSharedAssets();
+
+// Read type and pixel size straight from the bytes. The extension is not trusted
+// (it decides where the file is served from) and the dimensions let the editor
+// insert a width= on the <img>, which Outlook needs to size the image at all.
+function sniffImage(buf) {
+    if (!Buffer.isBuffer(buf) || buf.length < 24) return null;
+    const ascii = (a, b) => buf.slice(a, b).toString('ascii');
+    if (buf.readUInt32BE(0) === 0x89504e47 && buf.readUInt32BE(4) === 0x0d0a1a0a) {
+        return { ext: '.png', mime: 'image/png', width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+    }
+    if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') {
+        return { ext: '.gif', mime: 'image/gif', width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
+    }
+    if (buf[0] === 0xff && buf[1] === 0xd8) {
+        // Walk the segment chain to the frame header (SOF0..SOF15, minus the
+        // non-frame markers that share the range)
+        let i = 2;
+        while (i + 9 < buf.length) {
+            if (buf[i] !== 0xff) { i++; continue; }
+            const marker = buf[i + 1];
+            if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+            if (marker === 0xd9 || marker === 0xda) break;
+            const len = buf.readUInt16BE(i + 2);
+            if (len < 2) break;
+            if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+                return { ext: '.jpg', mime: 'image/jpeg', height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+            }
+            i += 2 + len;
+        }
+        return { ext: '.jpg', mime: 'image/jpeg', width: 0, height: 0 };
+    }
+    if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') {
+        const chunk = ascii(12, 16);
+        if (chunk === 'VP8X' && buf.length >= 30) {
+            return { ext: '.webp', mime: 'image/webp', width: buf.readUIntLE(24, 3) + 1, height: buf.readUIntLE(27, 3) + 1 };
+        }
+        if (chunk === 'VP8 ' && buf.length >= 30) {
+            return { ext: '.webp', mime: 'image/webp', width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff };
+        }
+        if (chunk === 'VP8L' && buf.length >= 25) {
+            const bits = buf.readUInt32LE(21);
+            return { ext: '.webp', mime: 'image/webp', width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+        }
+        return { ext: '.webp', mime: 'image/webp', width: 0, height: 0 };
+    }
+    return null; // SVG included: it would be script running on this origin
+}
+
+function assetFileName(original, ext) {
+    const raw = String(original || 'imagen');
+    const base = path.basename(raw, path.extname(raw))
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'imagen';
+    return `${base}-${nodeCrypto.randomBytes(3).toString('hex')}${ext}`;
+}
+
+// Folder this caller writes to: superadmin owns the shared set, everyone else
+// their own account. Null means "no account", so nowhere to write.
+function writableAssetScope(req) {
+    const scope = getAccountScope(req);
+    if (scope === null) return SHARED_ASSET_SCOPE;
+    if (scope === NO_SCOPE || !ASSET_SCOPE_RE.test(scope)) return null;
+    return scope;
+}
+
+function assetFilePath(scope, name) {
+    if (!ASSET_SCOPE_RE.test(scope) || !ASSET_NAME_RE.test(name) || name.includes('..')) return null;
+    if (!ASSET_MIME[path.extname(name).toLowerCase()]) return null;
+    const file = path.join(ASSETS_DIR, scope, name);
+    return file.startsWith(ASSETS_DIR + path.sep) ? file : null;
+}
+
+async function listAssetsForScope(scope) {
+    const out = [];
+    const folders = scope && scope !== SHARED_ASSET_SCOPE ? [scope, SHARED_ASSET_SCOPE] : [SHARED_ASSET_SCOPE];
+    for (const folder of folders) {
+        let names = [];
+        try { names = await fs.readdir(path.join(ASSETS_DIR, folder)); } catch (e) { continue; }
+        for (const name of names) {
+            if (!ASSET_MIME[path.extname(name).toLowerCase()] || !ASSET_NAME_RE.test(name)) continue;
+            const file = path.join(ASSETS_DIR, folder, name);
+            let size = 0, mtime = null, info = null;
+            try {
+                const st = await fs.stat(file);
+                size = st.size; mtime = st.mtime.toISOString();
+                // Head of the file only: enough for the dimensions, and the gallery
+                // would otherwise pull every full image into memory on each listing
+                const fh = await fs.open(file, 'r');
+                try {
+                    const head = Buffer.alloc(Math.min(st.size, 65536));
+                    await fh.read(head, 0, head.length, 0);
+                    info = sniffImage(head);
+                } finally { await fh.close(); }
+            } catch (e) { continue; }
+            out.push({
+                name, scope: folder, size, mtime,
+                width: info ? info.width : 0,
+                height: info ? info.height : 0,
+                shared: folder === SHARED_ASSET_SCOPE,
+                url: `/assets/${folder}/${name}`
+            });
+        }
+    }
+    return out.sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)));
+}
+
+const assetUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: ASSET_MAX_SIZE, files: 1 }
+});
+
+// Multer throws outside the route's try/catch; without this the panel gets a
+// 500 HTML page instead of "that image is too big".
+function assetUploadSingle(req, res, next) {
+    assetUpload.single('file')(req, res, (err) => {
+        if (err) {
+            const tooBig = err.code === 'LIMIT_FILE_SIZE';
+            log.warn('Asset upload rejected', { error: err.message });
+            return res.status(400).json({ error: tooBig ? 'Image too large (max 5 MB)' : 'Upload error' });
+        }
+        next();
+    });
+}
+
+// List images visible to the caller (own account + shared)
+adminRouter.get('/assets', async (req, res) => {
+    const scope = getAccountScope(req);
+    const own = scope === null ? SHARED_ASSET_SCOPE : (ASSET_SCOPE_RE.test(scope) ? scope : null);
+    res.json({ scope: own, baseUrl: publicBaseUrl(req), assets: await listAssetsForScope(own) });
+});
+
+// Upload an image for use in templates
+adminRouter.post('/assets', assetUploadSingle, async (req, res) => {
+    const scope = writableAssetScope(req);
+    if (!scope) return res.status(403).json({ error: t.forbidden });
+    if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+        return res.status(400).json({ error: 'No image uploaded' });
+    }
+    const info = sniffImage(req.file.buffer);
+    if (!info) return res.status(400).json({ error: 'Unsupported image type. Use PNG, JPG, GIF or WEBP.' });
+    const name = assetFileName(req.file.originalname, info.ext);
+    try {
+        await fs.mkdir(path.join(ASSETS_DIR, scope), { recursive: true });
+        await fs.writeFile(path.join(ASSETS_DIR, scope, name), req.file.buffer);
+    } catch (e) {
+        log.error('Asset upload failed', { scope, name, error: e.message });
+        return res.status(500).json({ error: 'Failed to store image' });
+    }
+    log.info('Asset uploaded', { scope, name, bytes: req.file.buffer.length, by: req.user && req.user.username });
+    res.json({
+        name, scope,
+        url: `/assets/${scope}/${name}`,
+        absoluteUrl: `${publicBaseUrl(req)}/assets/${scope}/${name}`,
+        width: info.width, height: info.height,
+        mime: info.mime, size: req.file.buffer.length
+    });
+});
+
+// Delete an image. Same rule as deleting a template: admin or superadmin, and only
+// within their own scope — shared images belong to the superadmin.
+adminRouter.delete('/assets/:scope/:name', requireRole('superadmin', 'admin'), async (req, res) => {
+    const scope = req.params.scope;
+    const writable = writableAssetScope(req);
+    if (!writable || scope !== writable) return res.status(403).json({ error: t.forbidden });
+    const file = assetFilePath(scope, req.params.name);
+    if (!file) return res.status(400).json({ error: 'Invalid image name' });
+    try {
+        await fs.unlink(file);
+        res.json({ message: 'Image deleted' });
+    } catch (e) {
+        res.status(404).json({ error: 'Image not found' });
+    }
+});
+
+// Public: this is what the recipient's mail client requests. No auth by design.
+app.get('/assets/:scope/:name', (req, res) => {
+    const file = assetFilePath(req.params.scope, req.params.name);
+    if (!file) return res.status(404).end();
+    res.sendFile(file, {
+        headers: {
+            'Content-Type': ASSET_MIME[path.extname(file).toLowerCase()],
+            'Content-Disposition': 'inline',
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': 'public, max-age=31536000, immutable'
+        }
+    }, (err) => { if (err && !res.headersSent) res.status(404).end(); });
+});
+
 // Change own password (any role)
 adminRouter.put('/admin/reset-password', async (req, res) => {
     const { currentPassword, newPassword } = req.body;
@@ -3955,7 +4264,7 @@ function buildApiSpec(req) {
             { method: 'POST', path: '/api/v1/senders/:id/test', auth: true, description: 'Verify connection and send a test email. Body: { to } (optional, defaults to the sender "from").' },
             { method: 'GET', path: '/api/v1/templates', auth: true, description: 'List email templates.' },
             { method: 'GET', path: '/api/v1/templates/:name', auth: true, description: 'Get template HTML content.' },
-            { method: 'PUT', path: '/api/v1/templates/:name', auth: true, description: 'Create or update a template. Body: { content }. Use {{fields}} placeholder for the auto-generated submission fields list and {{form_id}} for the form id. Name must end in .html.' }
+            { method: 'PUT', path: '/api/v1/templates/:name', auth: true, description: 'Create or update a template. Body: { content }. Placeholders: {{fields}} (auto-generated list of submitted fields), {{field_name}} (one field, with {{field_name|fallback}} for when it is empty), {{form_id}} and {{base_url}} (this server, for /assets/... images). Name must end in .html.' }
         ],
         formConfig: {
             id: 'string, required on create. Letters, numbers, hyphens, underscores. This is the form_id used in form submissions.',
@@ -3966,7 +4275,7 @@ function buildApiSpec(req) {
             templatePath: 'string. Email template path, e.g. "templates/contact-form.html" (default).',
             autoReplyEnabled: 'boolean. Send a confirmation email to the submitter (uses the "email" field). Default false.',
             autoReplyTemplate: 'string. Template path for the auto-reply. Default "templates/auto-reply.html".',
-            autoReplySubject: 'string. Subject of the auto-reply.',
+            autoReplySubject: 'string. Subject of the auto-reply. Takes the same placeholders as the template, e.g. "Hola {{name}}! Gracias por escribirnos".',
             autoReplyReplyTo: 'string. Reply-To for the auto-reply.',
             discordWebhook: 'string. Discord webhook URL for notifications.',
             telegramBotToken: 'string. Telegram bot token for notifications.',
@@ -4377,7 +4686,10 @@ apiRouter.get('/templates', async (req, res) => {
         templates,
         placeholders: {
             '{{fields}}': 'Replaced with an auto-generated <li> list of all submitted fields.',
-            '{{form_id}}': 'Replaced with the form id.'
+            '{{form_id}}': 'Replaced with the form id.',
+            '{{field_name}}': 'Replaced with that field value. Matching ignores case and separators, and common es/en names are aliased (name/nombre, email/correo, phone/telefono, company/empresa, message/mensaje).',
+            '{{field_name|fallback}}': 'Same, with the text to use when the field is empty or missing. An empty result does not leave a dangling space before punctuation.',
+            '{{base_url}}': 'Replaced with the public URL of this server, for images uploaded to /assets/{scope}/{file}.'
         }
     });
 });

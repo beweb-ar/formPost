@@ -52,7 +52,8 @@
 - **Multiple recipients** - Send to multiple email addresses per form (comma-separated, chip UI)
 - **HTML email notifications** - Custom email templates per form with dynamic field injection
 - **File attachments** - Accept file uploads (max 5 files, 10 MB each) and forward them via email, Discord, and Telegram
-- **Template management** - Create, edit, and delete email templates from the admin UI
+- **Template management** - Create, edit, and delete email templates from the admin UI, with image upload: files are hosted by formPost and served at a public URL the recipient's mail client can fetch
+- **Per-field variables** - `{{field}}` and `{{field|fallback}}` in the template body and in the auto-reply subject
 - **Auto-responder** - Automatic confirmation email to the person who submitted the form, with selectable template
 - **Forms without sender** - Forms can work with notifications only (Discord, Telegram, Webhook) without an SMTP sender
 
@@ -270,6 +271,7 @@ in-memory: a restart clears it. `GET /admin/api/senders` reports it per sender a
 | `SUPPORTHUB_TOOLS_SECRET` | - | HS256 secret that signs the user tokens accepted by the read-only `/agent-api` endpoints (SupportHub agent tools). Unset = `/agent-api` and the token endpoint are disabled |
 | `SUPPORTHUB_URL` | - | Base URL of the SupportHub platform. Set it and the admin panel loads the help widget for signed-in users; unset, nothing is loaded |
 | `USER_EMAILS` | - | Seeds the email of existing users so they can use Google / one-time-code sign-in: `user1=mail1@dom,user2=mail2@dom`. Written into each user record, only when that user has no email yet |
+| `PUBLIC_URL` | (from the request) | Public base URL of this instance, what `{{base_url}}` resolves to in templates. Set it when the proxy does not forward the real host |
 | `ENCRYPTION_KEY` | auto | 64 hex chars (32 bytes) used to encrypt stored secrets (SMTP passwords, SendGrid keys, Telegram tokens, captcha secrets). If unset, a key is auto-generated at `data/.secret.key` — **back that file up**: without it, encrypted secrets cannot be recovered |
 
 ## Accounts, Users & Roles (v1.4)
@@ -351,17 +353,53 @@ The Settings modal is split into tabs: **Senders**, **Accounts** and **Users** (
 Templates are HTML files with placeholders:
 
 ```html
-<!-- Dynamic mode (recommended) -->
 <h2>New submission from {{form_id}}</h2>
 <ul>{{fields}}</ul>
 
-<!-- Legacy mode -->
-<p><strong>Name:</strong> {{name}}</p>
+<!-- One field at a time, with a fallback for when it is empty -->
+<p>Hi {{name}}! We got your message about {{company|your catalogs}}.</p>
 ```
 
-> Both `{{form_id}}` and `{{website_id}}` are supported for backward compatibility.
+| Placeholder | Replaced with |
+|---|---|
+| `{{fields}}` | `<li>` list of every submitted field |
+| `{{form_id}}` | The form id (`{{website_id}}` also works) |
+| `{{field_name}}` | That field's value |
+| `{{field_name\|fallback}}` | Same, with the text to use when the field is empty or missing |
+| `{{base_url}}` | Public URL of this server, used by uploaded images |
 
-An auto-reply template (`templates/auto-reply.html`) is included for the auto-responder feature.
+Both styles work in the same template. Names are matched ignoring case and separators
+(`{{correo_electronico}}` = `{{correoElectronico}}`), and the usual es/en pairs are aliased:
+name/nombre, email/correo, phone/telefono, company/empresa, message/mensaje, subject/asunto.
+An empty value leaves no dangling space before punctuation, so `Hi {{name}}!` reads `Hi!`
+when the visitor sent no name.
+
+Submitted values are HTML-escaped; a `{{...}}` inside a field value is never expanded.
+
+### Auto-reply
+
+`templates/auto-reply.html` is included, plus `templates/autoresponder-catalogoplus-es.html`
+as a full branded example. The **auto-reply subject takes the same placeholders**, so
+`Hola {{name}}! Te contactamos desde Catálogo Plus` is a valid subject.
+
+### Images in templates
+
+Emails cannot carry local files, so every image needs a public URL. In the template editor,
+**Upload image** stores the file on this server and inserts the `<img>` tag for you:
+
+```html
+<img src="{{base_url}}/assets/shared/catalogo-plus.png" width="168" alt="Catálogo Plus"
+     style="display:block;width:168px;max-width:100%;height:auto;border:0;">
+```
+
+- Uploads live in `data/assets/{scope}/` (mounted volume, so they survive redeploys) and are
+  served unauthenticated at `/assets/{scope}/{file}` — the recipient's mail client has no session.
+- Superadmins write the `shared` set (visible to every account); other users write their own
+  account folder.
+- PNG, JPG, GIF and WEBP, 5 MB max. The file type is read from the bytes, not the extension;
+  SVG is rejected because it would run as script on this origin. WEBP does not render in Outlook.
+- Files in `assets/` in the repo are seeded into `data/assets/shared/` on first boot.
+- `PUBLIC_URL` sets what `{{base_url}}` resolves to; without it, it is taken from the request.
 
 ## HTML Form Example
 
@@ -399,6 +437,7 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 |---|---|---|
 | `POST` | `/submit` | Process a form submission |
 | `GET` | `/health` | Health check |
+| `GET` | `/assets/:scope/:file` | Template images, as fetched by the recipient's mail client |
 
 ### Admin (Basic Auth)
 
@@ -415,6 +454,8 @@ An auto-reply template (`templates/auto-reply.html`) is included for the auto-re
 | `GET` | `/admin/api/outbox/:id` | Paginated outbox for one form (reachable from the card's **Outbox** button) |
 | `POST` | `/admin/api/telegram/chats` | Fetch available Telegram chats for a bot token |
 | `GET/PUT/DELETE` | `/admin/api/templates[/:name]` | CRUD templates |
+| `GET/POST` | `/admin/api/assets` | List / upload template images (`multipart/form-data`, field `file`) |
+| `DELETE` | `/admin/api/assets/:scope/:name` | Delete a template image |
 | `GET` | `/admin/api/statistics[/:id]` | Stats (includes mails/notifications counts) |
 | `GET` | `/admin/api/statistics/chart` | Chart data with submissions, mails, notifications per day |
 | `PUT` | `/admin/api/statistics/:id/reset` | Reset stats |
@@ -579,10 +620,13 @@ formPost/
 ├── Dockerfile / docker-compose.yml
 ├── admin/
 │   └── index.html                  # Admin dashboard (single-file SPA)
+├── assets/                         # Built-in email images, seeded into data/assets/shared
 ├── templates/
 │   ├── contact-form.html           # Default email template
-│   └── auto-reply.html             # Auto-responder template
+│   ├── auto-reply.html             # Auto-responder template
+│   └── autoresponder-catalogoplus-es.html  # Full branded auto-reply example
 └── data/
+    ├── assets/{scope}/             # Uploaded template images, served at /assets/{scope}/{file}
     ├── submissions-{formId}.json   # Stored submissions
     └── outbox-{formId}.json        # Outgoing mail/notification log
 ```

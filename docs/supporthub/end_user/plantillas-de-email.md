@@ -47,8 +47,14 @@ Se abre desde el botón **Plantillas** (sobre) del encabezado.
 | `{{fields}}` | La lista completa de campos enviados, como ítems `<li>` (nombre del campo en negrita + valor) |
 | `{{form_id}}` | El ID del formulario |
 | `{{nombre_del_campo}}` | El valor de ese campo puntual, por ejemplo `{{email}}` o `{{mensaje}}` |
+| `{{nombre_del_campo|texto por defecto}}` | Lo mismo, pero con el texto a usar si ese campo vino vacío o no vino |
+| `{{base_url}}` | La dirección de tu formPost, la que usan las imágenes que subís |
 
-Cómo elige formPost: si la plantilla contiene `{{fields}}`, arma la lista automática con todos los campos; si no lo contiene, reemplaza una por una las variables de campo que hayas escrito (y donde no haya dato pone `Not specified`) [evidencia: server.js:915-933].
+Las dos formas conviven en la misma plantilla: `{{fields}}` arma la lista automática y, al mismo tiempo, `{{nombre}}` te deja saludar por el nombre [evidencia: server.js:1297-1335].
+
+Los nombres se comparan sin distinguir mayúsculas ni guiones (`{{correo_electronico}}` es igual a `{{correoElectronico}}`), y los pares habituales español/inglés son equivalentes: nombre/name, correo/email, telefono/phone, empresa/company, mensaje/message, asunto/subject.
+
+Un valor vacío no deja espacios colgando: `Hola {{nombre}}!` se lee `Hola!` cuando la persona no mandó nombre.
 
 Lo más simple y a prueba de cambios es usar `{{fields}}`: así, el día que agregues un campo nuevo en tu sitio, aparece solo en el email.
 
@@ -58,6 +64,38 @@ Ejemplo mínimo:
 <h2>Nuevo mensaje de {{form_id}}</h2>
 <ul>{{fields}}</ul>
 ```
+
+Ejemplo con nombre propio:
+
+```html
+<p>Hola {{nombre|}}, recibimos tu consulta sobre {{empresa|tu proyecto}}.</p>
+```
+
+## Cómo pongo una imagen (logo, banner) en la plantilla
+
+Un email no puede llevar imágenes desde tu computadora: cada imagen necesita una dirección pública. formPost las hostea por vos.
+
+1. Abrí la plantilla en **Plantillas > Editar**.
+2. Tocá **Subir imagen** y elegí el archivo. Se sube, se guarda en tu formPost y la etiqueta `<img>` queda insertada donde tenías el cursor, con el ancho real de la imagen.
+3. Ajustá el `width` si la querés más chica y **Guardar Plantilla**.
+
+El botón **Imágenes** abre las que ya subiste: tocá una para insertarla de nuevo, o la ✕ para borrarla [evidencia: server.js:3237, server.js:3279].
+
+Queda escrito así, y `{{base_url}}` se reemplaza solo al enviar:
+
+```html
+<img src="{{base_url}}/assets/shared/mi-logo.png" width="168" alt="Mi marca"
+     style="display:block;width:168px;max-width:100%;height:auto;border:0;">
+```
+
+Cosas a tener en cuenta:
+
+- PNG, JPG, GIF o WEBP, hasta 5 MB. El SVG no se acepta.
+- **WEBP no se ve en Outlook**: para email conviene PNG o JPG.
+- Poné siempre el `width`: sin él, Outlook muestra la imagen a tamaño completo.
+- Escribí un `alt` con sentido: muchos clientes de correo no descargan imágenes hasta que la persona lo autoriza, y ese texto es lo único que se ve mientras tanto.
+- Las imágenes marcadas **Compartida** las subió el administrador de la plataforma y las ven todas las cuentas; las tuyas solo las ve tu cuenta.
+- Si borrás una imagen que una plantilla está usando, ese email va a mostrarla rota.
 
 ## Qué significa la etiqueta "Compartida" en la lista
 
@@ -71,11 +109,11 @@ Eliminar una plantilla compartida solo lo puede hacer el superadmin; para el res
 
 Botón **Eliminar** en su fila y confirmá `¿Eliminar plantilla "X"?`.
 
-Antes de borrarla, revisá que ningún formulario la esté usando: si el archivo no existe al momento de enviar, formPost manda igual el email, pero con un formato genérico automático (título + lista de campos) en vez de tu diseño [evidencia: server.js:934-943].
+Antes de borrarla, revisá que ningún formulario la esté usando: si el archivo no existe al momento de enviar, formPost manda igual el email, pero con un formato genérico automático (título + lista de campos) en vez de tu diseño [evidencia: server.js:1478-1487].
 
 ## Qué pasa si me equivoco en el HTML
 
-La vista previa te muestra el resultado antes de guardar. Los valores que envían los visitantes se escapan automáticamente, así que un mensaje con `<` o `>` no rompe el email ni ejecuta nada [evidencia: server.js:920, server.js:630-639].
+La vista previa te muestra el resultado antes de guardar. Los valores que envían los visitantes se escapan automáticamente, así que un mensaje con `<` o `>` no rompe el email ni ejecuta nada [evidencia: server.js:1097-1105, server.js:1297-1335].
 
 ## Errores frecuentes
 
@@ -84,13 +122,15 @@ La vista previa te muestra el resultado antes de guardar. Los valores que envía
 - **"Content is required"** → se intentó guardar sin contenido.
 - **"Template not found"** → la plantilla fue eliminada; recargá la lista.
 - **"Failed to save template"** → el servidor no pudo escribir el archivo; avisá a soporte.
+- **"Unsupported image type. Use PNG, JPG, GIF or WEBP."** → el archivo que quisiste subir no es una imagen de las aceptadas (el SVG no se acepta).
+- **"Image too large (max 5 MB)"** → achicá la imagen antes de subirla; para un email 5 MB ya es muchísimo.
 - **"Guardada como copia para tu cuenta"** → no es un error: editaste una plantilla compartida y se guardó como copia tuya.
 
 ## Notas de trazabilidad (para revisión, no para el usuario)
 
 - Gestor y editor de plantillas con vista previa: [evidencia: admin/index.html:2994-3105]
-- Reemplazo de variables en el envío real: [evidencia: server.js:915-943]
+- Reemplazo de variables en el envío real: [evidencia: server.js:1263-1335, server.js:1470-1487]
 - Datos de ejemplo de la vista previa: [evidencia: admin/index.html:3085-3105]
 - Compartidas vs. copia por cuenta: [evidencia: server.js:2192-2224, server.js:2115-2148]
 - Permisos de borrado: [evidencia: server.js:2228-2248, admin/index.html:3017]
-- Escapado de valores del visitante: [evidencia: server.js:630-639, server.js:920]
+- Escapado de valores del visitante: [evidencia: server.js:1097-1105, server.js:1300-1304]

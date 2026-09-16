@@ -1578,6 +1578,12 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.5rem;">
                     <div class="form-group" style="margin-bottom:0;">
                         <label data-i18n="templateContent">HTML Content</label>
+                        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.4rem;flex-wrap:wrap;">
+                            <button type="button" class="btn-sm btn-outline" id="assetUploadBtn" onclick="document.getElementById('assetFileInput').click()" data-i18n="insertImage">&#128247; Upload image</button>
+                            <button type="button" class="btn-sm btn-outline" onclick="toggleAssetGallery()" data-i18n="myImages">Images</button>
+                            <input type="file" id="assetFileInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none;" onchange="uploadTemplateAsset(this)" />
+                        </div>
+                        <div id="assetGallery" style="display:none;max-height:180px;overflow:auto;border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:0.5rem;margin-bottom:0.4rem;background:var(--bg-primary);"></div>
                         <textarea id="templateEditorContent" oninput="updateTemplatePreview()" style="width:100%;min-height:400px;font-family:monospace;font-size:0.85rem;padding:0.75rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);resize:vertical;" placeholder="<h2>New submission from {{form_id}}</h2>&#10;<ul>{{fields}}</ul>"></textarea>
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
@@ -1585,7 +1591,7 @@
                         <iframe id="templatePreviewFrame" style="width:100%;min-height:400px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:#fff;" sandbox="allow-same-origin"></iframe>
                     </div>
                 </div>
-                <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;" data-i18n="templateHint">Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{form_id}} for the form ID.</p>
+                <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;" data-i18n="templateHint">Use {{fields}} for the full list, {{fieldname}} for one field and {{fieldname|fallback text}} when it may be empty. {{form_id}} is the form ID and {{base_url}} the address of this server (used by uploaded images).</p>
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" onclick="closeTemplateEditor()" data-i18n="cancel">Cancel</button>
                     <button type="submit" id="templateEditorSaveBtn" data-i18n="saveTemplate">Save Template</button>
@@ -1741,10 +1747,17 @@
                 templatesBtn: '&#9993; Templates', manageTemplates: 'Email Templates',
                 templateEditor: 'Template Editor', templateName: 'Template Name',
                 templatePathLabel: 'Path', templateContent: 'HTML Content',
-                templateHint: 'Use {{fields}} for dynamic fields or {{fieldname}} for specific fields. {{form_id}} for the form ID.',
+                templateHint: 'Use {{fields}} for the full list, {{fieldname}} for one field and {{fieldname|fallback text}} when it may be empty. {{form_id}} is the form ID and {{base_url}} the address of this server (used by uploaded images).',
                 saveTemplate: 'Save Template', newTemplate: 'New Template', templateCopyFrom: 'Copy from',
                 noTemplates: 'No templates found.', templateSaved: 'Template saved successfully',
                 templateDeleted: 'Template deleted', confirmDeleteTemplate: 'Delete template "{name}"? This cannot be undone.',
+                // Template images
+                insertImage: '&#128247; Upload image', myImages: 'Images', uploadingImage: 'Uploading...',
+                imageUploaded: 'Image uploaded and inserted', imageFailed: 'Could not upload the image',
+                noImages: 'No images uploaded yet. Upload one and it gets inserted where the cursor is.',
+                imageWebpWarn: 'Uploaded, but WEBP does not show in Outlook. PNG or JPG is safer for email.',
+                imageDeleted: 'Image deleted', confirmDeleteImage: 'Delete image "{name}"? Any template using it will show a broken image.',
+                imageShared: 'Shared', imagesHint: 'Click an image to insert it at the cursor.',
                 // Senders
                 senders: 'Senders (Email Relays)', newSender: '+ New Sender',
                 senderName: 'Name / Alias', sender: 'Sender', senderAlias: 'Sender Alias (From name)', senderActive: 'Active',
@@ -1931,10 +1944,17 @@
                 templatesBtn: '&#9993; Plantillas', manageTemplates: 'Plantillas de Email',
                 templateEditor: 'Editor de Plantilla', templateName: 'Nombre de Plantilla',
                 templatePathLabel: 'Ruta', templateContent: 'Contenido HTML',
-                templateHint: 'Usa {{fields}} para campos din\u00e1micos o {{fieldname}} para campos espec\u00edficos. {{form_id}} para el ID del formulario.',
+                templateHint: 'Us\u00e1 {{fields}} para la lista completa, {{nombre_del_campo}} para un campo puntual y {{nombre_del_campo|texto por defecto}} para cuando venga vac\u00edo. {{form_id}} es el ID del formulario y {{base_url}} la direcci\u00f3n de este servidor (la usan las im\u00e1genes que sub\u00eds).',
                 saveTemplate: 'Guardar Plantilla', newTemplate: 'Nueva Plantilla', templateCopyFrom: 'Copiar desde',
                 noTemplates: 'No se encontraron plantillas.', templateSaved: 'Plantilla guardada correctamente',
                 templateDeleted: 'Plantilla eliminada', confirmDeleteTemplate: '¿Eliminar plantilla "{name}"? Esta acción no se puede deshacer.',
+                // Imagenes de plantilla
+                insertImage: '&#128247; Subir imagen', myImages: 'Imágenes', uploadingImage: 'Subiendo...',
+                imageUploaded: 'Imagen subida e insertada', imageFailed: 'No se pudo subir la imagen',
+                noImages: 'Todavía no subiste imágenes. Subí una y se inserta donde tengas el cursor.',
+                imageWebpWarn: 'Subida, pero WEBP no se ve en Outlook. Para email conviene PNG o JPG.',
+                imageDeleted: 'Imagen eliminada', confirmDeleteImage: '¿Eliminar la imagen "{name}"? Las plantillas que la usen van a mostrarla rota.',
+                imageShared: 'Compartida', imagesHint: 'Tocá una imagen para insertarla donde está el cursor.',
                 // Senders
                 senders: 'Senders (Relays de Email)', newSender: '+ Nuevo Sender',
                 senderName: 'Nombre / Alias', sender: 'Sender', senderAlias: 'Alias del Sender (nombre del remitente)', senderActive: 'Activo',
@@ -3772,28 +3792,147 @@
 
         function closeTemplateEditor() {
             document.getElementById('templateEditorModal').style.display = 'none';
+            document.getElementById('assetGallery').style.display = 'none';
         }
+
+        // Sample values for the preview, keyed the way the server normalizes a
+        // placeholder name (lowercase, no separators)
+        var previewSamples = {
+            name: 'John Doe', nombre: 'John Doe', fullname: 'John Doe', apellido: 'Pérez',
+            email: 'john@example.com', correo: 'john@example.com', correoelectronico: 'john@example.com',
+            empresa: 'Acme SA', company: 'Acme SA', rubro: 'Indumentaria',
+            message: 'Hello, this is a test message.', mensaje: 'Hola, este es un mensaje de prueba.',
+            phone: '+1 555-0100', telefono: '+1 555-0100', whatsapp: '+1 555-0100'
+        };
 
         function updateTemplatePreview() {
             var content = document.getElementById('templateEditorContent').value;
-            // Replace template variables with sample data for preview
-            var preview = content
-                .replace(/\{\{form_id\}\}|\{\{website_id\}\}/g, 'my-form')
-                .replace(/\{\{fields\}\}/g, '<li><strong>Name:</strong> John Doe</li>\n<li><strong>Email:</strong> john@example.com</li>\n<li><strong>Message:</strong> Hello, this is a test message.</li>')
-                .replace(/\{\{name\}\}/g, 'John Doe')
-                .replace(/\{\{nombre\}\}/g, 'John Doe')
-                .replace(/\{\{email\}\}/g, 'john@example.com')
-                .replace(/\{\{correo\}\}/g, 'john@example.com')
-                .replace(/\{\{message\}\}/g, 'Hello, this is a test message.')
-                .replace(/\{\{mensaje\}\}/g, 'Hola, este es un mensaje de prueba.')
-                .replace(/\{\{phone\}\}/g, '+1 555-0100')
-                .replace(/\{\{telefono\}\}/g, '+1 555-0100')
-                .replace(/\{\{\w+\}\}/g, 'Sample value');
+            // Same substitution rules as the server, with sample data
+            var preview = content.replace(/( ?)\{\{\s*([\w.\- ]+?)\s*(?:\|([^}]*))?\}\}/g, function(match, space, rawName, rawDefault, offset) {
+                var name = String(rawName).toLowerCase().replace(/[^a-z0-9]/g, '');
+                var value;
+                if (name === 'formid' || name === 'websiteid') value = 'my-form';
+                else if (name === 'fields') value = '<li><strong>Name:</strong> John Doe</li>\n<li><strong>Email:</strong> john@example.com</li>\n<li><strong>Message:</strong> Hello, this is a test message.</li>';
+                else if (name === 'baseurl') value = window.location.origin;
+                else if (previewSamples[name]) value = previewSamples[name];
+                else value = rawDefault !== undefined ? rawDefault : 'Sample value';
+                // Same as the server: an empty value does not leave "Hola !" behind
+                if (value === '' && space && /[!?,.;:)]/.test(content.charAt(offset + match.length))) return '';
+                return space + value;
+            });
             var frame = document.getElementById('templatePreviewFrame');
             var doc = frame.contentDocument || frame.contentWindow.document;
             doc.open();
             doc.write(preview);
             doc.close();
+        }
+
+        // ===== Images for templates =====
+        // An email cannot carry local files, so every image has to live at a public
+        // URL. These are uploaded to this server and referenced as {{base_url}}/assets/...
+        var assetsCache = [];
+
+        function insertInTemplateEditor(snippet) {
+            var ta = document.getElementById('templateEditorContent');
+            var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+            var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : start;
+            ta.value = ta.value.slice(0, start) + snippet + ta.value.slice(end);
+            ta.selectionStart = ta.selectionEnd = start + snippet.length;
+            ta.focus();
+            updateTemplatePreview();
+        }
+
+        function assetImgTag(asset) {
+            // Explicit width: Outlook ignores CSS sizing and would print the image full size
+            var w = asset.width ? Math.min(asset.width, 600) : 0;
+            return '<img src="{{base_url}}' + asset.url + '" ' + (w ? 'width="' + w + '" ' : '') +
+                'alt="" style="display:block;' + (w ? 'width:' + w + 'px;' : '') + 'max-width:100%;height:auto;border:0;">';
+        }
+
+        async function uploadTemplateAsset(input) {
+            var file = input.files && input.files[0];
+            input.value = '';
+            if (!file) return;
+            var btn = document.getElementById('assetUploadBtn');
+            var label = btn.innerHTML;
+            btn.disabled = true;
+            btn.textContent = L('uploadingImage');
+            try {
+                var body = new FormData();
+                body.append('file', file);
+                var res = await fetch('/admin/api/assets', { method: 'POST', headers: { Authorization: auth }, body: body });
+                var data = await res.json();
+                if (!res.ok) {
+                    showToast(data.error || L('imageFailed'), 'error');
+                } else {
+                    insertInTemplateEditor(assetImgTag(data));
+                    showToast(data.mime === 'image/webp' ? L('imageWebpWarn') : L('imageUploaded'), data.mime === 'image/webp' ? 'error' : 'success');
+                    if (document.getElementById('assetGallery').style.display !== 'none') loadAssetGallery();
+                }
+            } catch (err) {
+                showToast(L('connError'), 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = label;
+        }
+
+        function toggleAssetGallery() {
+            var box = document.getElementById('assetGallery');
+            var show = box.style.display === 'none';
+            box.style.display = show ? 'block' : 'none';
+            if (show) loadAssetGallery();
+        }
+
+        async function loadAssetGallery() {
+            var box = document.getElementById('assetGallery');
+            box.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+            try {
+                var res = await fetch('/admin/api/assets', { headers: { Authorization: auth } });
+                var data = await res.json();
+                assetsCache = data.assets || [];
+            } catch (e) {
+                box.innerHTML = '<div class="empty-state">' + L('connError') + '</div>';
+                return;
+            }
+            if (!assetsCache.length) {
+                box.innerHTML = '<div class="empty-state" style="padding:0.75rem;">' + L('noImages') + '</div>';
+                return;
+            }
+            var html = '<p style="font-size:0.75rem;color:var(--text-secondary);margin:0 0 0.5rem 0;">' + L('imagesHint') + '</p>' +
+                '<div style="display:flex;flex-wrap:wrap;gap:0.5rem;">';
+            assetsCache.forEach(function(a, i) {
+                var canDelete = isAdminOrAbove() && (!a.shared || isSuperadmin());
+                html += '<div style="position:relative;width:104px;border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:0.3rem;background:var(--bg-secondary);">' +
+                    // Checkerboard, so a white logo on a transparent background is still visible
+                    '<img src="' + esc(a.url) + '" alt="' + esc(a.name) + '" title="' + esc(a.name) + '" onclick="insertAssetFromGallery(' + i + ')" ' +
+                        'style="display:block;width:100%;height:56px;object-fit:contain;cursor:pointer;border-radius:2px;background-color:#fff;' +
+                        'background-image:linear-gradient(45deg,#9aa3b5 25%,transparent 25%),linear-gradient(-45deg,#9aa3b5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#9aa3b5 75%),linear-gradient(-45deg,transparent 75%,#9aa3b5 75%);' +
+                        'background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;">' +
+                    '<div style="font-size:0.62rem;color:var(--text-secondary);margin-top:0.25rem;word-break:break-all;line-height:1.2;">' + esc(a.name) + '</div>' +
+                    (a.shared ? '<div style="font-size:0.6rem;color:var(--accent-primary);">' + L('imageShared') + '</div>' : '') +
+                    (canDelete ? '<button type="button" class="btn-sm btn-danger" onclick="deleteAsset(' + i + ')" style="position:absolute;top:2px;right:2px;padding:0 0.3rem;line-height:1.3;">&times;</button>' : '') +
+                '</div>';
+            });
+            box.innerHTML = html + '</div>';
+        }
+
+        function insertAssetFromGallery(i) {
+            if (assetsCache[i]) insertInTemplateEditor(assetImgTag(assetsCache[i]));
+        }
+
+        async function deleteAsset(i) {
+            var a = assetsCache[i];
+            if (!a || !confirm(L('confirmDeleteImage').replace('{name}', a.name))) return;
+            try {
+                var res = await fetch('/admin/api/assets/' + encodeURIComponent(a.scope) + '/' + encodeURIComponent(a.name), {
+                    method: 'DELETE', headers: { Authorization: auth }
+                });
+                var data = await res.json();
+                showToast(res.ok ? L('imageDeleted') : (data.error || L('failedUpdate')), res.ok ? 'success' : 'error');
+                if (res.ok) loadAssetGallery();
+            } catch (e) {
+                showToast(L('connError'), 'error');
+            }
         }
 
         document.getElementById('templateEditorForm').addEventListener('submit', async function(e) {

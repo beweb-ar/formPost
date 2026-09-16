@@ -13,6 +13,10 @@ services:
       # Server configuration
       - PORT=3000
       - LANG=es
+      # Optional: public URL of this instance. It is what {{base_url}} resolves to
+      # in email templates (the images uploaded from the template editor use it).
+      # Without it, the URL is taken from the incoming request.
+      # - PUBLIC_URL=https://formpost.example.com
       # Optional: Enable debug mode (bypasses Turnstile for testing)
       # - DEBUG=true
       # Optional: fixed key (64 hex chars) for secret encryption at rest.

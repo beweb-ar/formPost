@@ -39,6 +39,9 @@ COPY admin ./admin
 # Copy templates directory
 COPY templates ./templates
 
+# Built-in email images, seeded into data/assets/shared on first boot
+COPY assets ./assets
+
 # Create data directory for submission storage
 RUN mkdir -p /app/data
 

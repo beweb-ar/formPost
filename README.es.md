@@ -51,7 +51,8 @@
 - **Múltiples destinatarios** - Enviar a varias direcciones email por formulario (separados por coma, UI de chips)
 - **Notificaciones por email** - Plantillas HTML personalizadas con inyección dinámica de campos
 - **Archivos adjuntos** - Recibe archivos (máx 5, 10 MB cada uno) y los reenvía por email, Discord y Telegram
-- **Gestión de plantillas** - Crear, editar y eliminar plantillas desde el panel admin
+- **Gestión de plantillas** - Crear, editar y eliminar plantillas desde el panel admin, con subida de imágenes: los archivos quedan hosteados en formPost y se sirven en una URL pública que el mail del destinatario puede pedir
+- **Variables por campo** - `{{campo}}` y `{{campo|texto por defecto}}` en el cuerpo de la plantilla y en el asunto de la auto-respuesta
 - **Auto-respuesta** - Email de confirmación automático al remitente, con plantilla seleccionable
 - **Formularios sin sender** - Los formularios pueden funcionar solo con notificaciones (Discord, Telegram, Webhook) sin sender SMTP
 
@@ -265,6 +266,7 @@ Senders muestra una etiqueta **CAÍDO**, y `POST /admin/api/senders/:id/health/r
 | `SUPPORTHUB_TOOLS_SECRET` | - | Secret HS256 con el que se firman los tokens de usuario que aceptan los endpoints de solo lectura `/agent-api` (herramientas del agente de SupportHub). Sin definir = `/agent-api` y el endpoint de token quedan deshabilitados |
 | `SUPPORTHUB_URL` | - | URL base de la plataforma SupportHub. Definida, el panel carga el widget de ayuda para los usuarios logueados; sin definir, no se carga nada |
 | `USER_EMAILS` | - | Semilla del email de usuarios existentes para que puedan usar Google / código de un solo uso: `usuario1=mail1@dom,usuario2=mail2@dom`. Se escribe en el registro de cada usuario, solo si todavía no tiene email |
+| `PUBLIC_URL` | (del request) | URL pública de esta instancia, a lo que resuelve `{{base_url}}` en las plantillas. Definila si el proxy no reenvía el host real |
 | `ENCRYPTION_KEY` | auto | 64 caracteres hex (32 bytes) para cifrar los secretos guardados (contraseñas SMTP, keys de SendGrid, tokens de Telegram, claves de captcha). Si no se define, se genera una clave en `data/.secret.key` — **hacé backup de ese archivo**: sin él no se pueden recuperar los secretos cifrados |
 
 ## Cuentas, Usuarios y Roles (v1.4)
@@ -326,14 +328,52 @@ El modal de configuración está dividido en pestañas: **Senders**, **Cuentas**
 ## Plantillas de Email
 
 ```html
-<!-- Modo dinámico -->
 <h2>Nuevo envío de {{form_id}}</h2>
 <ul>{{fields}}</ul>
+
+<!-- Un campo puntual, con texto por defecto para cuando venga vacío -->
+<p>Hola {{nombre}}! Recibimos tu consulta sobre {{empresa|sus catálogos}}.</p>
 ```
 
-> Tanto `{{form_id}}` como `{{website_id}}` son soportados por compatibilidad.
+| Variable | Se reemplaza por |
+|---|---|
+| `{{fields}}` | La lista `<li>` con todos los campos enviados |
+| `{{form_id}}` | El ID del formulario (`{{website_id}}` también funciona) |
+| `{{nombre_del_campo}}` | El valor de ese campo |
+| `{{nombre_del_campo\|texto}}` | Lo mismo, con el texto a usar si el campo viene vacío o no vino |
+| `{{base_url}}` | La URL pública de este servidor, la que usan las imágenes subidas |
 
-Incluye plantilla de auto-respuesta: `templates/auto-reply.html`
+Los dos estilos conviven en la misma plantilla. Los nombres se comparan sin distinguir
+mayúsculas ni separadores (`{{correo_electronico}}` = `{{correoElectronico}}`), y los pares
+habituales es/en son equivalentes: nombre/name, correo/email, telefono/phone, empresa/company,
+mensaje/message, asunto/subject. Un valor vacío no deja espacios colgando antes de un signo:
+`Hola {{nombre}}!` se lee `Hola!` cuando el visitante no mandó nombre.
+
+Los valores que envían los visitantes se escapan, y un `{{...}}` dentro de un valor nunca se expande.
+
+### Auto-respuesta
+
+Incluye `templates/auto-reply.html` y `templates/autoresponder-catalogoplus-es.html` como
+ejemplo completo con marca. **El asunto de la auto-respuesta acepta las mismas variables**:
+`Hola {{name}}! Te contactamos desde Catálogo Plus` es un asunto válido.
+
+### Imágenes en las plantillas
+
+Un email no puede llevar archivos locales: cada imagen necesita una URL pública. En el editor
+de plantillas, **Subir imagen** guarda el archivo en este servidor e inserta la etiqueta:
+
+```html
+<img src="{{base_url}}/assets/shared/catalogo-plus.png" width="168" alt="Catálogo Plus"
+     style="display:block;width:168px;max-width:100%;height:auto;border:0;">
+```
+
+- Se guardan en `data/assets/{scope}/` (volumen montado, sobreviven a los redeploys) y se sirven
+  sin autenticación en `/assets/{scope}/{archivo}`: el mail del destinatario no tiene sesión.
+- El superadmin escribe el set `shared` (lo ven todas las cuentas); el resto, la carpeta de su cuenta.
+- PNG, JPG, GIF y WEBP, hasta 5 MB. El tipo se lee de los bytes, no de la extensión; el SVG se
+  rechaza porque correría como script en este dominio. WEBP no se ve en Outlook.
+- Lo que esté en `assets/` del repo se copia a `data/assets/shared/` en el primer arranque.
+- `PUBLIC_URL` define a qué resuelve `{{base_url}}`; si no está, se toma del request.
 
 ## Ejemplo de Formulario HTML
 
@@ -483,10 +523,13 @@ formPost/
 ├── config.json                     # Configuración
 ├── admin/
 │   └── index.html                  # Panel admin (SPA)
+├── assets/                         # Imágenes de email incluidas, se copian a data/assets/shared
 ├── templates/
 │   ├── contact-form.html           # Plantilla email por defecto
-│   └── auto-reply.html             # Plantilla auto-respuesta
+│   ├── auto-reply.html             # Plantilla auto-respuesta
+│   └── autoresponder-catalogoplus-es.html  # Auto-respuesta completa de ejemplo
 └── data/
+    ├── assets/{scope}/             # Imágenes subidas, se sirven en /assets/{scope}/{archivo}
     ├── submissions-{formId}.json   # Envíos almacenados
     └── outbox-{formId}.json        # Log de mails/notificaciones
 ```
