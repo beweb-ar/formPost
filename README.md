@@ -398,7 +398,11 @@ Emails cannot carry local files, so every image needs a public URL. In the templ
   account folder.
 - PNG, JPG, GIF and WEBP, 5 MB max. The file type is read from the bytes, not the extension;
   SVG is rejected because it would run as script on this origin. WEBP does not render in Outlook.
-- Files in `assets/` in the repo are seeded into `data/assets/shared/` on first boot.
+- Files in `assets/` in the repo are seeded into `data/assets/shared/` at boot.
+- Same for the shared templates: `templates/` is a mounted volume, so the mount hides whatever
+  the image ships at that path. The image carries a second copy in `templates-default/` and new
+  defaults are copied into the volume at boot — once per name, recorded in `data/.seeded.json`,
+  so a default you delete stays deleted.
 - `PUBLIC_URL` sets what `{{base_url}}` resolves to; without it, it is taken from the request.
 
 ## HTML Form Example

@@ -36,8 +36,10 @@ COPY fav-icon.png ./
 # Copy admin directory
 COPY admin ./admin
 
-# Copy templates directory
+# Copy templates directory. templates-default is the same set outside the mount:
+# a volume shadows /app/templates, so new defaults are seeded from there at boot.
 COPY templates ./templates
+COPY templates ./templates-default
 
 # Built-in email images, seeded into data/assets/shared on first boot
 COPY assets ./assets

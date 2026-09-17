@@ -372,7 +372,11 @@ de plantillas, **Subir imagen** guarda el archivo en este servidor e inserta la 
 - El superadmin escribe el set `shared` (lo ven todas las cuentas); el resto, la carpeta de su cuenta.
 - PNG, JPG, GIF y WEBP, hasta 5 MB. El tipo se lee de los bytes, no de la extensión; el SVG se
   rechaza porque correría como script en este dominio. WEBP no se ve en Outlook.
-- Lo que esté en `assets/` del repo se copia a `data/assets/shared/` en el primer arranque.
+- Lo que esté en `assets/` del repo se copia a `data/assets/shared/` al arrancar.
+- Lo mismo con las plantillas compartidas: `templates/` es un volumen montado y el montaje tapa
+  lo que la imagen trae en esa ruta. La imagen lleva una segunda copia en `templates-default/` y
+  las plantillas nuevas se copian al volumen al arrancar — una sola vez por nombre, anotado en
+  `data/.seeded.json`, así una plantilla que borrás no vuelve a aparecer.
 - `PUBLIC_URL` define a qué resuelve `{{base_url}}`; si no está, se toma del request.
 
 ## Ejemplo de Formulario HTML

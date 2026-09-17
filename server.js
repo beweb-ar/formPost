@@ -10,6 +10,7 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const FormData = require('form-data');
 const os = require('os');
+const fsConstants = require('fs').constants;
 const config = require('./config.json');
 
 // Multer config: temp uploads with size limits
@@ -2928,6 +2929,55 @@ async function ensureTemplatesDir() {
 }
 ensureTemplatesDir();
 
+// ===== Defaults shipped in the image =====
+// templates/ and data/ are mounted volumes: the mount shadows whatever the image
+// has at that path, so a template or image added to a release would never reach an
+// instance that is already running. Copy them in at boot instead — once per name,
+// which is what the marker file is for: a default someone deleted stays deleted.
+const SEED_MARKER = path.join(__dirname, 'data', '.seeded.json');
+let seedQueue = Promise.resolve();
+function seedDefaults(kind, srcDir, destDir, isAllowed) {
+    seedQueue = seedQueue.then(async () => {
+        let names;
+        try { names = await fs.readdir(srcDir); } catch (e) { return; } // only exists inside the image
+        let state = {};
+        try { state = JSON.parse(await fs.readFile(SEED_MARKER, 'utf8')) || {}; } catch (e) {}
+        const seeded = new Set(state[kind] || []);
+        let changed = false;
+        for (const name of names) {
+            if (!isAllowed(name) || seeded.has(name)) continue;
+            try {
+                await fs.mkdir(destDir, { recursive: true });
+                await fs.copyFile(path.join(srcDir, name), path.join(destDir, name), fsConstants.COPYFILE_EXCL);
+                log.info('Seeded default file', { kind, name });
+            } catch (e) {
+                // EEXIST just means the instance already had it. Anything else is a
+                // real failure: leave it unmarked so the next boot tries again.
+                if (e.code !== 'EEXIST') {
+                    log.warn('Could not seed default file', { kind, name, error: e.message });
+                    continue;
+                }
+            }
+            seeded.add(name);
+            changed = true;
+        }
+        if (!changed) return;
+        state[kind] = [...seeded];
+        try {
+            await fs.mkdir(path.dirname(SEED_MARKER), { recursive: true });
+            await fs.writeFile(SEED_MARKER, JSON.stringify(state, null, 2));
+        } catch (e) {
+            log.warn('Could not record seeded defaults', { kind, error: e.message });
+        }
+    }).catch(e => log.error('Seeding defaults failed', { kind, error: e.message }));
+    return seedQueue;
+}
+
+// The shared template set. In the image these live in templates-default/, outside
+// the mount; in a dev checkout that folder does not exist and this is a no-op.
+seedDefaults('templates', path.join(__dirname, 'templates-default'), TEMPLATES_DIR,
+    name => name.endsWith('.html'));
+
 // Template layout: templates/ root = shared/default set (visible to every account,
 // writable by superadmin only); templates/{accountId}/ = per-account templates.
 // Account-folder writes by admin/user roles; editing a shared one creates an account copy.
@@ -3081,24 +3131,9 @@ const ASSET_SCOPE_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const ASSET_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
 const ASSET_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 
-const fsConstants = require('fs').constants;
-
-// Ship the built-in brand images into the volume on first boot so a fresh deploy
-// has them. Existing files are never overwritten: the volume is the source of truth.
-async function seedSharedAssets() {
-    const dest = path.join(ASSETS_DIR, SHARED_ASSET_SCOPE);
-    try { await fs.mkdir(dest, { recursive: true }); } catch (e) {}
-    let seeds = [];
-    try { seeds = await fs.readdir(ASSETS_SEED_DIR); } catch (e) { return; }
-    for (const name of seeds) {
-        if (!ASSET_MIME[path.extname(name).toLowerCase()]) continue;
-        try {
-            await fs.copyFile(path.join(ASSETS_SEED_DIR, name), path.join(dest, name), fsConstants.COPYFILE_EXCL);
-            log.info('Seeded shared email asset', { name });
-        } catch (e) { /* already there */ }
-    }
-}
-seedSharedAssets();
+// Ship the built-in brand images into the volume so a fresh deploy has them
+seedDefaults('assets', ASSETS_SEED_DIR, path.join(ASSETS_DIR, SHARED_ASSET_SCOPE),
+    name => !!ASSET_MIME[path.extname(name).toLowerCase()]);
 
 // Read type and pixel size straight from the bytes. The extension is not trusted
 // (it decides where the file is served from) and the dimensions let the editor
