@@ -2934,18 +2934,46 @@ ensureTemplatesDir();
 // has at that path, so a template or image added to a release would never reach an
 // instance that is already running. Copy them in at boot instead — once per name,
 // which is what the marker file is for: a default someone deleted stays deleted.
+//
+// An instance that already curated its own set (renamed the stock templates, deleted
+// the ones it does not use) is left exactly as it is: the first run just records what
+// the image ships as "already handled". Otherwise this release would drop files back
+// into a live instance and silently change the design of mails going out today.
+// From that first run on, a name the image adds later is genuinely new, and gets in.
 const SEED_MARKER = path.join(__dirname, 'data', '.seeded.json');
 let seedQueue = Promise.resolve();
 function seedDefaults(kind, srcDir, destDir, isAllowed) {
     seedQueue = seedQueue.then(async () => {
         let names;
         try { names = await fs.readdir(srcDir); } catch (e) { return; } // only exists inside the image
+        names = names.filter(isAllowed);
         let state = {};
-        try { state = JSON.parse(await fs.readFile(SEED_MARKER, 'utf8')) || {}; } catch (e) {}
+        let firstRun = true;
+        try {
+            state = JSON.parse(await fs.readFile(SEED_MARKER, 'utf8')) || {};
+            firstRun = !Array.isArray(state[kind]);
+        } catch (e) {}
         const seeded = new Set(state[kind] || []);
         let changed = false;
+
+        if (firstRun) {
+            let existing = [];
+            try { existing = (await fs.readdir(destDir)).filter(isAllowed); } catch (e) {}
+            if (existing.length) {
+                state[kind] = names;
+                try {
+                    await fs.mkdir(path.dirname(SEED_MARKER), { recursive: true });
+                    await fs.writeFile(SEED_MARKER, JSON.stringify(state, null, 2));
+                    log.info('Existing set kept as is, defaults marked as handled', { kind, existing: existing.length });
+                } catch (e) {
+                    log.warn('Could not record seeded defaults', { kind, error: e.message });
+                }
+                return;
+            }
+        }
+
         for (const name of names) {
-            if (!isAllowed(name) || seeded.has(name)) continue;
+            if (seeded.has(name)) continue;
             try {
                 await fs.mkdir(destDir, { recursive: true });
                 await fs.copyFile(path.join(srcDir, name), path.join(destDir, name), fsConstants.COPYFILE_EXCL);

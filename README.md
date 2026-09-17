@@ -401,8 +401,10 @@ Emails cannot carry local files, so every image needs a public URL. In the templ
 - Files in `assets/` in the repo are seeded into `data/assets/shared/` at boot.
 - Same for the shared templates: `templates/` is a mounted volume, so the mount hides whatever
   the image ships at that path. The image carries a second copy in `templates-default/` and new
-  defaults are copied into the volume at boot — once per name, recorded in `data/.seeded.json`,
-  so a default you delete stays deleted.
+  defaults are copied into the volume at boot, once per name, recorded in `data/.seeded.json`.
+  Two rules keep this from touching a running installation: an instance that already has its own
+  templates is left exactly as it is (the first boot only records what the image ships, so a
+  release never restores files into live forms), and a default you delete stays deleted.
 - `PUBLIC_URL` sets what `{{base_url}}` resolves to; without it, it is taken from the request.
 
 ## HTML Form Example
